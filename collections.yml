@@ -1,0 +1,1551 @@
+# CineSets collections
+# Copyright (C) 2026 blurbery. SPDX-License-Identifier: AGPL-3.0-or-later
+# CineSets by blurbery (https://github.com/blurbery/cinesets). Additional terms under AGPL-3.0 section 7 apply: see NOTICE.
+#
+# Each entry becomes one collection. Required fields:
+#   key        unique id: lower-case letters, digits and dashes. Start movie keys with m- and TV keys with s-;
+#              a movie and TV pair with the same ending (m-netflix, s-netflix) sit next to each other.
+#   group      section on the Collections page, see `order` in config.yml
+#   type       movie or show
+#   title      big poster title (\n breaks the line)
+# One of:
+#   lists      public mdblist lists (user/list-slug), merged in order
+#   titles     a fixed list of [title, year] (franchises); needs min if fewer than defaults.min_items films
+# Optional:
+#   subtitle         smaller white line under the title
+#   accent           poster colour: purple, pink, blue, gold, green, red, teal
+#   limit            most titles to keep (defaults.limit)
+#   min              skip the collection if fewer titles match (defaults.min_items)
+#   logo             streaming service logo key (netflix, prime, disney, hbomax, apple, hulu, paramount, peacock, stan)
+#   backdrop_title   the film or show whose artwork the poster uses
+#   backdrop_item    the server item id whose artwork the poster uses (instead of backdrop_title)
+#   exclude_genres   drop titles with any of these genres
+#   pin              keep at the very top of the Collections page (1 first)
+#   ranked           false to keep a list's own order instead of its rank (default true)
+#   display_order    how titles are ordered inside the collection: SortName or PremiereDate
+#   overview         the collection's description
+#   create_name      a temporary name to create the collection under (needed when its name was used before)
+
+collections:
+
+  # --- Seasonal. Remove or comment these out after the season ends.
+  - key: m-halloween
+    group: seasonal
+    type: movie
+    title: "Halloween"
+    accent: red
+    lists: [bsm-venger/halloween-movies]
+  - key: s-halloween
+    group: seasonal
+    type: show
+    title: "Halloween"
+    accent: red
+    lists: [bobnimbo/halloween-shows]
+    backdrop_title: "Wednesday"
+  - key: m-halloween-kids
+    group: seasonal
+    type: movie
+    title: "Halloween"
+    subtitle: "For Kids"
+    accent: red
+    lists: [hdlists/halloween-movies-for-kids]
+
+  # --- Charts: trending, most watched and new releases. Trending entries are pinned to the top.
+  - key: m-trending
+    group: charts
+    type: movie
+    title: "Trending"
+    subtitle: "Top 20"
+    accent: pink
+    lists: [snoak/trending-movies]
+    pin: 1
+    limit: 20
+  - key: s-trending
+    group: charts
+    type: show
+    title: "Trending"
+    subtitle: "Top 20"
+    accent: pink
+    lists: [snoak/trakt-s-trending-shows]
+    pin: 1
+    limit: 20
+    exclude_genres: ["Talk", "Talk Show", "News"]
+  - key: m-trendingall
+    group: charts
+    type: movie
+    title: "Trending"
+    accent: pink
+    lists: [snoak/trending-movies]
+    pin: 2
+    limit: 250
+    backdrop_title: "Deadpool & Wolverine"
+    create_name: "Movies - Trending (full list)"
+  - key: s-trendingall
+    group: charts
+    type: show
+    title: "Trending"
+    accent: pink
+    lists: [snoak/trakt-s-trending-shows]
+    pin: 2
+    limit: 250
+    exclude_genres: ["Talk", "Talk Show", "News"]
+    backdrop_title: "House of the Dragon"
+    create_name: "TV Shows - Trending (full list)"
+  - key: m-watched-week
+    group: charts
+    type: movie
+    title: "Most\nWatched"
+    subtitle: "This Week"
+    accent: blue
+    lists: [linaspurinis/top-watched-movies-of-the-week]
+    limit: 100
+  - key: s-watched-week
+    group: charts
+    type: show
+    title: "Most\nWatched"
+    subtitle: "This Week"
+    accent: blue
+    lists: [didak88/most-watched-tv-shows-of-the-week]
+    limit: 100
+  - key: m-new
+    group: charts
+    type: movie
+    title: "New"
+    subtitle: "Releases"
+    accent: teal
+    lists: [snoak/latest-movies-digital-release]
+    limit: 100
+  - key: s-new
+    group: charts
+    type: show
+    title: "New"
+    subtitle: "Shows"
+    accent: teal
+    lists: [garycrawfordgc/latest-tv-shows]
+    limit: 100
+    backdrop_title: "A Tale of Two Cities (2026)"
+
+  # --- Franchises and universes. Shown last, A to Z. Entries with `titles` use a fixed (title, year) list.
+  - key: m-marvel
+    group: universes
+    type: movie
+    title: "Marvel"
+    subtitle: "Universe"
+    accent: red
+    lists: [atb001/marvel-cinematic-universe-movies-only]
+    backdrop_title: "Avengers: Endgame"
+  - key: s-marvel
+    group: universes
+    type: show
+    title: "Marvel"
+    subtitle: "Universe"
+    accent: red
+    lists: [aznpho50/mcu-shows]
+    backdrop_title: "Loki"
+  - key: m-dc
+    group: universes
+    type: movie
+    title: "DC"
+    subtitle: "Universe"
+    accent: blue
+    lists: [nobnobz/collection-dc-extended-universe-dceu]
+    backdrop_title: "Wonder Woman"
+  - key: s-dc
+    group: universes
+    type: show
+    title: "DC"
+    subtitle: "Universe"
+    accent: blue
+    lists: [benmortimer13/dc-shows]
+    backdrop_title: "Gotham"
+  - key: m-starwars
+    group: universes
+    type: movie
+    title: "Star Wars"
+    accent: gold
+    lists: [carpenter_/star-wars-films]
+    backdrop_title: "Star Wars"
+  - key: s-starwars
+    group: universes
+    type: show
+    title: "Star Wars"
+    accent: gold
+    lists: [clad/star-wars-show]
+    backdrop_title: "The Mandalorian"
+  - key: m-wizarding
+    group: universes
+    type: movie
+    title: "Wizarding"
+    subtitle: "World"
+    accent: purple
+    lists: [aaron713/wizarding-world]
+  - key: m-middleearth
+    group: universes
+    type: movie
+    title: "Middle-\nearth"
+    accent: green
+    lists: [thebirdod/lord-of-the-rings-and-hobbit-collection]
+    min: 5
+    backdrop_title: "The Lord of the Rings: The Return of the King"
+  - key: m-bond
+    group: universes
+    type: movie
+    title: "James\nBond"
+    subtitle: "007"
+    accent: teal
+    lists: [fremulon-7/james-bond-collection]
+    backdrop_title: "Skyfall"
+  - key: m-xmen
+    group: universes
+    type: movie
+    title: "X-Men"
+    accent: gold
+    lists: [wheezer0610/x-men-universe]
+    backdrop_title: "Logan"
+  - key: m-spiderman
+    group: universes
+    type: movie
+    title: "Spider-\nMan"
+    accent: red
+    lists: [magicnorris/spider-man-collection]
+    backdrop_title: "Spider-Man 2"
+  - key: m-fast
+    group: universes
+    type: movie
+    title: "Fast &\nFurious"
+    accent: blue
+    lists: [kaoxt/fast-and-furious-collection]
+    backdrop_title: "Fast Five"
+  - key: m-mission
+    group: universes
+    type: movie
+    title: "Mission:\nImpossible"
+    accent: red
+    lists: [thebirdod/mission-impossible-collection]
+  - key: m-jurassic
+    group: universes
+    type: movie
+    title: "Jurassic\nPark"
+    accent: green
+    lists: [thebirdod/jurassic-park-collection]
+    min: 5
+  - key: m-transformers
+    group: universes
+    type: movie
+    title: "Transformers"
+    accent: blue
+    lists: [michael0deon/transformers-all]
+    backdrop_title: "Transformers"
+  - key: m-batman
+    group: universes
+    type: movie
+    title: "Batman"
+    accent: gold
+    lists: [thebirdod/batman-collection]
+    backdrop_title: "The Batman"
+  - key: m-johnwick
+    group: universes
+    type: movie
+    title: "John\nWick"
+    accent: purple
+    lists: [wheezer0610/john-wick]
+    min: 4
+  - key: m-monsterverse
+    group: universes
+    type: movie
+    title: "Monster\nVerse"
+    accent: teal
+    lists: [kraftynic/monsterverse-chronological-jeare7t6jn]
+    min: 5
+  - key: m-startrek
+    group: universes
+    type: movie
+    title: "Star Trek"
+    accent: blue
+    lists: [theimmortal68/star-trek]
+  - key: s-startrek
+    group: universes
+    type: show
+    title: "Star Trek"
+    accent: blue
+    lists: [pawdog/star-trek-tv-series]
+    backdrop_title: "Star Trek: The Next Generation"
+  - key: m-pixar
+    group: universes
+    type: movie
+    title: "Pixar"
+    accent: teal
+    lists: [chisoxdev/all-pixar-movies]
+  - key: m-disneyanim
+    group: universes
+    type: movie
+    title: "Disney"
+    subtitle: "Classics"
+    accent: blue
+    lists: [sgreenuk/collection-disney-classics]
+    backdrop_title: "The Lion King"
+  - key: m-dreamworks
+    group: universes
+    type: movie
+    title: "DreamWorks"
+    accent: green
+    lists: [benmooney/dreamworks-animation-movies]
+    backdrop_title: "How to Train Your Dragon"
+  - key: m-ghibli
+    group: universes
+    type: movie
+    title: "Studio\nGhibli"
+    accent: pink
+    lists: [atb001/studio-ghibli]
+    backdrop_title: "My Neighbor Totoro"
+  - key: m-a24
+    group: universes
+    type: movie
+    title: "A24"
+    accent: purple
+    lists: [allenhouchins/a24-movies]
+    backdrop_title: "Everything Everywhere All at Once"
+  - key: m-nolan
+    group: universes
+    type: movie
+    title: "Christopher\nNolan"
+    accent: teal
+    lists: [davidio/directed-by-christopher-nolan]
+    backdrop_title: "Inception"
+  - key: m-tarantino
+    group: universes
+    type: movie
+    title: "Quentin\nTarantino"
+    accent: gold
+    lists: [glennveenstra15/directed-by-quentin-tarantino]
+    backdrop_title: "Pulp Fiction"
+  - key: m-rocky
+    group: universes
+    type: movie
+    title: "Rocky &\nCreed"
+    accent: red
+    titles:
+      - ["Rocky", 1976]
+      - ["Rocky II", 1979]
+      - ["Rocky III", 1982]
+      - ["Rocky IV", 1985]
+      - ["Rocky Balboa", 2006]
+      - ["Creed", 2015]
+      - ["Creed II", 2018]
+      - ["Creed III", 2023]
+    min: 3
+    backdrop_title: "Creed"
+  - key: m-despicable
+    group: universes
+    type: movie
+    title: "Despicable\nMe"
+    subtitle: "& Minions"
+    accent: gold
+    titles:
+      - ["Despicable Me", 2010]
+      - ["Despicable Me 2", 2013]
+      - ["Despicable Me 3", 2017]
+      - ["Despicable Me 4", 2024]
+      - ["Minions", 2015]
+      - ["Minions: The Rise of Gru", 2022]
+      - ["Minions & Monsters", 2026]
+    min: 3
+    backdrop_title: "Despicable Me"
+  - key: m-toystory
+    group: universes
+    type: movie
+    title: "Toy Story"
+    accent: blue
+    titles:
+      - ["Toy Story", 1995]
+      - ["Toy Story 2", 1999]
+      - ["Toy Story 3", 2010]
+      - ["Toy Story 4", 2019]
+      - ["Toy Story 5", 2026]
+      - ["Lightyear", 2022]
+    min: 3
+    backdrop_title: "Toy Story 4"
+  - key: m-shrek
+    group: universes
+    type: movie
+    title: "Shrek"
+    accent: green
+    titles:
+      - ["Shrek", 2001]
+      - ["Shrek 2", 2004]
+      - ["Shrek the Third", 2007]
+      - ["Shrek Forever After", 2010]
+      - ["Puss in Boots", 2011]
+      - ["Puss in Boots: The Last Wish", 2022]
+    min: 3
+    backdrop_title: "Shrek 2"
+  - key: m-predator
+    group: universes
+    type: movie
+    title: "Predator"
+    accent: green
+    titles:
+      - ["Predator", 1987]
+      - ["Predators", 2010]
+      - ["The Predator", 2018]
+      - ["Prey", 2022]
+      - ["Predator: Killer of Killers", 2025]
+      - ["Predator: Badlands", 2025]
+    min: 3
+    backdrop_title: "Prey"
+  - key: m-iceage
+    group: universes
+    type: movie
+    title: "Ice Age"
+    accent: blue
+    titles:
+      - ["Ice Age", 2002]
+      - ["Ice Age: The Meltdown", 2006]
+      - ["Ice Age: Dawn of the Dinosaurs", 2009]
+      - ["Ice Age: Continental Drift", 2012]
+      - ["Ice Age: Collision Course", 2016]
+      - ["The Ice Age Adventures of Buck Wild", 2022]
+    min: 3
+    backdrop_title: "Ice Age"
+  - key: m-pirates
+    group: universes
+    type: movie
+    title: "Pirates of\nthe Caribbean"
+    accent: gold
+    titles:
+      - ["Pirates of the Caribbean: The Curse of the Black Pearl", 2003]
+      - ["Pirates of the Caribbean: Dead Man's Chest", 2006]
+      - ["Pirates of the Caribbean: At World's End", 2007]
+      - ["Pirates of the Caribbean: On Stranger Tides", 2011]
+      - ["Pirates of the Caribbean: Dead Men Tell No Tales", 2017]
+    min: 3
+    backdrop_title: "Pirates of the Caribbean: The Curse of the Black Pearl"
+  - key: m-matrix
+    group: universes
+    type: movie
+    title: "The Matrix"
+    accent: green
+    titles:
+      - ["The Matrix", 1999]
+      - ["The Animatrix", 2003]
+      - ["The Matrix Reloaded", 2003]
+      - ["The Matrix Revolutions", 2003]
+      - ["The Matrix Resurrections", 2021]
+    min: 3
+    backdrop_title: "The Matrix"
+  - key: m-rambo
+    group: universes
+    type: movie
+    title: "Rambo"
+    accent: red
+    titles:
+      - ["First Blood", 1982]
+      - ["Rambo: First Blood Part II", 1985]
+      - ["Rambo III", 1988]
+      - ["Rambo", 2008]
+      - ["Rambo: Last Blood", 2019]
+    min: 3
+    backdrop_title: "First Blood"
+  - key: m-terminator
+    group: universes
+    type: movie
+    title: "Terminator"
+    accent: blue
+    titles:
+      - ["The Terminator", 1984]
+      - ["Terminator 2: Judgment Day", 1991]
+      - ["Terminator Salvation", 2009]
+      - ["Terminator Genisys", 2015]
+      - ["Terminator: Dark Fate", 2019]
+    min: 3
+    backdrop_title: "Terminator 2: Judgment Day"
+  - key: m-indiana
+    group: universes
+    type: movie
+    title: "Indiana\nJones"
+    accent: gold
+    titles:
+      - ["Raiders of the Lost Ark", 1981]
+      - ["Indiana Jones and the Temple of Doom", 1984]
+      - ["Indiana Jones and the Last Crusade", 1989]
+      - ["Indiana Jones and the Kingdom of the Crystal Skull", 2008]
+      - ["Indiana Jones and the Dial of Destiny", 2023]
+    min: 3
+    backdrop_title: "Raiders of the Lost Ark"
+  - key: m-hungergames
+    group: universes
+    type: movie
+    title: "The Hunger\nGames"
+    accent: red
+    titles:
+      - ["The Hunger Games", 2012]
+      - ["The Hunger Games: Catching Fire", 2013]
+      - ["The Hunger Games: Mockingjay - Part 1", 2014]
+      - ["The Hunger Games: Mockingjay - Part 2", 2015]
+      - ["The Hunger Games: The Ballad of Songbirds & Snakes", 2023]
+    min: 3
+    backdrop_title: "The Hunger Games: Catching Fire"
+  - key: m-apes
+    group: universes
+    type: movie
+    title: "Planet of\nthe Apes"
+    accent: teal
+    titles:
+      - ["Planet of the Apes", 1968]
+      - ["Rise of the Planet of the Apes", 2011]
+      - ["Dawn of the Planet of the Apes", 2014]
+      - ["War for the Planet of the Apes", 2017]
+      - ["Kingdom of the Planet of the Apes", 2024]
+    min: 3
+    backdrop_title: "War for the Planet of the Apes"
+  - key: m-madmax
+    group: universes
+    type: movie
+    title: "Mad Max"
+    accent: gold
+    titles:
+      - ["Mad Max", 1979]
+      - ["Mad Max 2", 1981]
+      - ["Mad Max Beyond Thunderdome", 1985]
+      - ["Mad Max: Fury Road", 2015]
+      - ["Furiosa: A Mad Max Saga", 2024]
+    min: 3
+    backdrop_title: "Furiosa: A Mad Max Saga"
+  - key: m-conjuring
+    group: universes
+    type: movie
+    title: "The\nConjuring"
+    subtitle: "Universe"
+    accent: purple
+    titles:
+      - ["The Conjuring", 2013]
+      - ["The Conjuring 2", 2016]
+      - ["Annabelle: Creation", 2017]
+      - ["The Conjuring: The Devil Made Me Do It", 2021]
+      - ["The Conjuring: Last Rites", 2025]
+    min: 3
+    backdrop_title: "The Conjuring"
+  - key: m-bourne
+    group: universes
+    type: movie
+    title: "Bourne"
+    accent: blue
+    titles:
+      - ["The Bourne Identity", 2002]
+      - ["The Bourne Supremacy", 2004]
+      - ["The Bourne Ultimatum", 2007]
+      - ["The Bourne Legacy", 2012]
+      - ["Jason Bourne", 2016]
+    min: 3
+    backdrop_title: "The Bourne Ultimatum"
+  - key: m-alien
+    group: universes
+    type: movie
+    title: "Alien"
+    accent: teal
+    titles:
+      - ["Aliens", 1986]
+      - ["Alien Resurrection", 1997]
+      - ["Prometheus", 2012]
+      - ["Alien: Romulus", 2024]
+    min: 3
+    backdrop_title: "Alien: Romulus"
+  - key: m-kungfupanda
+    group: universes
+    type: movie
+    title: "Kung Fu\nPanda"
+    accent: gold
+    titles:
+      - ["Kung Fu Panda", 2008]
+      - ["Kung Fu Panda 2", 2011]
+      - ["Kung Fu Panda 3", 2016]
+      - ["Kung Fu Panda 4", 2024]
+    min: 3
+    backdrop_title: "Kung Fu Panda 4"
+  - key: m-diehard
+    group: universes
+    type: movie
+    title: "Die Hard"
+    accent: red
+    titles:
+      - ["Die Hard", 1988]
+      - ["Die Hard 2", 1990]
+      - ["Live Free or Die Hard", 2007]
+      - ["A Good Day to Die Hard", 2013]
+    min: 3
+    backdrop_title: "Die Hard"
+  - key: m-halloweensaga
+    group: universes
+    type: movie
+    title: "Halloween"
+    subtitle: "Saga"
+    accent: red
+    titles:
+      - ["Halloween", 1978]
+      - ["Halloween II", 1981]
+      - ["Halloween III: Season of the Witch", 1982]
+      - ["Halloween H20: 20 Years Later", 1998]
+      - ["Halloween: Resurrection", 2002]
+      - ["Halloween", 2018]
+      - ["Halloween Kills", 2021]
+      - ["Halloween Ends", 2022]
+    min: 3
+  - key: m-residentevil
+    group: universes
+    type: movie
+    title: "Resident\nEvil"
+    accent: blue
+    titles:
+      - ["Resident Evil", 2002]
+      - ["Resident Evil: Apocalypse", 2004]
+      - ["Resident Evil: Extinction", 2007]
+      - ["Resident Evil: Afterlife", 2010]
+      - ["Resident Evil: Retribution", 2012]
+      - ["Resident Evil: The Final Chapter", 2016]
+      - ["Resident Evil: Welcome to Raccoon City", 2021]
+      - ["Resident Evil", 2026]
+    min: 3
+  - key: m-evildead
+    group: universes
+    type: movie
+    title: "Evil Dead"
+    accent: gold
+    titles:
+      - ["The Evil Dead", 1982]
+      - ["Evil Dead II", 1987]
+      - ["Army of Darkness", 1992]
+      - ["Evil Dead Rise", 2023]
+      - ["Evil Dead Burn", 2026]
+    min: 3
+  - key: m-jackass
+    group: universes
+    type: movie
+    title: "Jackass"
+    accent: green
+    titles:
+      - ["Jackass: The Movie", 2002]
+      - ["Jackass Number Two", 2006]
+      - ["Jackass 3D", 2010]
+      - ["Jackass Presents: Bad Grandpa", 2013]
+      - ["Jackass Forever", 2022]
+    min: 3
+  - key: m-americanpie
+    group: universes
+    type: movie
+    title: "American Pie"
+    accent: purple
+    titles:
+      - ["American Pie", 1999]
+      - ["American Pie 2", 2001]
+      - ["American Wedding", 2003]
+      - ["American Reunion", 2012]
+    min: 3
+  - key: m-badboys
+    group: universes
+    type: movie
+    title: "Bad Boys"
+    accent: teal
+    titles:
+      - ["Bad Boys", 1995]
+      - ["Bad Boys II", 2003]
+      - ["Bad Boys for Life", 2020]
+      - ["Bad Boys: Ride or Die", 2024]
+    min: 3
+  - key: m-childsplaychucky
+    group: universes
+    type: movie
+    title: "Chucky"
+    accent: pink
+    titles:
+      - ["Child's Play", 1988]
+      - ["Child's Play 2", 1990]
+      - ["Child's Play 3", 1991]
+      - ["Bride of Chucky", 1998]
+    min: 3
+  - key: m-lethalweapon
+    group: universes
+    type: movie
+    title: "Lethal\nWeapon"
+    accent: red
+    titles:
+      - ["Lethal Weapon", 1987]
+      - ["Lethal Weapon 2", 1989]
+      - ["Lethal Weapon 3", 1992]
+      - ["Lethal Weapon 4", 1998]
+    min: 3
+  - key: m-madagascar
+    group: universes
+    type: movie
+    title: "Madagascar"
+    accent: blue
+    titles:
+      - ["Madagascar", 2005]
+      - ["Madagascar: Escape 2 Africa", 2008]
+      - ["Madagascar 3: Europe's Most Wanted", 2012]
+      - ["Penguins of Madagascar", 2014]
+    min: 3
+  - key: m-spykids
+    group: universes
+    type: movie
+    title: "Spy Kids"
+    accent: gold
+    titles:
+      - ["Spy Kids", 2001]
+      - ["Spy Kids 2: The Island of Lost Dreams", 2002]
+      - ["Spy Kids 3-D: Game Over", 2003]
+      - ["Spy Kids: Armageddon", 2023]
+    min: 3
+  - key: m-theexpendables
+    group: universes
+    type: movie
+    title: "The\nExpendables"
+    accent: green
+    titles:
+      - ["The Expendables", 2010]
+      - ["The Expendables 2", 2012]
+      - ["The Expendables 3", 2014]
+      - ["Expend4bles", 2023]
+    min: 3
+  - key: m-thelegomovie
+    group: universes
+    type: movie
+    title: "The LEGO\nMovie"
+    accent: purple
+    titles:
+      - ["The Lego Movie", 2014]
+      - ["The Lego Batman Movie", 2017]
+      - ["The Lego Ninjago Movie", 2017]
+      - ["The Lego Movie 2: The Second Part", 2019]
+    min: 3
+  - key: m-themummy
+    group: universes
+    type: movie
+    title: "The Mummy"
+    accent: teal
+    titles:
+      - ["The Mummy", 1999]
+      - ["The Mummy Returns", 2001]
+      - ["The Scorpion King", 2002]
+      - ["The Mummy: Tomb of the Dragon Emperor", 2008]
+    min: 3
+  - key: m-thepurge
+    group: universes
+    type: movie
+    title: "The Purge"
+    accent: pink
+    titles:
+      - ["The Purge", 2013]
+      - ["The Purge: Election Year", 2016]
+      - ["The First Purge", 2018]
+      - ["The Forever Purge", 2021]
+    min: 3
+  - key: m-underworld
+    group: universes
+    type: movie
+    title: "Underworld"
+    accent: red
+    titles:
+      - ["Underworld", 2003]
+      - ["Underworld: Evolution", 2006]
+      - ["Underworld: Rise of the Lycans", 2009]
+      - ["Underworld: Awakening", 2012]
+    min: 3
+  - key: m-aquietplace
+    group: universes
+    type: movie
+    title: "A Quiet\nPlace"
+    accent: blue
+    titles:
+      - ["A Quiet Place", 2018]
+      - ["A Quiet Place Part II", 2021]
+      - ["A Quiet Place: Day One", 2024]
+    min: 3
+  - key: m-avatar
+    group: universes
+    type: movie
+    title: "Avatar"
+    accent: gold
+    titles:
+      - ["Avatar", 2009]
+      - ["Avatar: The Way of Water", 2022]
+      - ["Avatar: Fire and Ash", 2025]
+    min: 3
+  - key: m-backtothefuture
+    group: universes
+    type: movie
+    title: "Back to\nthe Future"
+    accent: green
+    titles:
+      - ["Back to the Future", 1985]
+      - ["Back to the Future Part II", 1989]
+      - ["Back to the Future Part III", 1990]
+    min: 3
+  - key: m-beverlyhillscop
+    group: universes
+    type: movie
+    title: "Beverly Hills\nCop"
+    accent: purple
+    titles:
+      - ["Beverly Hills Cop", 1984]
+      - ["Beverly Hills Cop II", 1987]
+      - ["Beverly Hills Cop: Axel F", 2024]
+    min: 3
+  - key: m-cars
+    group: universes
+    type: movie
+    title: "Cars"
+    accent: teal
+    titles:
+      - ["Cars", 2006]
+      - ["Cars 2", 2011]
+      - ["Cars 3", 2017]
+    min: 3
+  - key: m-fiftyshades
+    group: universes
+    type: movie
+    title: "Fifty Shades"
+    accent: pink
+    titles:
+      - ["Fifty Shades of Grey", 2015]
+      - ["Fifty Shades Darker", 2017]
+      - ["Fifty Shades Freed", 2018]
+    min: 3
+  - key: m-ghostbusters
+    group: universes
+    type: movie
+    title: "Ghostbusters"
+    accent: red
+    titles:
+      - ["Ghostbusters", 1984]
+      - ["Ghostbusters II", 1989]
+      - ["Ghostbusters: Afterlife", 2021]
+    min: 3
+  - key: m-homealone
+    group: universes
+    type: movie
+    title: "Home Alone"
+    accent: blue
+    titles:
+      - ["Home Alone", 1990]
+      - ["Home Alone 2: Lost in New York", 1992]
+      - ["Home Sweet Home Alone", 2021]
+    min: 3
+  - key: m-hoteltransylvania
+    group: universes
+    type: movie
+    title: "Hotel\nTransylvania"
+    accent: gold
+    titles:
+      - ["Hotel Transylvania", 2012]
+      - ["Hotel Transylvania 2", 2015]
+      - ["Hotel Transylvania: Transformania", 2022]
+    min: 3
+  - key: m-howtotrainyourdragon
+    group: universes
+    type: movie
+    title: "How to Train\nYour Dragon"
+    accent: green
+    titles:
+      - ["How to Train Your Dragon", 2010]
+      - ["How to Train Your Dragon 2", 2014]
+      - ["How to Train Your Dragon: The Hidden World", 2019]
+      - ["How to Train Your Dragon", 2025]
+    min: 3
+  - key: m-insidious
+    group: universes
+    type: movie
+    title: "Insidious"
+    accent: purple
+    titles:
+      - ["Insidious", 2011]
+      - ["Insidious: Chapter 2", 2013]
+      - ["Insidious: The Last Key", 2018]
+    min: 3
+  - key: m-jaws
+    group: universes
+    type: movie
+    title: "Jaws"
+    accent: teal
+    titles:
+      - ["Jaws", 1975]
+      - ["Jaws 2", 1978]
+      - ["Jaws 3-D", 1983]
+    min: 3
+  - key: m-jumanji
+    group: universes
+    type: movie
+    title: "Jumanji"
+    accent: pink
+    titles:
+      - ["Jumanji", 1995]
+      - ["Jumanji: Welcome to the Jungle", 2017]
+      - ["Jumanji: The Next Level", 2019]
+    min: 3
+  - key: m-killbill
+    group: universes
+    type: movie
+    title: "Kill Bill"
+    accent: red
+    titles:
+      - ["Kill Bill: Vol. 1", 2003]
+      - ["Kill Bill: Vol. 2", 2004]
+      - ["Kill Bill: The Whole Bloody Affair", 2011]
+    min: 3
+  - key: m-kingsman
+    group: universes
+    type: movie
+    title: "Kingsman"
+    accent: blue
+    titles:
+      - ["Kingsman: The Secret Service", 2015]
+      - ["Kingsman: The Golden Circle", 2017]
+      - ["The King's Man", 2021]
+    min: 3
+  - key: m-knivesout
+    group: universes
+    type: movie
+    title: "Knives Out"
+    accent: gold
+    titles:
+      - ["Knives Out", 2019]
+      - ["Glass Onion: A Knives Out Mystery", 2022]
+      - ["Wake Up Dead Man: A Knives Out Mystery", 2025]
+    min: 3
+  - key: m-meettheparents
+    group: universes
+    type: movie
+    title: "Meet the\nParents"
+    accent: green
+    titles:
+      - ["Meet the Parents", 2000]
+      - ["Meet the Fockers", 2004]
+      - ["Little Fockers", 2010]
+    min: 3
+  - key: m-meninblack
+    group: universes
+    type: movie
+    title: "Men in Black"
+    accent: purple
+    titles:
+      - ["Men in Black", 1997]
+      - ["Men in Black II", 2002]
+      - ["Men in Black 3", 2012]
+    min: 3
+  - key: m-oceans
+    group: universes
+    type: movie
+    title: "Ocean's"
+    subtitle: "Trilogy"
+    accent: teal
+    titles:
+      - ["Ocean's Eleven", 2001]
+      - ["Ocean's Twelve", 2004]
+      - ["Ocean's Thirteen", 2007]
+    min: 3
+  - key: m-paddington
+    group: universes
+    type: movie
+    title: "Paddington"
+    accent: pink
+    titles:
+      - ["Paddington", 2014]
+      - ["Paddington 2", 2017]
+      - ["Paddington in Peru", 2024]
+    min: 3
+  - key: m-rushhour
+    group: universes
+    type: movie
+    title: "Rush Hour"
+    accent: red
+    titles:
+      - ["Rush Hour", 1998]
+      - ["Rush Hour 2", 2001]
+      - ["Rush Hour 3", 2007]
+    min: 3
+  - key: m-saw
+    group: universes
+    type: movie
+    title: "Saw"
+    accent: blue
+    titles:
+      - ["Saw", 2004]
+      - ["Saw II", 2005]
+      - ["Saw X", 2023]
+    min: 3
+  - key: m-scream
+    group: universes
+    type: movie
+    title: "Scream"
+    accent: gold
+    titles:
+      - ["Scream", 1996]
+      - ["Scream", 2022]
+      - ["Scream VI", 2023]
+      - ["Scream 7", 2026]
+    min: 3
+  - key: m-sonicthehedgehog
+    group: universes
+    type: movie
+    title: "Sonic the\nHedgehog"
+    accent: green
+    titles:
+      - ["Sonic the Hedgehog", 2020]
+      - ["Sonic the Hedgehog 2", 2022]
+      - ["Sonic the Hedgehog 3", 2024]
+    min: 3
+  - key: m-taken
+    group: universes
+    type: movie
+    title: "Taken"
+    accent: purple
+    titles:
+      - ["Taken", 2008]
+      - ["Taken 2", 2012]
+      - ["Taken 3", 2014]
+    min: 3
+  - key: m-theequalizer
+    group: universes
+    type: movie
+    title: "The\nEqualizer"
+    accent: teal
+    titles:
+      - ["The Equalizer", 2014]
+      - ["The Equalizer 2", 2018]
+      - ["The Equalizer 3", 2023]
+    min: 3
+  - key: m-thegodfather
+    group: universes
+    type: movie
+    title: "The\nGodfather"
+    accent: pink
+    titles:
+      - ["The Godfather", 1972]
+      - ["The Godfather Part II", 1974]
+      - ["The Godfather Part III", 1990]
+    min: 3
+  - key: m-themazerunner
+    group: universes
+    type: movie
+    title: "The Maze\nRunner"
+    accent: red
+    titles:
+      - ["The Maze Runner", 2014]
+      - ["Maze Runner: The Scorch Trials", 2015]
+      - ["Maze Runner: The Death Cure", 2018]
+    min: 3
+  - key: m-tron
+    group: universes
+    type: movie
+    title: "Tron"
+    accent: blue
+    titles:
+      - ["Tron", 1982]
+      - ["Tron: Legacy", 2010]
+      - ["Tron: Ares", 2025]
+    min: 3
+  - key: m-twilight
+    group: universes
+    type: movie
+    title: "Twilight"
+    accent: gold
+    titles:
+      - ["Twilight", 2008]
+      - ["The Twilight Saga: Breaking Dawn - Part 1", 2011]
+      - ["The Twilight Saga: Breaking Dawn - Part 2", 2012]
+    min: 3
+  - key: m-venom
+    group: universes
+    type: movie
+    title: "Venom"
+    accent: green
+    titles:
+      - ["Venom", 2018]
+      - ["Venom: Let There Be Carnage", 2021]
+      - ["Venom: The Last Dance", 2024]
+    min: 3
+
+  # --- Kids and family.
+  - key: m-kids
+    group: kids
+    type: movie
+    title: "Kids"
+    subtitle: "Popular"
+    accent: green
+    lists: [dmasej/popular-kids-family-movies]
+  - key: s-kids
+    group: kids
+    type: show
+    title: "Kids"
+    subtitle: "Ages 3-8"
+    accent: green
+    lists: [golenlk/kids-shows-age-3-to-8]
+  - key: m-kidsanimated
+    group: kids
+    type: movie
+    title: "Kids"
+    subtitle: "Animated"
+    accent: pink
+    lists: [a9s2w5/all-animated-movies-for-kids]
+  - key: s-preschool
+    group: kids
+    type: show
+    title: "Preschool"
+    accent: gold
+    lists: [rizzlemedizzle/mdb-aria-preschool-candidates]
+  - key: m-familybest
+    group: kids
+    type: movie
+    title: "Family"
+    subtitle: "Favourites"
+    accent: teal
+    lists: [bbrodka1963/top-100-family-movies-english]
+  - key: s-familytv
+    group: kids
+    type: show
+    title: "Family"
+    subtitle: "G & PG"
+    accent: teal
+    lists: [familytv133/family-kids-english-tv-showsrated-g-pg]
+
+  # --- Streaming services. `logo` uses the service logo (run `cinesets logos` once to download them).
+  - key: m-netflix
+    group: streaming
+    type: movie
+    title: "Netflix"
+    subtitle: "Popular"
+    accent: red
+    lists: [fadetoblah/netflix-top-movies]
+    limit: 50
+    logo: "netflix"
+  - key: s-netflix
+    group: streaming
+    type: show
+    title: "Netflix"
+    subtitle: "Popular"
+    accent: red
+    lists: [snoak/netflix-top-10-shows]
+    limit: 50
+    logo: "netflix"
+  - key: m-prime
+    group: streaming
+    type: movie
+    title: "Prime\nVideo"
+    subtitle: "Popular"
+    accent: teal
+    lists: [fadetoblah/amazon-top-movies]
+    limit: 50
+    backdrop_title: "Project Hail Mary"
+    logo: "prime"
+  - key: s-prime
+    group: streaming
+    type: show
+    title: "Prime\nVideo"
+    subtitle: "Popular"
+    accent: teal
+    lists: [fadetoblah/amazon-prime-top-tv-shows]
+    limit: 50
+    logo: "prime"
+  - key: m-disney
+    group: streaming
+    type: movie
+    title: "Disney+"
+    subtitle: "Popular"
+    accent: blue
+    lists: [fadetoblah/disney-top-movies]
+    limit: 50
+    logo: "disney"
+  - key: s-disney
+    group: streaming
+    type: show
+    title: "Disney+"
+    subtitle: "Popular"
+    accent: blue
+    lists: [fadetoblah/disney-top-tv-shows]
+    limit: 50
+    logo: "disney"
+  - key: m-max
+    group: streaming
+    type: movie
+    title: "HBO Max"
+    subtitle: "Popular"
+    accent: purple
+    lists: [fadetoblah/hbo-max-top-movies]
+    limit: 50
+    backdrop_title: "Supergirl"
+    logo: "hbomax"
+  - key: s-max
+    group: streaming
+    type: show
+    title: "HBO Max"
+    subtitle: "Popular"
+    accent: purple
+    lists: [fadetoblah/hbo-max-top-tv-shows]
+    limit: 50
+    backdrop_title: "Hacks"
+    logo: "hbomax"
+  - key: m-apple
+    group: streaming
+    type: movie
+    title: "Apple TV+"
+    subtitle: "Popular"
+    accent: green
+    lists: [fadetoblah/appletv-top-movies]
+    limit: 50
+    logo: "apple"
+  - key: s-apple
+    group: streaming
+    type: show
+    title: "Apple TV+"
+    subtitle: "Popular"
+    accent: green
+    lists: [fadetoblah/appletv-top-shows]
+    limit: 50
+    backdrop_title: "Silo"
+    logo: "apple"
+  - key: m-hulu
+    group: streaming
+    type: movie
+    title: "Hulu"
+    subtitle: "Popular"
+    accent: green
+    lists: [fadetoblah/hulu-top-movies]
+    limit: 50
+    logo: "hulu"
+  - key: s-hulu
+    group: streaming
+    type: show
+    title: "Hulu"
+    subtitle: "Popular"
+    accent: green
+    lists: [fadetoblah/hulu-top-tv-shows]
+    limit: 50
+    logo: "hulu"
+  - key: m-paramount
+    group: streaming
+    type: movie
+    title: "Paramount+"
+    subtitle: "Popular"
+    accent: blue
+    lists: [fadetoblah/paramount-top-movies]
+    limit: 50
+    logo: "paramount"
+  - key: s-paramount
+    group: streaming
+    type: show
+    title: "Paramount+"
+    subtitle: "Popular"
+    accent: blue
+    lists: [fadetoblah/paramount-top-tv-shows]
+    limit: 50
+    logo: "paramount"
+  - key: m-peacock
+    group: streaming
+    type: movie
+    title: "Peacock"
+    subtitle: "Popular"
+    accent: gold
+    lists: [fadetoblah/peacock-top-movies]
+    limit: 50
+    logo: "peacock"
+  - key: s-peacock
+    group: streaming
+    type: show
+    title: "Peacock"
+    subtitle: "Popular"
+    accent: gold
+    lists: [fadetoblah/peacock-top-tv-shows]
+    limit: 50
+    logo: "peacock"
+    min: 5
+  - key: m-stan
+    group: streaming
+    type: movie
+    title: "Stan"
+    subtitle: "Popular"
+    accent: blue
+    lists: [altfreq/stan-australia-movies]
+    limit: 50
+    logo: "stan"
+  - key: s-stan
+    group: streaming
+    type: show
+    title: "Stan"
+    subtitle: "Popular"
+    accent: blue
+    lists: [altfreq/stan-australia-series]
+    limit: 50
+    logo: "stan"
+
+  # --- Best of.
+  - key: m-top250
+    group: bestof
+    type: movie
+    title: "Top\nRated"
+    subtitle: "All Time"
+    accent: gold
+    lists: [snoak/imdb-top-250-movies]
+    limit: 250
+  - key: s-top250
+    group: bestof
+    type: show
+    title: "Top\nRated"
+    subtitle: "All Time"
+    accent: gold
+    lists: [snoak/imdb-top-250-shows]
+    limit: 250
+  - key: m-oscars
+    group: bestof
+    type: movie
+    title: "Oscar"
+    subtitle: "Winners"
+    accent: gold
+    lists: [adamlobb/oscar-winners]
+    limit: 250
+  - key: m-globes
+    group: bestof
+    type: movie
+    title: "Golden\nGlobe"
+    subtitle: "Winners"
+    accent: gold
+    lists: [nobnobz/awards-golden-globe-winners]
+    limit: 250
+  - key: s-emmys
+    group: bestof
+    type: show
+    title: "Emmy"
+    subtitle: "Winners"
+    accent: gold
+    lists: [nobnobz/awards-emmy-winner]
+    limit: 250
+    backdrop_title: "Shōgun"
+  - key: m-70s
+    group: bestof
+    type: movie
+    title: "Best of"
+    subtitle: "The 70s"
+    accent: pink
+    lists: [coffeeknight/best-of-the-1970s]
+  - key: m-80s
+    group: bestof
+    type: movie
+    title: "Best of"
+    subtitle: "The 80s"
+    accent: pink
+    lists: [coffeeknight/best-of-the-1980s]
+  - key: m-90s
+    group: bestof
+    type: movie
+    title: "Best of"
+    subtitle: "The 90s"
+    accent: pink
+    lists: [coffeeknight/best-of-the-1990s]
+  - key: m-00s
+    group: bestof
+    type: movie
+    title: "Best of"
+    subtitle: "The 2000s"
+    accent: pink
+    lists: [coffeeknight/best-of-the-2000s]
+    backdrop_title: "The Lord of the Rings: The Fellowship of the Ring"
+  - key: m-10s
+    group: bestof
+    type: movie
+    title: "Best of"
+    subtitle: "The 2010s"
+    accent: pink
+    lists: [coffeeknight/best-of-the-2010s]
+  - key: m-20s
+    group: bestof
+    type: movie
+    title: "Best of"
+    subtitle: "The 2020s"
+    accent: pink
+    lists: [coffeeknight/best-of-the-2020s]
+  - key: m-docs
+    group: bestof
+    type: movie
+    title: "Popular"
+    subtitle: "Documentaries"
+    accent: teal
+    lists: [dannyvfilms/popular-documentaries-this-year]
+    backdrop_title: "Queen of Chess"
+  - key: m-mindbenders
+    group: bestof
+    type: movie
+    title: "Mind\nBenders"
+    accent: purple
+    lists: [hdlists/mindfuck-movies]
+  - key: m-twists
+    group: bestof
+    type: movie
+    title: "Plot\nTwists"
+    accent: purple
+    lists: [hdlists/crazy-plot-twists]
+  - key: m-truestory
+    group: bestof
+    type: movie
+    title: "True\nStories"
+    accent: teal
+    lists: [hdlists/based-on-or-inspired-by-a-true-story]
+  - key: m-anime
+    group: bestof
+    type: movie
+    title: "Anime"
+    subtitle: "Top Rated"
+    accent: pink
+    lists: [cakepopcorn/top-rated-anime-movies]
+  - key: s-anime
+    group: bestof
+    type: show
+    title: "Anime"
+    subtitle: "Trending"
+    accent: pink
+    lists: [snoak/trending-anime-shows]
+
+  # --- Popular by genre.
+  - key: m-action
+    group: genres
+    type: movie
+    title: "Popular"
+    subtitle: "Action"
+    accent: red
+    lists: [garycrawfordgc/action]
+  - key: m-comedy
+    group: genres
+    type: movie
+    title: "Popular"
+    subtitle: "Comedy"
+    accent: gold
+    lists: [garycrawfordgc/comedy]
+  - key: m-crime
+    group: genres
+    type: movie
+    title: "Popular"
+    subtitle: "Crime"
+    accent: blue
+    lists: [garycrawfordgc/crime]
+  - key: m-drama
+    group: genres
+    type: movie
+    title: "Popular"
+    subtitle: "Drama"
+    accent: purple
+    lists: [garycrawfordgc/drama]
+  - key: m-horror
+    group: genres
+    type: movie
+    title: "Popular"
+    subtitle: "Horror"
+    accent: red
+    lists: [garycrawfordgc/horror]
+    backdrop_title: "Sinners"
+  - key: m-scifi
+    group: genres
+    type: movie
+    title: "Popular"
+    subtitle: "Sci-Fi"
+    accent: teal
+    lists: [garycrawfordgc/sci-fi]
+    backdrop_title: "Project Hail Mary"
+  - key: m-thriller
+    group: genres
+    type: movie
+    title: "Popular"
+    subtitle: "Thriller"
+    accent: blue
+    lists: [garycrawfordgc/thriller]
+  - key: m-war
+    group: genres
+    type: movie
+    title: "Popular"
+    subtitle: "War"
+    accent: green
+    lists: [garycrawfordgc/war]
+  - key: m-family
+    group: genres
+    type: movie
+    title: "Popular"
+    subtitle: "Family"
+    accent: green
+    lists: [MaxtronTV/family-movies]
+  - key: m-animation
+    group: genres
+    type: movie
+    title: "Popular"
+    subtitle: "Animation"
+    accent: pink
+    lists: [hdlists/latest-hd-animated-movies-from-1980-to-today]
+  - key: s-action
+    group: genres
+    type: show
+    title: "Popular"
+    subtitle: "Action"
+    accent: red
+    lists: [snoak/action-shows]
+  - key: s-comedy
+    group: genres
+    type: show
+    title: "Popular"
+    subtitle: "Comedy"
+    accent: gold
+    lists: [snoak/comedy-shows]
+    backdrop_title: "The Bear"
+  - key: s-drama
+    group: genres
+    type: show
+    title: "Popular"
+    subtitle: "Drama"
+    accent: purple
+    lists: [snoak/drama-shows]
+  - key: s-animation
+    group: genres
+    type: show
+    title: "Popular"
+    subtitle: "Animation"
+    accent: pink
+    lists: [snoak/animationanime-shows]
+  - key: s-crime
+    group: genres
+    type: show
+    title: "Popular"
+    subtitle: "Crime"
+    accent: blue
+    lists: [garycrawfordgc/crime-shows]
+  - key: s-scifi
+    group: genres
+    type: show
+    title: "Popular"
+    subtitle: "Sci-Fi"
+    accent: teal
+    lists: [garycrawfordgc/sci-fi-shows]
+  - key: s-family
+    group: genres
+    type: show
+    title: "Popular"
+    subtitle: "Family"
+    accent: green
+    lists: [MaxtronTV/family-tv-shows]
+  - key: s-docs
+    group: genres
+    type: show
+    title: "Popular"
+    subtitle: "Documentaries"
+    accent: teal
+    lists: [MaxtronTV/documentary-tv-shows]
+
+  # --- Regional.
+  - key: m-turkish
+    group: regional
+    type: movie
+    title: "Turkish"
+    subtitle: "Movies"
+    accent: red
+    lists: [fufu67/popular-turkish-movies]
+    backdrop_title: "The Butterfly's Dream"
+  - key: s-turkish
+    group: regional
+    type: show
+    title: "Turkish"
+    subtitle: "Series"
+    accent: red
+    lists: [fufu67/popular-turkish-shows]

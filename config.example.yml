@@ -1,0 +1,54 @@
+# CineSets settings. Copy this file to config.yml and edit it.
+# CineSets by blurbery (https://github.com/blurbery/cinesets). SPDX-License-Identifier: AGPL-3.0-or-later
+# Additional terms under AGPL-3.0 section 7 apply: see NOTICE.
+
+server:
+  type: emby                     # emby or jellyfin
+  url: http://127.0.0.1:8096     # your server address as seen from where CineSets runs
+                                 # (in Docker, use the server's LAN address, not 127.0.0.1)
+  api_key: ""                    # Dashboard > API Keys on Emby or Jellyfin. Or leave empty and set
+                                 # CINESETS_API_KEY in the environment.
+
+# Libraries CineSets matches titles in. Names must match your server's library names exactly
+# (for example "Films" or "Kids TV"). When a title is in several, the first library listed wins.
+# type: movie or show.
+libraries:
+  - {name: Movies, type: movie}
+  - {name: TV Shows, type: show}
+
+# Which collections exist and where they come from.
+collections_file: collections.yml
+
+# Cache, record of the collections CineSets owns, posters and logos.
+data_dir: data
+
+# The small gold label at the top of every poster, and the start of each collection name.
+labels:
+  movie: Movies
+  show: TV Shows
+
+defaults:
+  limit: 150        # most titles in a list-based collection
+  min_items: 8      # skip a collection with fewer matches than this
+
+# Collections page, top to bottom. A nested list shares one block (charts then genres).
+# Collections with `pin` in collections.yml always sit above all of these.
+order:
+  - [charts, genres]
+  - streaming
+  - bestof
+  - kids
+  - seasonal
+  - regional
+  - universes
+alphabetical_groups: [universes]
+
+# Seconds to pause after each write, and the slowest write (seconds) before a run stops to spare the server.
+write_pause: 1.0
+slow_write_limit: 30
+
+# Used by `cinesets schedule` (the Docker image). Cron users can ignore this.
+schedule:
+  - {every_hours: 6, only: "m-trending,s-trending"}
+  - {every_hours: 24, group: "seasonal,charts"}
+  - {every_hours: 168, all: true}

@@ -1,0 +1,110 @@
+# CineSets by blurbery (https://github.com/blurbery/cinesets). SPDX-License-Identifier: AGPL-3.0-or-later
+# Additional terms under AGPL-3.0 section 7 apply: see NOTICE.
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "17 3 * * 1"   # weekly check against the newest server releases
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  tests:
+    name: Unit tests (Python ${{ matrix.python }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        python: ["3.9", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install -r requirements-dev.txt
+      - run: python -m pytest -q tests --ignore=tests/e2e
+      - name: Shell scripts parse
+        run: for f in install.sh run.sh docker-entrypoint.sh; do sh -n "$f"; done
+
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: docker build -t cinesets:ci .
+      - name: Runs and drops root
+        run: |
+          mkdir -p config/data
+          printf 'server: {type: emby, url: "http://127.0.0.1:8096", api_key: "x"}\nlibraries: [{name: Movies, type: movie}]\ndata_dir: data\n' > config/config.yml
+          sudo chown -R 0:0 config
+          docker run --rm -v "$PWD/config:/config" cinesets:ci version
+          docker run --rm -v "$PWD/config:/config" cinesets:ci list > list.txt
+          test "$(wc -l < list.txt)" -ge 160
+          test "$(stat -c %u:%g config)" = "1000:1000"
+          test "$(stat -c %u:%g config/data)" = "1000:1000"
+          if docker run --rm -e PUID=0 -v "$PWD/config:/config" cinesets:ci version; then echo "PUID=0 should be refused"; exit 1; fi
+
+  end-to-end:
+    name: End to end (${{ matrix.server.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    continue-on-error: ${{ matrix.server.newest }}
+    strategy:
+      fail-fast: false
+      matrix:
+        server:
+          - {name: "Jellyfin 10.10", kind: jellyfin, image: "jellyfin/jellyfin:10.10.7", newest: false}
+          - {name: "Jellyfin 12.2", kind: jellyfin, image: "jellyfin/jellyfin:12.2", newest: false}
+          - {name: "Emby 4.10", kind: emby, image: "emby/embyserver:4.10.1.0", newest: false}
+          - {name: "Jellyfin latest", kind: jellyfin, image: "jellyfin/jellyfin:latest", newest: true}
+          - {name: "Emby latest", kind: emby, image: "emby/embyserver:latest", newest: true}
+          - {name: "Emby beta", kind: emby, image: "emby/embyserver:beta", newest: true}
+    steps:
+      - name: Newest releases are checked weekly and on request
+        id: gate
+        run: |
+          if [ "${{ matrix.server.newest }}" = "true" ] && [ "${{ github.event_name }}" != "schedule" ] && [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.skip != 'true'
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        if: steps.gate.outputs.skip != 'true'
+        with:
+          python-version: "3.12"
+      - if: steps.gate.outputs.skip != 'true'
+        run: pip install -r requirements.txt
+      - name: Make tiny test films
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg > /dev/null
+          for film in "Back to the Future (1985)" "Back to the Future Part II (1989)" "Back to the Future Part III (1990)" "The Matrix (1999)"; do
+            mkdir -p "media/movies/$film"
+            ffmpeg -loglevel error -f lavfi -i color=c=navy:s=320x180:d=3 -c:v libx264 -pix_fmt yuv420p "media/movies/$film/$film.mkv"
+          done
+      - name: Start a throwaway ${{ matrix.server.name }}
+        if: steps.gate.outputs.skip != 'true'
+        run: docker run -d --name media -p 127.0.0.1:8096:8096 -v "$PWD/media:/media:ro" ${{ matrix.server.image }}
+      - name: CineSets against the real server
+        if: steps.gate.outputs.skip != 'true'
+        run: python tests/e2e/run_e2e.py --kind ${{ matrix.server.kind }} --url http://127.0.0.1:8096 --media /media/movies
+      - name: Server log on failure
+        if: failure() && steps.gate.outputs.skip != 'true'
+        run: docker logs media 2>&1 | tail -n 150

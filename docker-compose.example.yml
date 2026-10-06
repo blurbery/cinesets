@@ -1,0 +1,27 @@
+# CineSets with Docker Compose.
+# CineSets by blurbery (https://github.com/blurbery/cinesets). SPDX-License-Identifier: AGPL-3.0-or-later
+# Additional terms under AGPL-3.0 section 7 apply: see NOTICE.
+#
+#   cp docker-compose.example.yml docker-compose.yml
+#   docker compose build
+#   docker compose run --rm cinesets setup    # asks for your server and writes ./config/config.yml
+#   docker compose run --rm cinesets logos
+#   docker compose run --rm cinesets plan     # dry run, changes nothing
+#   docker compose up -d                       # starts the schedule (all jobs run once straight away)
+#
+# The server address must be reachable from inside the container: use your server's LAN address (for
+# example http://192.0.2.10:8096) or its container name on a shared Docker network (http://emby:8096),
+# not 127.0.0.1. Data, posters and logos are kept in ./config/data.
+# To customise collections, copy collections.yml into ./config: that copy replaces the built-in one.
+services:
+  cinesets:
+    build: .
+    container_name: cinesets
+    restart: unless-stopped
+    volumes:
+      - ./config:/config
+    environment:
+      PUID: 1000    # CineSets runs as this user and group, not root; ./config is handed to them
+      PGID: 1000
+    # Optional: keep the API key out of config.yml by putting CINESETS_API_KEY=... in ./config/cinesets.env
+    # env_file: ./config/cinesets.env
