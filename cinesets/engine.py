@@ -44,6 +44,23 @@ class Engine:
         self.logos = os.path.join(self.data, "logos")
         self.posters = os.path.join(self.data, "posters")
 
+    # ------------------------------------------------------------ reads
+    def all_items(self, query, what, pause=0.0):
+        """Every item an /Items query returns, a page at a time. A short page is not taken as the end, since a server
+        or a proxy in front of it may send fewer items than asked for: reading stops at an empty page."""
+        out, seen, start = [], set(), 0
+        while True:
+            page = self.srv.get(f"/Items?{query}&StartIndex={start}&Limit={PAGE}&EnableTotalRecordCount=false")["Items"]
+            new = [i for i in page if i["Id"] not in seen]
+            if not new:
+                if page:  # the same items again: the server ignored StartIndex, so stop rather than loop forever
+                    print(f"   the server sent the same page of {what} twice; anything after it was not read")
+                return out
+            seen.update(i["Id"] for i in new)
+            out += new
+            start += len(page)
+            time.sleep(pause)
+
     # ------------------------------------------------------------ library index
     def build_index(self):
         """One item per title; libraries listed earlier in config.yml win when a title is in several."""
@@ -56,22 +73,15 @@ class Engine:
             if name not in folders:
                 raise SystemExit(f"library {name!r} not found on the server (found: {', '.join(sorted(folders))})")
             item_type = "Movie" if kind == "movie" else "Series"
-            start = count = 0
-            while True:
-                page = self.srv.get(f"/Items?Recursive=true&IncludeItemTypes={item_type}&Fields=ProviderIds,ProductionYear"
-                                    f"&ParentId={folders[name]}&StartIndex={start}&Limit={PAGE}&EnableTotalRecordCount=false")["Items"]
-                for it in page:
-                    prov = {k.lower(): str(v) for k, v in (it.get("ProviderIds") or {}).items() if v}
-                    for key in index[kind]:
-                        if prov.get(key):
-                            index[kind][key].setdefault(prov[key], it["Id"])
-                    index["items"][it["Id"]] = {"n": it.get("Name"), "y": it.get("ProductionYear"), "b": bool(it.get("BackdropImageTags")), "k": kind}
-                count += len(page)
-                if len(page) < PAGE:
-                    break
-                start += PAGE
-                time.sleep(0.5)
-            print(f"  indexed {name}: {count}")
+            items = self.all_items(f"Recursive=true&IncludeItemTypes={item_type}&Fields=ProviderIds,ProductionYear"
+                                   f"&ParentId={folders[name]}", f"library {name!r}", pause=0.5)
+            for it in items:
+                prov = {k.lower(): str(v) for k, v in (it.get("ProviderIds") or {}).items() if v}
+                for key in index[kind]:
+                    if prov.get(key):
+                        index[kind][key].setdefault(prov[key], it["Id"])
+                index["items"][it["Id"]] = {"n": it.get("Name"), "y": it.get("ProductionYear"), "b": bool(it.get("BackdropImageTags")), "k": kind}
+            print(f"  indexed {name}: {len(items)}")
         save_json(self.index_file, index)
         return index
 
@@ -201,14 +211,8 @@ class Engine:
 
     # ------------------------------------------------------------ writes
     def collections_by_id(self):
-        """Every collection on the server, id -> name, read in pages."""
-        out, start = {}, 0
-        while True:
-            page = self.srv.get(f"/Items?IncludeItemTypes=BoxSet&Recursive=true&StartIndex={start}&Limit=1000")["Items"]
-            out.update({i["Id"]: i.get("Name") for i in page})
-            if len(page) < 1000:
-                return out
-            start += 1000
+        """Every collection on the server, id -> name."""
+        return {i["Id"]: i.get("Name") for i in self.all_items("IncludeItemTypes=BoxSet&Recursive=true", "collections")}
 
     def existing_collections(self):
         return {name: cid for cid, name in self.collections_by_id().items()}
@@ -341,7 +345,7 @@ class Engine:
     def members(self, cid, user_id):
         # Jellyfin only lists box set children for a user; Emby lists them either way
         user = f"&UserId={user_id}" if self.srv.kind == "jellyfin" else ""
-        return {i["Id"] for i in self.srv.get(f"/Items?ParentId={cid}&Limit=5000{user}")["Items"]}
+        return {i["Id"] for i in self.all_items(f"ParentId={cid}{user}", f"collection {cid}")}
 
     def existing_ids(self, ids):
         """Drop ids the server no longer has (the index can be up to a day old), keeping order."""
