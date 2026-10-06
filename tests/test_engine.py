@@ -11,7 +11,7 @@ import requests
 from cinesets import catalog
 from cinesets.engine import Engine
 from cinesets.store import load_json
-from conftest import FakeServer, seed_index
+from conftest import FakeServer, Resp, seed_index
 
 FRANCHISE = """collections:
   - key: m-bttf
@@ -253,3 +253,56 @@ def test_existing_name_is_refused_before_creating(make_cfg):
         f.write(yml)
     eng.run("apply", catalog.load(cfg), 8)
     assert not [c for c in srv.calls if c[0] == "POST" and c[1].startswith("/Collections?")]
+
+
+# ------------------------------------------------------------ Jellyfin 12
+class GroupingServer(FakeServer):
+    """Jellyfin 12 without a user: a library listing shows a collection in place of the titles in it, unless asked
+    not to with CollapseBoxSetItems=false."""
+
+    def __init__(self):
+        super().__init__("jellyfin")
+        self.films = [{"Id": f"m{n}", "Name": f"Film {n}", "ProductionYear": 2000, "ProviderIds": {"Imdb": f"tt{n:07d}"}}
+                      for n in range(1, 4)]
+
+    def call(self, method, path, timeout=120, **kw):
+        if path == "/Library/VirtualFolders":
+            return Resp(data=[{"Name": "Movies", "ItemId": "lib-movies"}, {"Name": "TV Shows", "ItemId": "lib-tv"}])
+        if "ParentId=lib-" in path:
+            self.calls.append((method, path))
+            if "ParentId=lib-tv" in path:
+                return Resp(data={"Items": []})
+            if "StartIndex=0&" not in path:
+                return Resp(data={"Items": []})
+            if "CollapseBoxSetItems=false" in path:
+                return Resp(data={"Items": self.films})
+            return Resp(data={"Items": [self.films[2], {"Id": "box", "Name": "Movies - Films", "Type": "BoxSet"}]})
+        return super().call(method, path, timeout, **kw)
+
+
+def test_index_keeps_titles_that_are_in_collections(make_cfg):
+    cfg = make_cfg("jellyfin")
+    index = Engine(cfg, GroupingServer()).build_index()
+    assert sorted(index["items"]) == ["m1", "m2", "m3"]
+    assert sorted(index["movie"]["imdb"].values()) == ["m1", "m2", "m3"]
+
+
+class SlowListingServer(FakeServer):
+    """Jellyfin 12: a new collection lists no titles for a moment after it is made."""
+
+    def call(self, method, path, timeout=120, **kw):
+        if method == "GET" and "ParentId=" in path and not any(p.startswith("/Items?ParentId=") for _, p in self.calls):
+            self.calls.append((method, path))
+            return Resp(data={"Items": []})
+        return super().call(method, path, timeout, **kw)
+
+
+def test_a_new_collections_titles_are_not_added_twice(make_cfg):
+    cfg, _, _ = setup_run(make_cfg, "jellyfin")
+    srv = SlowListingServer("jellyfin")
+    for iid, (name, _, k) in ITEMS.items():
+        srv.add_item(iid, name, "Movie" if k == "movie" else "Series")
+    Engine(cfg, srv).run("apply", catalog.load(cfg), 8)
+    (cid, coll), = srv.collections.items()
+    assert coll["members"] == ["m1", "m2", "m3"]
+    assert not [c for c in srv.calls if c[0] == "POST" and c[1].startswith(f"/Collections/{cid}/Items")]
