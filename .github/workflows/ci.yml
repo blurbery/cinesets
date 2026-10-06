@@ -69,7 +69,9 @@ jobs:
       matrix:
         server:
           - {name: "Jellyfin 10.10", kind: jellyfin, image: "jellyfin/jellyfin:10.10.7", newest: false}
+          - {name: "Jellyfin 10.11", kind: jellyfin, image: "jellyfin/jellyfin:10.11.11", newest: false}
           - {name: "Jellyfin 12.2", kind: jellyfin, image: "jellyfin/jellyfin:12.2", newest: false}
+          - {name: "Emby 4.9", kind: emby, image: "emby/embyserver:4.9.5.0", newest: false}
           - {name: "Emby 4.10", kind: emby, image: "emby/embyserver:4.10.1.0", newest: false}
           - {name: "Jellyfin latest", kind: jellyfin, image: "jellyfin/jellyfin:latest", newest: true}
           - {name: "Emby latest", kind: emby, image: "emby/embyserver:latest", newest: true}
@@ -91,20 +93,17 @@ jobs:
           python-version: "3.12"
       - if: steps.gate.outputs.skip != 'true'
         run: pip install -r requirements.txt
-      - name: Make tiny test films
+      - name: Make tiny test films and shows
         if: steps.gate.outputs.skip != 'true'
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg > /dev/null
-          for film in "Back to the Future (1985)" "Back to the Future Part II (1989)" "Back to the Future Part III (1990)" "The Matrix (1999)"; do
-            mkdir -p "media/movies/$film"
-            ffmpeg -loglevel error -f lavfi -i color=c=navy:s=320x180:d=3 -c:v libx264 -pix_fmt yuv420p "media/movies/$film/$film.mkv"
-          done
+          python tests/e2e/run_e2e.py --make-media media
       - name: Start a throwaway ${{ matrix.server.name }}
         if: steps.gate.outputs.skip != 'true'
         run: docker run -d --name media -p 127.0.0.1:8096:8096 -v "$PWD/media:/media:ro" ${{ matrix.server.image }}
       - name: CineSets against the real server
         if: steps.gate.outputs.skip != 'true'
-        run: python tests/e2e/run_e2e.py --kind ${{ matrix.server.kind }} --url http://127.0.0.1:8096 --media /media/movies
+        run: python tests/e2e/run_e2e.py --kind ${{ matrix.server.kind }} --url http://127.0.0.1:8096 --media /media
       - name: Server log on failure
         if: failure() && steps.gate.outputs.skip != 'true'
         run: docker logs media 2>&1 | tail -n 150
