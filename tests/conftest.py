@@ -46,10 +46,26 @@ class FakeServer:
         self.timeout_on_create = False
         self.reuse_same_name = False   # Emby-style: creating a name that exists returns the existing one
         self.drop_posters = 0          # this many uploads are accepted but not kept
+        self.libraries = {}            # name -> folder id
+        self.page_cap = None           # send at most this many items per page, whatever Limit asks for
+        self.ignore_start = False      # always send the first page, as a server without paging would
 
     # --- helpers for tests
     def add_item(self, iid, name, kind="Movie"):
         self.items[iid] = {"Id": iid, "Name": name, "Type": kind}
+
+    def add_library(self, name, items):
+        """items: [(id, name, year, "Movie" or "Series", provider ids)]"""
+        fid = f"lib-{len(self.libraries) + 1}"
+        self.libraries[name] = fid
+        for iid, title, year, kind, ids in items:
+            self.items[iid] = {"Id": iid, "Name": title, "Type": kind, "ProductionYear": year, "ProviderIds": ids, "lib": fid}
+        return fid
+
+    def page(self, items, q):
+        start = 0 if self.ignore_start else int(q.get("StartIndex", 0))
+        n = min(int(q.get("Limit", len(items))), self.page_cap or len(items))
+        return Resp(data={"Items": items[start:start + n]})
 
     def add_collection(self, name, members=()):
         cid = str(self.next_id)
@@ -66,14 +82,19 @@ class FakeServer:
         u = urlparse(path)
         q = {k: v[0] for k, v in parse_qs(u.query).items()}
         parts = u.path.strip("/").split("/")
+        if method == "GET" and u.path == "/Library/VirtualFolders":
+            return Resp(data=[{"Name": n, "ItemId": fid} for n, fid in self.libraries.items()])
         if method == "GET" and u.path == "/Items":
             if q.get("IncludeItemTypes") == "BoxSet":
-                return Resp(data={"Items": [{"Id": c, "Name": v["Name"]} for c, v in self.collections.items()]})
+                return self.page([{"Id": c, "Name": v["Name"]} for c, v in self.collections.items()], q)
+            if q.get("ParentId") in self.libraries.values():
+                return self.page([i for i in self.items.values()
+                                  if i.get("lib") == q["ParentId"] and i["Type"] == q.get("IncludeItemTypes")], q)
             if "ParentId" in q:
                 if self.kind == "jellyfin" and "UserId" not in q:
                     return Resp(data={"Items": []})  # Jellyfin lists box set children only for a user
                 members = self.collections[q["ParentId"]]["members"]
-                return Resp(data={"Items": [{"Id": i} for i in members]})
+                return self.page([{"Id": i} for i in members], q)
             if "Ids" in q:
                 ids = q["Ids"].split(",")
                 return Resp(data={"Items": [{"Id": i, "Genres": self.items[i].get("Genres", [])} for i in ids if i in self.items]})

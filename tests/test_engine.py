@@ -285,3 +285,50 @@ def test_index_keeps_titles_that_are_in_collections(make_cfg):
     index = Engine(cfg, GroupingServer()).build_index()
     assert sorted(index["items"]) == ["m1", "m2", "m3"]
     assert sorted(index["movie"]["imdb"].values()) == ["m1", "m2", "m3"]
+
+
+# ------------------------------------------------------------ libraries and collections of any size
+def item_reads(srv):
+    return [c for c in srv.calls if c[0] == "GET" and c[1].startswith("/Items?")]
+
+
+@pytest.mark.parametrize("cap", [None, 7])
+def test_index_reads_the_whole_library_even_from_short_pages(make_cfg, monkeypatch, cap):
+    import cinesets.engine as engine_mod
+    monkeypatch.setattr(engine_mod.time, "sleep", lambda s: None)
+    cfg = make_cfg()
+    srv = FakeServer()
+    srv.page_cap = cap  # a server or proxy that sends fewer items per page than CineSets asks for
+    srv.add_library("Movies", [(f"m{n}", f"Film {n}", 2000, "Movie", {"Imdb": f"tt{n:07d}"}) for n in range(25)])
+    srv.add_library("TV Shows", [(f"s{n}", f"Show {n}", 2010, "Series", {"Tvdb": str(n)}) for n in range(3)])
+    index = Engine(cfg, srv).build_index()
+    assert len(index["movie"]["imdb"]) == 25 and len(index["show"]["tvdb"]) == 3 and len(index["items"]) == 28
+    # every page, plus the empty page that ends each library
+    assert len(item_reads(srv)) == (5 + 2 if cap else 2 + 2)
+
+
+@pytest.mark.parametrize("kind", ["emby", "jellyfin"])
+def test_collections_and_their_titles_are_read_across_pages(make_cfg, kind):
+    cfg, srv, eng = setup_run(make_cfg, kind)
+    srv.page_cap = 2
+    ids = [srv.add_collection(f"Collection {n}", ["m1", "m2", "m3"]) for n in range(5)]
+    assert sorted(eng.existing_collections().values()) == sorted(ids)
+    assert eng.members(ids[0], "admin") == {"m1", "m2", "m3"}
+
+
+def test_short_pages_do_not_cause_writes(make_cfg):
+    cfg, srv, eng = setup_run(make_cfg)
+    srv.page_cap = 1
+    eng.run("apply", catalog.load(cfg), 8)
+    srv.calls.clear()
+    eng.run("apply", catalog.load(cfg), 8)
+    assert srv.writes() == []          # all three titles were seen, so none is added again
+
+
+def test_a_server_that_ignores_paging_is_read_once_and_reported(make_cfg, capsys):
+    cfg, srv, eng = setup_run(make_cfg)
+    srv.page_cap, srv.ignore_start = 2, True
+    cid = srv.add_collection("Collection", ["m1", "m2", "m3"])
+    assert eng.members(cid, "admin") == {"m1", "m2"}
+    assert len(item_reads(srv)) == 2   # it stopped instead of asking for the same page forever
+    assert "sent the same page" in capsys.readouterr().out
