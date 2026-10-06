@@ -73,8 +73,9 @@ class Engine:
             if name not in folders:
                 raise SystemExit(f"library {name!r} not found on the server (found: {', '.join(sorted(folders))})")
             item_type = "Movie" if kind == "movie" else "Series"
+            # without CollapseBoxSetItems=false, Jellyfin 12 lists a collection in place of the titles in it
             items = self.all_items(f"Recursive=true&IncludeItemTypes={item_type}&Fields=ProviderIds,ProductionYear"
-                                   f"&ParentId={folders[name]}", f"library {name!r}", pause=0.5)
+                                   f"&CollapseBoxSetItems=false&ParentId={folders[name]}", f"library {name!r}", pause=0.5)
             for it in items:
                 prov = {k.lower(): str(v) for k, v in (it.get("ProviderIds") or {}).items() if v}
                 for key in index[kind]:
@@ -279,6 +280,7 @@ class Engine:
             st.pop("pending", None)
             save_json(self.state_file, state)
             self.wait_until_ready(cid, user_id)
+        # read back what the collection holds, even a new one: Jellyfin 12 can drop the titles it was created with
         current = self.members(cid, user_id)
         add = self.existing_ids([i for i in ids if i not in current])
         remove = current - set(ids)
