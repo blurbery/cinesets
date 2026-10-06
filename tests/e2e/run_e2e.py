@@ -109,19 +109,6 @@ def wait_up(api):
     raise SystemExit("server did not start")
 
 
-def wait_idle(api):
-    """Wait until no scheduled task (such as the library scan a collection change sets off) is running, so a
-    check doesn't race the server rewriting its library."""
-    calm, busy = 0, []
-    for _ in range(45):
-        busy = [t["Name"] for t in api.req("GET", "/ScheduledTasks").json() if t.get("State", "Idle") != "Idle"]
-        calm = 0 if busy else calm + 1
-        if calm >= 3:
-            return
-        time.sleep(4)
-    log(f"the server is still busy after 3 minutes ({', '.join(busy)}); carrying on")
-
-
 def numbers(text):
     """Jellyfin pads every number in a sort name to ten digits; compare the numbers, not their padding."""
     return re.sub(r"\d+", lambda m: str(int(m.group())), str(text))
@@ -197,6 +184,20 @@ def scan(api, expect):
                 seen = now
                 if stable >= 3:
                     break
+            lacking = [i for items in found.values() for i in items if not i.get("ProviderIds")]
+            if lacking:
+                # a server can leave a new title's details for later (Emby 4.11 did for shows): ask for them now,
+                # as you would by hand
+                for i in lacking:
+                    log(f"{i['Name']} has no ids yet; asking the server to refresh it")
+                    api.req("POST", f"/Items/{i['Id']}/Refresh", params={
+                        "Recursive": "true", "MetadataRefreshMode": "FullRefresh", "ImageRefreshMode": "Default",
+                        "ReplaceAllMetadata": "false", "ReplaceAllImages": "false"})
+                for _ in range(30):
+                    time.sleep(5)
+                    found = read()
+                    if all(i.get("ProviderIds") for items in found.values() for i in items):
+                        break
             for t, items in found.items():
                 for i in items:
                     log(f"{t}: {i['Name']} ({i.get('ProductionYear')}) ids={i.get('ProviderIds')} genres={i.get('Genres')}")
@@ -390,11 +391,13 @@ def main():
     check(len(done) == 4 and all(d == ("updated", 0, 0) for d in done.values()) and clean(out),
           f"a repeat run changes nothing ({done})")
 
-    # 4) paging: the server pages each list the way CineSets asks for it, and CineSets sees everything with one
-    # item per page
-    wait_idle(api)
+    # 4) the index, rebuilt now that the collections exist (Jellyfin 12 can list a collection in place of its
+    # titles), and paging: the server pages each list the way CineSets asks for it, and CineSets sees everything
+    # with one item per page
     folders = {f["Name"]: f["ItemId"] for f in api.req("GET", "/Library/VirtualFolders").json()}
-    library = {"Recursive": "true", "Fields": "ProviderIds,ProductionYear"}
+    keyed = Api(args.kind, args.url)  # CineSets reads with the API key, which some servers answer differently
+    keyed.token(key)
+    library = {"Recursive": "true", "Fields": "ProviderIds,ProductionYear", "CollapseBoxSetItems": "false"}
     titles = {"ParentId": ids["TV Shows - CI Shows"]}
     if api.kind == "jellyfin":
         titles["UserId"] = user_id  # as CineSets asks: Jellyfin lists box set children only for a user
@@ -403,18 +406,19 @@ def main():
             ("the TV Shows library", {**library, "IncludeItemTypes": "Series", "ParentId": folders["TV Shows"]}),
             ("the collections", {"Recursive": "true", "IncludeItemTypes": "BoxSet"}),
             ("a collection's titles", titles)]:
-        full = sorted(i["Id"] for i in api.req("GET", "/Items", params=params).json()["Items"])
-        got = paged(api, params)
+        full = sorted(i["Id"] for i in keyed.req("GET", "/Items", params=params).json()["Items"])
+        got = paged(keyed, params)
         check(len(full) > 1 and sorted(got) == full, f"one item per page reads all of {what} ({len(got)} of {len(full)})")
     with open(os.path.join(data, "index.json")) as f:
-        indexed = json.load(f)["items"]
-    out = cinesets(cfg, "index", page=1)
-    with open(os.path.join(data, "index.json")) as f:
-        now = json.load(f)["items"]
-    missing = sorted(v["n"] for k, v in indexed.items() if k not in now)
-    extra = sorted(v["n"] for k, v in now.items() if k not in indexed)
-    check(not missing and not extra and len(now) == len(FILMS) + len(SHOWS),
-          f"with one item per page CineSets indexed the same titles (missing {missing}, extra {extra})")
+        indexed = json.load(f)["items"]  # built before any collection existed
+    for how, page in [("now that the collections exist", None), ("with one item per page", 1)]:
+        cinesets(cfg, "index", page=page)
+        with open(os.path.join(data, "index.json")) as f:
+            now = json.load(f)["items"]
+        missing = sorted(v["n"] for k, v in indexed.items() if k not in now)
+        extra = sorted(v["n"] for k, v in now.items() if k not in indexed)
+        check(not missing and not extra and len(now) == len(FILMS) + len(SHOWS),
+              f"{how}, CineSets indexed the same titles (missing {missing}, extra {extra})")
     out = cinesets(cfg, "apply", page=1)
     done = results(out)
     check(len(done) == 4 and all(d == ("updated", 0, 0) for d in done.values()) and clean(out),
