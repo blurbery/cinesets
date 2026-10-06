@@ -377,13 +377,18 @@ def main():
     check(len(done) == 4 and all(d == ("updated", 0, 0) for d in done.values()) and clean(out),
           f"a repeat run changes nothing ({done})")
 
-    # 4) paging: the server pages each list CineSets reads, and CineSets sees everything with one item per page
+    # 4) paging: the server pages each list the way CineSets asks for it, and CineSets sees everything with one
+    # item per page
     folders = {f["Name"]: f["ItemId"] for f in api.req("GET", "/Library/VirtualFolders").json()}
+    library = {"Recursive": "true", "Fields": "ProviderIds,ProductionYear"}
+    titles = {"ParentId": ids["TV Shows - CI Shows"]}
+    if api.kind == "jellyfin":
+        titles["UserId"] = user_id  # as CineSets asks: Jellyfin lists box set children only for a user
     for what, params in [
-            ("the Movies library", {"Recursive": "true", "IncludeItemTypes": "Movie", "ParentId": folders["Movies"]}),
-            ("the TV Shows library", {"Recursive": "true", "IncludeItemTypes": "Series", "ParentId": folders["TV Shows"]}),
+            ("the Movies library", {**library, "IncludeItemTypes": "Movie", "ParentId": folders["Movies"]}),
+            ("the TV Shows library", {**library, "IncludeItemTypes": "Series", "ParentId": folders["TV Shows"]}),
             ("the collections", {"Recursive": "true", "IncludeItemTypes": "BoxSet"}),
-            ("a collection's titles", {"ParentId": ids["TV Shows - CI Shows"], "UserId": user_id})]:
+            ("a collection's titles", titles)]:
         full = sorted(i["Id"] for i in api.req("GET", "/Items", params=params).json()["Items"])
         got = paged(api, params)
         check(len(full) > 1 and sorted(got) == full, f"one item per page reads all of {what} ({len(got)} of {len(full)})")
