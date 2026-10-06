@@ -10,8 +10,8 @@
 Runs the first-run wizard, makes an API key and adds a Movies and a TV Shows library. Then it checks that
 CineSets creates a franchise collection and list collections matched by IMDb, TMDb and TVDB ids (one with a
 genre left out), with the right titles, name, overview, display order, locked fields, sort title and poster. It
-shrinks and renames them, changes nothing on a repeat run, takes them back with adopt after losing its record,
-refuses to touch a collection it did not create and removes only its own.
+shrinks and renames them, changes nothing on a repeat run (also when reading one item per page), takes them back
+with adopt after losing its record, refuses to touch a collection it did not create and removes only its own.
 """
 import argparse
 import json
@@ -193,9 +193,13 @@ def scan(api, expect):
 
 
 # ------------------------------------------------------------ CineSets
-def cinesets(cfg, *args):
-    out = subprocess.run([sys.executable, "-m", "cinesets", *args, "--config", cfg], cwd=ROOT,
-                         capture_output=True, text=True, timeout=600)
+def cinesets(cfg, *args, page=None):
+    """Run CineSets. `page` sets how many items it asks for per page, so a small library still spans many pages."""
+    cmd = [sys.executable, "-m", "cinesets", *args, "--config", cfg]
+    if page:
+        cmd[1:3] = ["-c", f"import sys, cinesets.cli, cinesets.engine; cinesets.engine.PAGE = {int(page)}; "
+                          "sys.argv[0] = 'cinesets'; cinesets.cli.main()"]
+    out = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=600)
     text = out.stdout + out.stderr
     log("cinesets " + " ".join(args) + "\n" + text.strip())
     if out.returncode:
@@ -207,6 +211,20 @@ def results(out):
     """What an apply did: {collection name: (created or updated, added, removed)}."""
     return {name: (what, int(a), int(r))
             for what, name, a, r in re.findall(r"^(created|updated) '(.+)': \+(\d+) -(\d+)", out, flags=re.M)}
+
+
+def paged(api, params):
+    """A query's ids read one per page, moving on by what each page held and stopping at an empty page."""
+    out, start = [], 0
+    while True:
+        page = api.req("GET", "/Items", params={**params, "StartIndex": start, "Limit": 1,
+                                                 "EnableTotalRecordCount": "false"}).json()["Items"]
+        if not page:
+            return out
+        out += [i["Id"] for i in page]
+        start += len(page)
+        if start > 100:
+            raise SystemExit(f"FAILED: paging {params} never reached an empty page")
 
 
 def boxsets(api):
@@ -359,7 +377,28 @@ def main():
     check(len(done) == 4 and all(d == ("updated", 0, 0) for d in done.values()) and clean(out),
           f"a repeat run changes nothing ({done})")
 
-    # 4) a new title renames the collection in place
+    # 4) paging: the server pages each list CineSets reads, and CineSets sees everything with one item per page
+    folders = {f["Name"]: f["ItemId"] for f in api.req("GET", "/Library/VirtualFolders").json()}
+    for what, params in [
+            ("the Movies library", {"Recursive": "true", "IncludeItemTypes": "Movie", "ParentId": folders["Movies"]}),
+            ("the TV Shows library", {"Recursive": "true", "IncludeItemTypes": "Series", "ParentId": folders["TV Shows"]}),
+            ("the collections", {"Recursive": "true", "IncludeItemTypes": "BoxSet"}),
+            ("a collection's titles", {"ParentId": ids["TV Shows - CI Shows"], "UserId": user_id})]:
+        full = sorted(i["Id"] for i in api.req("GET", "/Items", params=params).json()["Items"])
+        got = paged(api, params)
+        check(len(full) > 1 and sorted(got) == full, f"one item per page reads all of {what} ({len(got)} of {len(full)})")
+    with open(os.path.join(data, "index.json")) as f:
+        indexed = set(json.load(f)["items"])
+    out = cinesets(cfg, "index", page=1)
+    with open(os.path.join(data, "index.json")) as f:
+        check(set(json.load(f)["items"]) == indexed and len(indexed) == len(FILMS) + len(SHOWS),
+              "with one item per page CineSets indexed the same titles")
+    out = cinesets(cfg, "apply", page=1)
+    done = results(out)
+    check(len(done) == 4 and all(d == ("updated", 0, 0) for d in done.values()) and clean(out),
+          f"with one item per page a repeat run still changes nothing ({done})")
+
+    # 5) a new title renames the collection in place
     picks = entry("m-ci-picks", "movie", "CI Favourites", "charts", lists=["ci/movies"])
     write(franchise(bttf[:2]), picks, all_shows, no_talk)
     out = cinesets(cfg, "apply")
@@ -372,7 +411,7 @@ def main():
     ids["Movies - CI Favourites"] = ids.pop("Movies - CI Picks")
     ours["Movies - CI Favourites"] = ours.pop("Movies - CI Picks")
 
-    # 5) after losing its record, CineSets leaves the collections alone until adopt takes them back
+    # 6) after losing its record, CineSets leaves the collections alone until adopt takes them back
     os.remove(os.path.join(data, "state.json"))
     before = boxsets(api)
     out = cinesets(cfg, "apply")
@@ -385,7 +424,7 @@ def main():
     check(len(done) == 4 and all(d == ("updated", 0, 0) for d in done.values()) and clean(out) and boxsets(api) == before,
           f"after adopt, apply updated the same collections and made no new ones ({done})")
 
-    # 6) someone else's collection is left alone
+    # 7) someone else's collection is left alone
     api.req("POST", "/Collections", params={"Name": "Movies - The Matrix", "Ids": found["Movie"][matrix[0]]["Id"]})
     theirs = boxsets(api)["Movies - The Matrix"]
     write(franchise(bttf[:2]), picks, all_shows, no_talk, entry("m-matrix", "movie", "The Matrix", "universes", titles=[list(matrix)]))
@@ -395,13 +434,13 @@ def main():
           "the other collection's poster was not touched")
     check(members(api, theirs, user_id) == [matrix[0]], "the other collection's titles were not touched")
 
-    # 7) plan and posters write nothing
+    # 8) plan and posters write nothing
     before = boxsets(api)
     cinesets(cfg, "plan")
     cinesets(cfg, "posters")
     check(boxsets(api) == before, "plan and posters made no changes")
 
-    # 8) remove deletes only CineSets' own collections
+    # 9) remove deletes only CineSets' own collections
     out = cinesets(cfg, "remove", "--all", "--yes")
     after = boxsets(api)
     check(not set(ours) & set(after), "remove deleted all of CineSets' collections")
