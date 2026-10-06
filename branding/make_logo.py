@@ -135,18 +135,39 @@ def lockup(height, light=True):
     return img
 
 
-def banner(w=1600, h=520):
+TAGLINE = "Automatic, beautiful collections for Emby, Jellyfin and Silo"
+
+
+def backdrop(w, h):
+    """Near-black background with a warm gold glow from the top left."""
     bg = Image.new("RGB", (w, h), (10, 8, 14))
     glow = Image.new("L", (w, h), 0)
     ImageDraw.Draw(glow).ellipse((-w * 0.1, -h * 0.6, w * 0.7, h * 1.4), fill=255)
     bg.paste((60, 40, 12), (0, 0), glow.filter(ImageFilter.GaussianBlur(180)).point(lambda v: int(v * 0.55)))
-    img = bg.convert("RGBA")
+    return bg.convert("RGBA")
+
+
+def banner(w=1600, h=520):
+    img = backdrop(w, h)
     lk = lockup(300)
     x, y = (w - lk.width) // 2, int(h * 0.12)
     img.alpha_composite(lk, (x, y))
     f = ImageFont.truetype(os.path.join(FONTS, "Poppins-Regular.ttf"), 34)
-    t = "Automatic, beautiful collections for Emby, Jellyfin and Silo"
-    ImageDraw.Draw(img).text(((w - f.getlength(t)) / 2, y + lk.height + 34), t, font=f, fill=(222, 214, 196))
+    ImageDraw.Draw(img).text(((w - f.getlength(TAGLINE)) / 2, y + lk.height + 34), TAGLINE, font=f, fill=(222, 214, 196))
+    return img.convert("RGB")
+
+
+def social(w=1280, h=640):
+    """Link preview image (GitHub social preview, Discord and so on): 2:1, logo and tagline centred."""
+    img = backdrop(w, h)
+    lk = lockup(260)
+    f = ImageFont.truetype(os.path.join(FONTS, "Poppins-Regular.ttf"), 32)
+    top, bottom = lk.getbbox()[1], lk.getbbox()[3]  # centre what is drawn, not the lockup's empty margins
+    _, text_top, _, text_bottom = f.getbbox(TAGLINE)
+    gap = 44
+    y = (h - (bottom - top) - gap - (text_bottom - text_top)) // 2 - top
+    img.alpha_composite(lk, ((w - lk.width) // 2, y))
+    ImageDraw.Draw(img).text(((w - f.getlength(TAGLINE)) / 2, y + bottom + gap - text_top), TAGLINE, font=f, fill=(222, 214, 196))
     return img.convert("RGB")
 
 
@@ -155,6 +176,7 @@ icon(256).save(os.path.join(OUT, "cinesets-icon-256.png"))
 lockup(240, light=True).save(os.path.join(OUT, "cinesets-logo-dark-bg.png"))
 lockup(240, light=False).save(os.path.join(OUT, "cinesets-logo-light-bg.png"))
 banner().save(os.path.join(OUT, "cinesets-banner.png"))
+social().save(os.path.join(OUT, "cinesets-social.png"))
 # preview: icon on dark and light, lockups on both
 pv = Image.new("RGB", (1600, 1160), (24, 22, 28))
 pv.paste(banner(), (0, 0))
