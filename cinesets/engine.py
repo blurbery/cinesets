@@ -277,9 +277,8 @@ class Engine:
             st.pop("pending", None)
             save_json(self.state_file, state)
             self.wait_until_ready(cid, user_id)
+        # read back what the collection holds, even a new one: Jellyfin 12 can drop the titles it was created with
         current = self.members(cid, user_id)
-        if created:
-            current |= set(first)  # just added: Jellyfin 12 can take a moment to list them
         add = self.existing_ids([i for i in ids if i not in current])
         remove = current - set(ids)
         for batch in chunks(add):

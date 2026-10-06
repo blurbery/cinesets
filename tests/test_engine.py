@@ -285,24 +285,3 @@ def test_index_keeps_titles_that_are_in_collections(make_cfg):
     index = Engine(cfg, GroupingServer()).build_index()
     assert sorted(index["items"]) == ["m1", "m2", "m3"]
     assert sorted(index["movie"]["imdb"].values()) == ["m1", "m2", "m3"]
-
-
-class SlowListingServer(FakeServer):
-    """Jellyfin 12: a new collection lists no titles for a moment after it is made."""
-
-    def call(self, method, path, timeout=120, **kw):
-        if method == "GET" and "ParentId=" in path and not any(p.startswith("/Items?ParentId=") for _, p in self.calls):
-            self.calls.append((method, path))
-            return Resp(data={"Items": []})
-        return super().call(method, path, timeout, **kw)
-
-
-def test_a_new_collections_titles_are_not_added_twice(make_cfg):
-    cfg, _, _ = setup_run(make_cfg, "jellyfin")
-    srv = SlowListingServer("jellyfin")
-    for iid, (name, _, k) in ITEMS.items():
-        srv.add_item(iid, name, "Movie" if k == "movie" else "Series")
-    Engine(cfg, srv).run("apply", catalog.load(cfg), 8)
-    (cid, coll), = srv.collections.items()
-    assert coll["members"] == ["m1", "m2", "m3"]
-    assert not [c for c in srv.calls if c[0] == "POST" and c[1].startswith(f"/Collections/{cid}/Items")]
