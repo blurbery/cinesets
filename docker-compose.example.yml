@@ -12,7 +12,8 @@
 # The server address must be reachable from inside the container: use your server's LAN address (for
 # example http://192.0.2.10:8096) or its container name on a shared Docker network (http://emby:8096),
 # not 127.0.0.1. Data, posters and logos are kept in ./config/data.
-# To customise collections, copy collections.yml into ./config: that copy replaces the built-in one.
+# To customise collections, copy collections.yml to ./config/my-collections.yml and set
+# collections_file: my-collections.yml in ./config/config.yml (see the README).
 services:
   cinesets:
     build: .

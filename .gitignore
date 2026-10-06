@@ -17,3 +17,4 @@ docker-compose.yaml
 docker-compose.override.yaml
 compose.override.yml
 compose.override.yaml
+!.github/ISSUE_TEMPLATE/config.yml

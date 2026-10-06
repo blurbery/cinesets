@@ -1,0 +1,64 @@
+# CineSets by blurbery (https://github.com/blurbery/cinesets). SPDX-License-Identifier: AGPL-3.0-or-later
+# Additional terms under AGPL-3.0 section 7 apply: see NOTICE.
+name: Bug report
+description: Something isn't working the way it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting this. Please leave out server addresses, API keys, user names and anything else private.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What did you run, what did you expect, and what happened instead?
+      placeholder: I ran ./run.sh apply and the Netflix collection lost its poster.
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: CineSets version
+      description: "The output of `./run.sh version` (Docker: `docker compose run --rm cinesets version`)."
+      placeholder: "1.0.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: server
+    attributes:
+      label: Server
+      options:
+        - Emby
+        - Jellyfin
+    validations:
+      required: true
+  - type: input
+    id: server-version
+    attributes:
+      label: Server version
+      placeholder: "4.10.1.0"
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: How did you install CineSets?
+      options:
+        - git and install.sh
+        - Docker
+    validations:
+      required: true
+  - type: textarea
+    id: output
+    attributes:
+      label: Output or logs
+      description: The part that matters. `./run.sh plan` doesn't change anything and often shows the problem.
+      render: text
+  - type: checkboxes
+    id: private
+    attributes:
+      label: Before you submit
+      options:
+        - label: I've removed server addresses, API keys, user names and anything else private.
+          required: true

@@ -1,0 +1,7 @@
+# CineSets by blurbery (https://github.com/blurbery/cinesets). SPDX-License-Identifier: AGPL-3.0-or-later
+# Additional terms under AGPL-3.0 section 7 apply: see NOTICE.
+blank_issues_enabled: false
+contact_links:
+  - name: Security problem
+    url: https://github.com/blurbery/cinesets/security/advisories/new
+    about: Please report these privately here, not in a public issue.

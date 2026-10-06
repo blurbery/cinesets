@@ -1,0 +1,29 @@
+# CineSets by blurbery (https://github.com/blurbery/cinesets). SPDX-License-Identifier: AGPL-3.0-or-later
+# Additional terms under AGPL-3.0 section 7 apply: see NOTICE.
+name: Idea or new collection
+description: Suggest a feature, or a collection to add.
+labels: [enhancement]
+body:
+  - type: dropdown
+    id: kind
+    attributes:
+      label: What kind of idea is it?
+      options:
+        - A new collection
+        - A new feature
+        - Something else
+    validations:
+      required: true
+  - type: textarea
+    id: idea
+    attributes:
+      label: Your idea
+      description: What would you like CineSets to do, and how would it help? For a franchise, list the films and their years.
+    validations:
+      required: true
+  - type: input
+    id: list
+    attributes:
+      label: mdblist list
+      description: For a new collection, a public mdblist list it could come from (user/list-slug or a link).
+      placeholder: some-user/best-heist-movies

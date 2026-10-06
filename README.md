@@ -43,8 +43,8 @@ change anything. Check `config.yml` (every setting is explained in `config.examp
 ./run.sh apply
 ```
 
-Last step is the schedule the installer prints: trending every 6 hours, charts daily and everything else
-weekly.
+Last step is the schedule the installer prints: trending every 6 hours, charts and seasonal daily, and
+everything on Sundays.
 
 <details>
 <summary><b>Docker</b></summary>
@@ -60,7 +60,8 @@ docker compose up -d
 ```
 
 Inside the container `127.0.0.1` is the container itself, so give it your server's LAN address. `up -d` runs
-the schedule from `config.yml`. Restart the container after you change `config.yml`.
+the schedule from `config.yml`. Restart the container after you change `config.yml`. Any command below works
+as `docker compose run --rm cinesets <command>`.
 
 </details>
 
@@ -79,8 +80,9 @@ Most of them take `--only key1,key2` or `--group streaming`. `./run.sh --help` s
 
 ## Your own collections
 
-Copy `collections.yml` to `my-collections.yml`, set `collections_file: my-collections.yml` in `config.yml` and
-change whatever you like. The top of the file explains every field. A collection needs at least 8 matches in
+Copy `collections.yml` to `my-collections.yml` (on Docker, put it in `./config`), set
+`collections_file: my-collections.yml` in `config.yml` and change whatever you like. The top of the file
+explains every field. A collection needs at least 8 matches in
 your library before it's made, so regional ones like Stan only show up if you have the shows.
 
 <details>
@@ -138,8 +140,12 @@ delete the collections CineSets made, then delete the folder.
 
 ## Contributing
 
-PRs are welcome, just have a read of [CONTRIBUTING.md](CONTRIBUTING.md) first. Using AI is fine, but say so in
-the PR.
+Found a bug or got an idea? [Open an issue](https://github.com/blurbery/cinesets/issues/new/choose). PRs are
+welcome too, just have a read of [CONTRIBUTING.md](CONTRIBUTING.md) first. Using AI is fine, but say so in the
+PR.
+
+> [!CAUTION]
+> Security problems go through [SECURITY.md](SECURITY.md), not public issues.
 
 ## Licence
 
