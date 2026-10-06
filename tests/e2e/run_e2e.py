@@ -4,19 +4,24 @@
 # Additional terms under AGPL-3.0 section 7 apply: see NOTICE.
 """End-to-end test against a real, throwaway Emby or Jellyfin server (used by CI).
 
-  python tests/e2e/run_e2e.py --kind jellyfin --url http://127.0.0.1:8096 --media /media/movies
+  python tests/e2e/run_e2e.py --make-media media      (needs ffmpeg; then mount ./media as /media)
+  python tests/e2e/run_e2e.py --kind jellyfin --url http://127.0.0.1:8096 --media /media
 
-Runs the first-run wizard, makes an API key, adds a Movies library, then checks that CineSets creates a
-franchise collection with the right films, sort title and poster, shrinks it, changes nothing on a repeat
-run, and refuses to touch a collection it did not create.
+Runs the first-run wizard, makes an API key and adds a Movies and a TV Shows library. Then it checks that
+CineSets creates a franchise collection and list collections matched by IMDb, TMDb and TVDB ids (one with a
+genre left out), with the right titles, name, overview, display order, locked fields, sort title and poster. It
+shrinks and renames them, changes nothing on a repeat run, takes them back with adopt after losing its record,
+refuses to touch a collection it did not create and removes only its own.
 """
 import argparse
+import json
 import os
 import re
 import subprocess
 import sys
 import tempfile
 import time
+from xml.sax.saxutils import escape
 
 import requests
 
@@ -24,11 +29,53 @@ ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)
 USER, PASSWORD = "ci", "ci-password"
 CLIENT = 'MediaBrowser Client="cinesets-ci", Device="ci", DeviceId="cinesets-ci", Version="1.0"'
 
+# Test titles with their real ids, so the servers' own online lookups agree with the .nfo files
+FILMS = [  # title, year, imdb, tmdb, genres
+    ("Back to the Future", 1985, "tt0088763", 105, ["Adventure", "Comedy", "Science Fiction"]),
+    ("Back to the Future Part II", 1989, "tt0096874", 165, ["Adventure", "Comedy", "Science Fiction"]),
+    ("Back to the Future Part III", 1990, "tt0099088", 196, ["Adventure", "Comedy", "Western"]),
+    ("The Matrix", 1999, "tt0133093", 603, ["Action", "Science Fiction"]),
+]
+SHOWS = [  # title, year, imdb, tmdb, tvdb, genres
+    ("Stranger Things", 2016, "tt4574334", 66732, 305288, ["Drama", "Mystery", "Science Fiction"]),
+    ("The Late Show with Stephen Colbert", 2015, "tt3697842", 63770, 289574, ["Talk", "Comedy"]),
+]
+
 
 def log(msg):
     print(f"[e2e] {msg}", flush=True)
 
 
+# ------------------------------------------------------------ test media
+def video(path):
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    subprocess.run(["ffmpeg", "-loglevel", "error", "-y", "-f", "lavfi", "-i", "color=c=navy:s=320x180:d=3",
+                    "-c:v", "libx264", "-pix_fmt", "yuv420p", path], check=True)
+
+
+def nfo(path, root, title, year, ids, genres):
+    """Kodi-style metadata that Emby and Jellyfin both read, so the ids do not depend on online lookups."""
+    lines = [f"<{root}>", f"  <title>{escape(title)}</title>", f"  <year>{year}</year>"]
+    lines += [f'  <uniqueid type="{k}"{default}>{v}</uniqueid>' for (k, v), default in zip(ids, [' default="true"'] + [""] * len(ids))]
+    lines += [f"  <{k}id>{v}</{k}id>" for k, v in ids]
+    lines += [f"  <genre>{escape(g)}</genre>" for g in genres]
+    with open(path, "w") as f:
+        f.write('<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n' + "\n".join(lines + [f"</{root}>"]) + "\n")
+
+
+def make_media(root):
+    for title, year, imdb, tmdb, genres in FILMS:
+        folder = os.path.join(root, "movies", f"{title} ({year})")
+        video(os.path.join(folder, f"{title} ({year}).mkv"))
+        nfo(os.path.join(folder, f"{title} ({year}).nfo"), "movie", title, year, [("imdb", imdb), ("tmdb", tmdb)], genres)
+    for title, year, imdb, tmdb, tvdb, genres in SHOWS:
+        folder = os.path.join(root, "tv", f"{title} ({year})")
+        video(os.path.join(folder, "Season 01", f"{title} S01E01.mkv"))
+        nfo(os.path.join(folder, "tvshow.nfo"), "tvshow", title, year, [("tvdb", tvdb), ("imdb", imdb), ("tmdb", tmdb)], genres)
+    log(f"made {len(FILMS)} films and {len(SHOWS)} shows in {root}")
+
+
+# ------------------------------------------------------------ server setup
 class Api:
     def __init__(self, kind, url):
         self.kind, self.base = kind, url.rstrip("/") + ("/emby" if kind == "emby" else "")
@@ -101,39 +148,51 @@ def first_run(api):
     return key, user_id
 
 
-def add_library(api, media, expect):
-    api.req("POST", "/Library/VirtualFolders", params={"name": "Movies", "collectionType": "movies", "refreshLibrary": "false",
-                                                       "paths": media}, json={"LibraryOptions": {}})
-    folder = next(f for f in api.req("GET", "/Library/VirtualFolders").json() if f["Name"] == "Movies")
-    if media not in (folder.get("Locations") or []):
-        log(f"library has no path yet ({folder.get('Locations')}); adding it")
+def add_library(api, name, collection_type, path):
+    api.req("POST", "/Library/VirtualFolders", params={"name": name, "collectionType": collection_type,
+                                                       "refreshLibrary": "false", "paths": path}, json={"LibraryOptions": {}})
+    folder = next(f for f in api.req("GET", "/Library/VirtualFolders").json() if f["Name"] == name)
+    if path not in (folder.get("Locations") or []):
+        log(f"library {name} has no path yet ({folder.get('Locations')}); adding it")
         api.req("POST", "/Library/VirtualFolders/Paths", params={"refreshLibrary": "false"},
-                json={"Name": "Movies", "Path": media, "PathInfo": {"Path": media}})
-        folder = next(f for f in api.req("GET", "/Library/VirtualFolders").json() if f["Name"] == "Movies")
-    log(f"library locations: {folder.get('Locations')}")
+                json={"Name": name, "Path": path, "PathInfo": {"Path": path}})
+        folder = next(f for f in api.req("GET", "/Library/VirtualFolders").json() if f["Name"] == name)
+    log(f"library {name} locations: {folder.get('Locations')}")
+
+
+def scan(api, expect):
+    """Scan the libraries and wait for `expect` ({item type: count}) with settled metadata. Returns
+    {item type: {name: item}}."""
+    def read():
+        return {t: api.req("GET", "/Items", params={"Recursive": "true", "IncludeItemTypes": t,
+                                                    "Fields": "ProductionYear,ProviderIds,Genres"}).json()["Items"] for t in expect}
+
+    def summary(found):
+        return sorted((t, i["Name"], i.get("ProductionYear"), sorted((i.get("ProviderIds") or {}).items()),
+                       sorted(i.get("Genres") or [])) for t, items in found.items() for i in items)
     api.req("POST", "/Library/Refresh")
     for _ in range(90):
-        items = api.req("GET", "/Items", params={"Recursive": "true", "IncludeItemTypes": "Movie",
-                                                 "Fields": "ProductionYear"}).json()["Items"]
-        if len(items) >= expect:
-            # wait for online metadata to settle: names can change while the scan fetches details
-            seen = sorted((i["Name"], i.get("ProductionYear")) for i in items)
-            stable = 0
+        found = read()
+        if all(len(found[t]) >= n for t, n in expect.items()):
+            # wait for metadata to settle: names and ids can change while the scan fetches details
+            seen, stable = summary(found), 0
             for _ in range(30):
                 time.sleep(5)
-                items = api.req("GET", "/Items", params={"Recursive": "true", "IncludeItemTypes": "Movie",
-                                                         "Fields": "ProductionYear"}).json()["Items"]
-                now = sorted((i["Name"], i.get("ProductionYear")) for i in items)
+                found = read()
+                now = summary(found)
                 stable = stable + 1 if now == seen else 0
                 seen = now
                 if stable >= 3:
                     break
-            log("library: " + ", ".join(f"{i['Name']} ({i.get('ProductionYear')})" for i in items))
-            return {i["Name"]: i for i in items}
+            for t, items in found.items():
+                for i in items:
+                    log(f"{t}: {i['Name']} ({i.get('ProductionYear')}) ids={i.get('ProviderIds')} genres={i.get('Genres')}")
+            return {t: {i["Name"]: i for i in items} for t, items in found.items()}
         time.sleep(4)
-    raise SystemExit(f"library scan found {len(items)} of {expect} films")
+    raise SystemExit(f"library scan found {({t: len(v) for t, v in found.items()})} of {expect}")
 
 
+# ------------------------------------------------------------ CineSets
 def cinesets(cfg, *args):
     out = subprocess.run([sys.executable, "-m", "cinesets", *args, "--config", cfg], cwd=ROOT,
                          capture_output=True, text=True, timeout=600)
@@ -142,6 +201,12 @@ def cinesets(cfg, *args):
     if out.returncode:
         raise SystemExit(f"cinesets {' '.join(args)} exited {out.returncode}")
     return text
+
+
+def results(out):
+    """What an apply did: {collection name: (created or updated, added, removed)}."""
+    return {name: (what, int(a), int(r))
+            for what, name, a, r in re.findall(r"^(created|updated) '(.+)': \+(\d+) -(\d+)", out, flags=re.M)}
 
 
 def boxsets(api):
@@ -153,95 +218,193 @@ def members(api, cid, user_id):
     return sorted(i["Name"] for i in api.req("GET", "/Items", params={"ParentId": cid, "UserId": user_id}).json()["Items"])
 
 
+def clean(out):
+    """No collection failed and every poster upload was kept."""
+    return "!!" not in out and "did not keep the poster" not in out
+
+
 def check(cond, msg):
     if not cond:
         raise SystemExit("FAILED: " + msg)
     log("ok: " + msg)
 
 
-def franchise(titles, key="m-bttf", title="Back to\\nthe Future"):
-    lines = [f"  - key: {key}", "    group: universes", "    type: movie", f'    title: "{title}"', "    accent: blue",
-             "    min: 1", "    titles:"]
-    lines += [f'      - ["{t}", {y}]' for t, y in titles]
+def check_meta(api, cid, user_id, name, overview, order):
+    """The details CineSets writes back to the collection item, as the server kept them."""
+    item = collection_item(api, cid, user_id)
+    locks = set(item.get("LockedFields") or [])
+    want = {"Name", "Overview"} | ({"SortName"} if api.kind == "emby" else set())
+    check(item.get("Name") == name, f"{name}: name kept ({item.get('Name')!r})")
+    check(item.get("Overview") == overview, f"{name}: overview set ({item.get('Overview')!r})")
+    check(item.get("DisplayOrder") == order, f"{name}: display order {order} ({item.get('DisplayOrder')!r})")
+    check(want <= locks, f"{name}: {', '.join(sorted(want))} locked ({sorted(locks)})")
+
+
+def entry(key, kind, title, group, **fields):
+    lines = [f"  - key: {key}", f"    group: {group}", f"    type: {kind}", f"    title: {json.dumps(title)}",
+             "    accent: blue", "    min: 1"]
+    lines += [f"    {k}: {json.dumps(v)}" for k, v in fields.items()]  # JSON is valid YAML
     return "\n".join(lines) + "\n"
+
+
+def seed_list(data_dir, slug, rows):
+    """A fresh cached copy of an mdblist list, so the test needs no outside service."""
+    path = os.path.join(data_dir, "lists", slug.replace("/", "__") + ".json")
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    with open(path, "w") as f:
+        json.dump({"at": time.time(), "rows": rows}, f)
 
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--kind", choices=["emby", "jellyfin"], required=True)
+    ap.add_argument("--make-media", metavar="DIR", help="write the test films and shows to DIR and stop")
+    ap.add_argument("--kind", choices=["emby", "jellyfin"])
     ap.add_argument("--url", default="http://127.0.0.1:8096")
-    ap.add_argument("--media", default="/media/movies")
+    ap.add_argument("--media", default="/media", help="the media folder as the server sees it")
     args = ap.parse_args()
+    if args.make_media:
+        make_media(args.make_media)
+        return
+    if not args.kind:
+        ap.error("--kind is required")
     api = Api(args.kind, args.url)
     wait_up(api)
     info = api.req("GET", "/System/Info/Public").json()
     log(f"{args.kind} {info.get('Version')} is up")
     key, user_id = first_run(api)
-    films = add_library(api, args.media, 4)
+    add_library(api, "Movies", "movies", args.media + "/movies")
+    add_library(api, "TV Shows", "tvshows", args.media + "/tv")
+    found = scan(api, {"Movie": len(FILMS), "Series": len(SHOWS)})
 
-    def film(title, year):
-        """The server's own name for a test film (a server without online metadata may keep the folder name)."""
-        for name, item in films.items():
+    def named(item_type, title, year, ids):
+        """The server's own name for a test title (a server without online metadata may keep the folder name),
+        after checking it carries the ids the test lists use."""
+        for name, item in found[item_type].items():
             if name.startswith(title) and item.get("ProductionYear") == year and (title != "Back to the Future" or "Part" not in name):
+                prov = {k.lower(): str(v) for k, v in (item.get("ProviderIds") or {}).items()}
+                check(all(prov.get(k) == str(v) for k, v in ids.items()), f"the server has the ids of {name} ({prov})")
                 return name, year
-        raise SystemExit(f"FAILED: the server does not list {title} ({year}): {sorted(films)}")
-    bttf = [film("Back to the Future", 1985), film("Back to the Future Part II", 1989), film("Back to the Future Part III", 1990)]
-    matrix = film("The Matrix", 1999)
-    log(f"test films as the server names them: {bttf + [matrix]}")
+        raise SystemExit(f"FAILED: the server does not list {title} ({year}): {sorted(found[item_type])}")
+    films = {t: named("Movie", t, y, {"imdb": i, "tmdb": m}) for t, y, i, m, _ in FILMS}
+    shows = {t: named("Series", t, y, {"tvdb": v, "imdb": i, "tmdb": m}) for t, y, i, m, v, _ in SHOWS}
+    bttf = [films["Back to the Future"], films["Back to the Future Part II"], films["Back to the Future Part III"]]
+    matrix, stranger, late = films["The Matrix"], shows["Stranger Things"], shows["The Late Show with Stephen Colbert"]
+    log(f"test titles as the server names them: {list(films.values()) + list(shows.values())}")
 
     work = tempfile.mkdtemp(prefix="cinesets-e2e-")
-    cfg, coll = os.path.join(work, "config.yml"), os.path.join(work, "collections.yml")
+    cfg, coll, data = (os.path.join(work, f) for f in ("config.yml", "collections.yml", "data"))
     with open(cfg, "w") as f:
         f.write(f'server: {{type: {args.kind}, url: "{args.url}", api_key: "{key}"}}\n'
-                "libraries: [{name: Movies, type: movie}]\ncollections_file: collections.yml\nwrite_pause: 0.2\n")
+                "libraries: [{name: Movies, type: movie}, {name: TV Shows, type: show}]\n"
+                "collections_file: collections.yml\nwrite_pause: 0.2\n")
+    # list rows as mdblist sends them; each id kind has to match on its own
+    seed_list(data, "ci/movies", [
+        {"mediatype": "movie", "rank": 1, "title": "The Matrix", "imdb_id": "tt0133093", "id": None},    # IMDb only
+        {"mediatype": "movie", "rank": 2, "title": "Back to the Future", "imdb_id": None, "id": 105},   # TMDb only
+        {"mediatype": "movie", "rank": 3, "title": "Not on the server", "imdb_id": "tt0000001", "id": 1},
+        {"mediatype": "show", "rank": 4, "title": "Stranger Things", "imdb_id": "tt4574334", "id": 66732},
+    ])
+    seed_list(data, "ci/shows", [
+        {"mediatype": "show", "rank": 1, "title": "The Late Show", "tvdbid": 289574, "imdb_id": "tt3697842", "id": 63770},
+        {"mediatype": "show", "rank": 2, "title": "Stranger Things", "tvdbid": 305288, "imdb_id": None, "id": None},  # TVDB only
+    ])
 
-    # 1) create
-    with open(coll, "w") as f:
-        f.write("collections:\n" + franchise(bttf))
+    def write(*entries):
+        with open(coll, "w") as f:
+            f.write("collections:\n" + "".join(entries))
+
+    def franchise(titles):
+        return entry("m-bttf", "movie", "Back to\nthe Future", "universes", titles=[list(t) for t in titles])
+    picks = entry("m-ci-picks", "movie", "CI Picks", "charts", lists=["ci/movies"])
+    all_shows = entry("s-ci-shows", "show", "CI Shows", "charts", lists=["ci/shows"])
+    no_talk = entry("s-ci-notalk", "show", "No Talk", "charts", lists=["ci/shows"], exclude_genres=["Talk", "Talk Show"])
+    ours = {"Movies - Back to the Future": sorted(t for t, _ in bttf),
+            "Movies - CI Picks": sorted([matrix[0], films["Back to the Future"][0]]),
+            "TV Shows - CI Shows": sorted([stranger[0], late[0]]),
+            "TV Shows - No Talk": [stranger[0]]}
+
+    # 1) create: a franchise by title and year, and list collections by IMDb, TMDb and TVDB id
+    write(franchise(bttf), picks, all_shows, no_talk)
     out = cinesets(cfg, "apply")
-    check("created 'Movies - Back to the Future'" in out and "!!" not in out, "CineSets created the collection")
+    done = results(out)
+    check(sorted(done) == sorted(ours) and all(d[0] == "created" for d in done.values()) and clean(out),
+          f"CineSets created all four collections ({done})")
     sets = boxsets(api)
-    check("Movies - Back to the Future" in sets, "collection exists on the server with the right name")
-    cid = sets["Movies - Back to the Future"]
-    got = members(api, cid, user_id)
-    check(got == sorted(t for t, _ in bttf), f"collection holds exactly the three films ({got})")
-    item = api.req("GET", "/Items", params={"Ids": cid, "Fields": "SortName"}).json()["Items"][0]
+    ids = {name: sets.get(name) for name in ours}
+    check(all(ids.values()), "the collections exist on the server with the right names")
+    for name, want in ours.items():
+        got = members(api, ids[name], user_id)
+        check(got == want, f"{name} holds exactly {want} ({got})")
+    item = api.req("GET", "/Items", params={"Ids": ids["Movies - Back to the Future"], "Fields": "SortName"}).json()["Items"][0]
     # servers normalise sort names differently (Jellyfin pads numbers; Jellyfin 12 also drops "+" and "the"),
     # but the block number and the title always lead, which is what keeps the page order
     check(numbers(item.get("SortName", "")).lstrip("+ ").startswith("70_back to"), f"sort title set ({item.get('SortName')})")
-    check(has_poster(api, cid, user_id), "poster uploaded")
+    check_meta(api, ids["Movies - Back to the Future"], user_id, "Movies - Back to the Future",
+               "Back to the Future movies. Updated automatically.", "PremiereDate")
+    check_meta(api, ids["Movies - CI Picks"], user_id, "Movies - CI Picks", "CI Picks movies. Updated automatically.", "SortName")
+    check_meta(api, ids["TV Shows - No Talk"], user_id, "TV Shows - No Talk", "No Talk TV shows. Updated automatically.", "SortName")
+    for name in ours:
+        check(has_poster(api, ids[name], user_id), f"{name}: poster uploaded")
 
     # 2) shrink
-    with open(coll, "w") as f:
-        f.write("collections:\n" + franchise(bttf[:2]))
+    write(franchise(bttf[:2]), picks, all_shows, no_talk)
     out = cinesets(cfg, "apply")
-    check("+0 -1" in out, "CineSets removed the film that left the list")
-    check(members(api, cid, user_id) == sorted(t for t, _ in bttf[:2]), "collection shrank to two films")
+    check(results(out).get("Movies - Back to the Future") == ("updated", 0, 1), "CineSets removed the film that left the list")
+    check(members(api, ids["Movies - Back to the Future"], user_id) == sorted(t for t, _ in bttf[:2]), "collection shrank to two films")
+    ours["Movies - Back to the Future"] = sorted(t for t, _ in bttf[:2])
 
     # 3) nothing to do
     out = cinesets(cfg, "apply")
-    check("+0 -0" in out and "!!" not in out, "a repeat run changes nothing")
+    done = results(out)
+    check(len(done) == 4 and all(d == ("updated", 0, 0) for d in done.values()) and clean(out),
+          f"a repeat run changes nothing ({done})")
 
-    # 4) someone else's collection is left alone
-    api.req("POST", "/Collections", params={"Name": "Movies - The Matrix", "Ids": films[matrix[0]]["Id"]})
+    # 4) a new title renames the collection in place
+    picks = entry("m-ci-picks", "movie", "CI Favourites", "charts", lists=["ci/movies"])
+    write(franchise(bttf[:2]), picks, all_shows, no_talk)
+    out = cinesets(cfg, "apply")
+    sets = boxsets(api)
+    check(results(out).get("Movies - CI Favourites") == ("updated", 0, 0) and clean(out)
+          and sets.get("Movies - CI Favourites") == ids["Movies - CI Picks"] and "Movies - CI Picks" not in sets,
+          "a new title renamed the collection in place")
+    check_meta(api, ids["Movies - CI Picks"], user_id, "Movies - CI Favourites",
+               "CI Favourites movies. Updated automatically.", "SortName")
+    ids["Movies - CI Favourites"] = ids.pop("Movies - CI Picks")
+    ours["Movies - CI Favourites"] = ours.pop("Movies - CI Picks")
+
+    # 5) after losing its record, CineSets leaves the collections alone until adopt takes them back
+    os.remove(os.path.join(data, "state.json"))
+    before = boxsets(api)
+    out = cinesets(cfg, "apply")
+    check(out.count("not created by CineSets") == 4 and boxsets(api) == before,
+          "without its record CineSets refused all four collections")
+    out = cinesets(cfg, "adopt", "--all")
+    check(out.count("adopted") == 4, "adopt took all four back")
+    out = cinesets(cfg, "apply")
+    done = results(out)
+    check(len(done) == 4 and all(d == ("updated", 0, 0) for d in done.values()) and clean(out) and boxsets(api) == before,
+          f"after adopt, apply updated the same collections and made no new ones ({done})")
+
+    # 6) someone else's collection is left alone
+    api.req("POST", "/Collections", params={"Name": "Movies - The Matrix", "Ids": found["Movie"][matrix[0]]["Id"]})
     theirs = boxsets(api)["Movies - The Matrix"]
-    with open(coll, "a") as f:
-        f.write(franchise([matrix], key="m-matrix", title="The Matrix"))
+    write(franchise(bttf[:2]), picks, all_shows, no_talk, entry("m-matrix", "movie", "The Matrix", "universes", titles=[list(matrix)]))
     out = cinesets(cfg, "apply")
     check("not created by CineSets" in out, "CineSets refused a collection it did not create")
     check("Primary" not in (collection_item(api, theirs, user_id).get("ImageTags") or {}),
           "the other collection's poster was not touched")
+    check(members(api, theirs, user_id) == [matrix[0]], "the other collection's titles were not touched")
 
-    # 5) plan and posters write nothing
+    # 7) plan and posters write nothing
     before = boxsets(api)
     cinesets(cfg, "plan")
     cinesets(cfg, "posters")
     check(boxsets(api) == before, "plan and posters made no changes")
 
-    # 6) remove deletes only CineSets' own collection
+    # 8) remove deletes only CineSets' own collections
     out = cinesets(cfg, "remove", "--all", "--yes")
     after = boxsets(api)
-    check("Movies - Back to the Future" not in after, "remove deleted CineSets' collection")
+    check(not set(ours) & set(after), "remove deleted all of CineSets' collections")
     check(after.get("Movies - The Matrix") == theirs, "remove left the other collection alone")
     log(f"ALL CHECKS PASSED on {args.kind} {info.get('Version')}")
 
