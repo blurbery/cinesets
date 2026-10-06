@@ -1,0 +1,28 @@
+{
+  "$schema": "https://raw.githubusercontent.com/googleapis/release-please/main/schemas/config.json",
+  "bootstrap-sha": "3283872e2c26fe5bce9518227ecb2f63fbd03e63",
+  "include-component-in-tag": false,
+  "pull-request-title-pattern": "chore: release ${version}",
+  "pull-request-header": "Merging this pull request publishes the release below: it tags the new version and posts these notes to GitHub Releases.",
+  "packages": {
+    ".": {
+      "release-type": "python",
+      "package-name": "cinesets",
+      "changelog-path": "CHANGELOG.md",
+      "changelog-sections": [
+        {"type": "feat", "section": "Features"},
+        {"type": "fix", "section": "Bug fixes"},
+        {"type": "perf", "section": "Performance"},
+        {"type": "deps", "section": "Dependencies"},
+        {"type": "revert", "section": "Reverts"},
+        {"type": "docs", "section": "Documentation", "hidden": true},
+        {"type": "style", "section": "Style", "hidden": true},
+        {"type": "refactor", "section": "Refactoring", "hidden": true},
+        {"type": "test", "section": "Tests", "hidden": true},
+        {"type": "build", "section": "Build", "hidden": true},
+        {"type": "ci", "section": "Continuous integration", "hidden": true},
+        {"type": "chore", "section": "Chores", "hidden": true}
+      ]
+    }
+  }
+}

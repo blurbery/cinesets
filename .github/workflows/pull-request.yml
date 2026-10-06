@@ -1,0 +1,79 @@
+# CineSets by blurbery (https://github.com/blurbery/cinesets). SPDX-License-Identifier: AGPL-3.0-or-later
+# Additional terms under AGPL-3.0 section 7 apply: see NOTICE.
+#
+# Checks every pull request's title (Conventional Commits, which drive versions and release notes) and its AI
+# disclosure (required by CONTRIBUTING.md). It reads only the pull request's title and description from the
+# event payload: nothing is checked out or run from the pull request.
+name: Pull request
+
+on:
+  pull_request:
+    types: [opened, edited, reopened, synchronize, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pull-request-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  rules:
+    name: Title and AI disclosure
+    # Release pull requests are opened by the release workflow, not a person.
+    if: github.event.pull_request.user.type != 'Bot'
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Check title and AI disclosure
+        run: |
+          python3 - <<'PY'
+          import json, os, re, sys
+
+          pr = json.load(open(os.environ["GITHUB_EVENT_PATH"], encoding="utf-8"))["pull_request"]
+          title = (pr.get("title") or "").strip()
+          body = re.sub(r"<!--.*?-->", "", (pr.get("body") or "").replace("\r\n", "\n"), flags=re.S)
+          errors = []
+
+          types = "feat|fix|perf|deps|revert|docs|style|refactor|test|build|ci|chore"
+          if not re.fullmatch(rf"({types})(\([a-z0-9 ._/-]+\))?!?: \S.*", title):
+              errors.append(
+                  "The title must follow Conventional Commits, for example 'fix: keep posters on Jellyfin 12' "
+                  "or 'feat(collections): add Studio Ghibli'. Allowed types: " + types.replace("|", ", ") + ". "
+                  "Add ! before the colon for a breaking change.")
+
+          section = re.search(r"^##+\s*AI disclosure.*?$(.*?)(?=^##+\s|\Z)", body, flags=re.M | re.S | re.I)
+          if not section:
+              errors.append(
+                  "The description has no '## AI disclosure' section. Copy it from the pull request template "
+                  "(.github/pull_request_template.md) and fill it in.")
+          else:
+              text = section.group(1)
+              box = r"^\s*[-*]\s*\[[xX]\]\s*"
+              none = re.search(box + r"No AI tools were used", text, flags=re.M | re.I)
+              used = re.search(box + r"AI tools were used", text, flags=re.M | re.I)
+              if bool(none) == bool(used):
+                  errors.append(
+                      "Tick exactly one box in the AI disclosure: 'No AI tools were used' or "
+                      "'AI tools were used'. Change [ ] to [x].")
+              elif used:
+                  details = re.search(r"^\s*AI tools used and what they did:?(.*)", text, flags=re.M | re.S | re.I)
+                  words = re.findall(r"\w+", details.group(1)) if details else []
+                  if len(words) < 5:
+                      errors.append(
+                          "You ticked 'AI tools were used'. Under 'AI tools used and what they did', name each "
+                          "tool and say what it did, for example 'Claude wrote the first draft of the parser and "
+                          "its tests; I reviewed every line and ran the tests on my own server'.")
+
+          summary = os.environ.get("GITHUB_STEP_SUMMARY")
+          if errors:
+              for e in errors:
+                  print(f"::error::{e}")
+              if summary:
+                  with open(summary, "a", encoding="utf-8") as f:
+                      f.write("### Pull request needs a change\n\n" + "\n".join(f"- {e}" for e in errors)
+                              + "\n\nEdit the title or description and this check runs again. "
+                              "See CONTRIBUTING.md.\n")
+              sys.exit(1)
+          print("Title and AI disclosure look good.")
+          PY
