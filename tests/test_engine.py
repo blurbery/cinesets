@@ -3,12 +3,14 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Additional terms under AGPL-3.0 section 7 apply: see NOTICE.
 """Engine behaviour against an in-memory server: create, update, shrink, ownership and failure handling."""
+import json
 import os
+import random
 
 import pytest
 import requests
 
-from cinesets import catalog
+from cinesets import catalog, config
 from cinesets.engine import Engine
 from cinesets.store import load_json
 from conftest import FakeServer, Resp, seed_index
@@ -332,3 +334,110 @@ def test_a_server_that_ignores_paging_is_read_once_and_reported(make_cfg, capsys
     assert eng.members(cid, "admin") == {"m1", "m2"}
     assert len(item_reads(srv)) == 2   # it stopped instead of asking for the same page forever
     assert "sent the same page" in capsys.readouterr().out
+
+
+# ---------------------------------------------------------------- poster settings and random artwork
+WITH_ARTWORK = FRANCHISE.replace("    min: 2\n", '    min: 2\n    backdrop_title: "Back to the Future"\n')
+
+
+def random_run(make_cfg, extra="posters: {artwork: random}\n", yml=WITH_ARTWORK, seed=1):
+    cfg = make_cfg("emby", yml, extra)
+    seed_index(cfg, ITEMS)
+    srv = FakeServer("emby")
+    for iid, (name, _, k) in ITEMS.items():
+        srv.add_item(iid, name, "Movie" if k == "movie" else "Series")
+    return cfg, srv, Engine(cfg, srv, rng=random.Random(seed))
+
+
+def uploads(srv):
+    return [c for c in srv.writes() if "/Images/" in c[1]]
+
+
+def test_default_settings_keep_the_design_record_of_older_versions(make_cfg):
+    """Posters made before the poster settings existed must not be rebuilt and uploaded again."""
+    for extra in ("", "posters: {artwork: fixed, accent: auto, shade: medium, label: true}\n"):
+        cfg, srv, eng = random_run(make_cfg, extra)
+        eng.run("apply", catalog.load(cfg), 8)
+        assert state(cfg)["m-bttf"]["design"] == json.dumps(
+            ["Movies", "Back to\nthe Future", None, "blue", None, "Back to the Future"])
+        assert state(cfg)["m-bttf"]["backdrop_item"] == "m1" and "artwork" not in state(cfg)["m-bttf"]
+
+
+def test_random_artwork_ignores_backdrop_title_and_stays_put(make_cfg):
+    picks = set()
+    for seed in range(6):
+        cfg, srv, eng = random_run(make_cfg, seed=seed)
+        eng.run("apply", catalog.load(cfg), 8)
+        st = state(cfg)["m-bttf"]
+        assert st["backdrop_item"] in {"m1", "m2", "m3"} and st["artwork"] == "random"
+        picks.add(st["backdrop_item"])
+        srv.calls.clear()
+        eng.run("apply", catalog.load(cfg), 8)
+        assert srv.writes() == []                              # the pick is kept, nothing uploaded again
+        os.remove(os.path.join(cfg.path("data_dir"), "state.json"))
+    assert len(picks) > 1                                      # installs don't all get the same picture
+
+
+def test_reshuffle_picks_different_artwork(make_cfg):
+    cfg, srv, eng = random_run(make_cfg)
+    eng.run("apply", catalog.load(cfg), 8)
+    first = state(cfg)["m-bttf"]["backdrop_item"]
+    srv.calls.clear()
+    eng.reshuffle = True
+    eng.run("apply", catalog.load(cfg), 8)
+    assert state(cfg)["m-bttf"]["backdrop_item"] != first and len(uploads(srv)) == 1
+
+
+def test_switching_to_random_replaces_the_fixed_pick(make_cfg):
+    cfg, srv, eng = random_run(make_cfg, "")
+    eng.run("apply", catalog.load(cfg), 8)
+    assert state(cfg)["m-bttf"]["backdrop_item"] == "m1"
+    with open(cfg.path("base_dir") + "/config.yml", "a") as f:
+        f.write("posters: {artwork: random}\n")
+    cfg2 = config.load(cfg.path("base_dir") + "/config.yml")
+    srv.calls.clear()
+    Engine(cfg2, srv, rng=random.Random(3)).run("apply", catalog.load(cfg2), 8)
+    assert state(cfg)["m-bttf"]["backdrop_item"] in {"m2", "m3"} and len(uploads(srv)) == 1
+
+
+def test_a_colour_change_keeps_the_random_picture(make_cfg):
+    cfg, srv, eng = random_run(make_cfg)
+    eng.run("apply", catalog.load(cfg), 8)
+    first = state(cfg)["m-bttf"]["backdrop_item"]
+    with open(cfg.path("base_dir") + "/config.yml", "a") as f:
+        f.write("posters: {artwork: random, accent: \"#ff3366\", case: upper}\n")
+    cfg2 = config.load(cfg.path("base_dir") + "/config.yml")
+    srv.calls.clear()
+    eng2 = Engine(cfg2, srv, rng=random.Random(99))
+    eng2.run("apply", catalog.load(cfg2), 8)
+    assert state(cfg)["m-bttf"]["backdrop_item"] == first and len(uploads(srv)) == 1   # new colours, same picture
+    srv.calls.clear()
+    eng2.run("apply", catalog.load(cfg2), 8)
+    assert srv.writes() == []
+
+
+def test_streaming_and_pinned_posters_are_not_randomised(make_cfg):
+    yml = WITH_ARTWORK + ('  - key: m-netflix\n    group: streaming\n    type: movie\n    title: "Netflix"\n    logo: netflix\n'
+                          '    min: 2\n    backdrop_title: "Back to the Future Part III"\n    titles:\n'
+                          '      - ["Back to the Future", 1985]\n      - ["Back to the Future Part II", 1989]\n'
+                          '      - ["Back to the Future Part III", 1990]\n')
+    yml = yml.replace('    backdrop_title: "Back to the Future"\n', '    backdrop_item: m2\n', 1)
+    cfg, srv, eng = random_run(make_cfg, yml=yml)
+    eng.run("apply", catalog.load(cfg), 8)
+    st = state(cfg)
+    assert st["m-netflix"]["backdrop_item"] == "m3" and "artwork" not in st["m-netflix"]
+    assert st["m-bttf"]["backdrop_item"] == "m2" and "artwork" not in st["m-bttf"]
+
+
+
+def test_random_artwork_comes_from_the_top_titles_and_a_pick_further_down_is_kept(make_cfg):
+    from cinesets.engine import RANDOM_FROM
+    cfg, srv, eng = random_run(make_cfg)
+    candidates = [f"i{n}" for n in range(60)]
+    for seed in range(40):
+        eng.rng = random.Random(seed)
+        assert eng.random_pick(candidates, {}, set()) in candidates[:RANDOM_FROM]
+    st = {"backdrop_item": "i50", "artwork": "random"}      # picked when it was near the top; the list has moved on
+    assert eng.random_pick(candidates, st, set()) == "i50"
+    eng.reshuffle = True
+    assert eng.random_pick(candidates, st, set()) in candidates[:RANDOM_FROM]

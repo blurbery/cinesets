@@ -13,7 +13,8 @@
 #   titles     a fixed list of [title, year] (franchises); needs min if fewer than defaults.min_items films
 # Optional:
 #   subtitle         smaller white line under the title
-#   accent           poster colour: purple, pink, blue, gold, green, red, teal
+#   accent           poster colour: purple, pink, blue, gold, green, red, teal, orange, silver, ice, a colour like
+#                    "#ff3366", or two like ["#ff3366", "#ffaa00"] for the title's start and end
 #   limit            most titles to keep (defaults.limit)
 #   min              skip the collection if fewer titles match (defaults.min_items)
 #   logo             streaming service logo key (netflix, prime, disney, hbomax, apple, hulu, paramount, peacock, stan)

@@ -40,9 +40,17 @@ def test_shipped_catalogue_counts_match_readme(make_cfg):
     assert logos <= set(logo_mod.FILES) and logos <= set(posters.SERVICES)
 
 
+def test_readme_settings_examples_load(make_cfg):
+    readme = open(os.path.join(ROOT, "README.md")).read()
+    for name in ("Poster style",):
+        block = re.search(r"```yaml\n(.*?)```", readme.split(f"## {name}", 1)[1], re.S).group(1)
+        make_cfg(extra=block)                                         # loads without complaint
+
+
 def test_readme_examples_load(make_cfg, tmp_path):
     readme = open(os.path.join(ROOT, "README.md")).read()
-    blocks = re.findall(r"```yaml\n(.*?)```", readme, re.S)
+    section = readme.split("## Your own collections", 1)[1].split("\n## ", 1)[0]
+    blocks = re.findall(r"```yaml\n(.*?)```", section, re.S)
     extra = yaml.safe_load("collections:\n" + "".join(blocks))["collections"]
     cfg = make_cfg(collections_yml=yaml.safe_dump({"collections": extra}))
     keys = {c["key"] for c in catalog.load(cfg)}
@@ -227,3 +235,73 @@ def test_setup_trims_emby_web_address(tmp_path, monkeypatch):
     monkeypatch.setattr(server.MediaServer, "get", lambda self, path: [{"Name": "Movies", "CollectionType": "movies"}])
     cli.setup(str(tmp_path / "config.yml"))
     assert config.load(str(tmp_path / "config.yml"))["server"]["url"] == "http://192.0.2.10:8096"
+
+
+# ---------------------------------------------------------------- poster settings
+def test_example_config_loads_with_the_documented_defaults():
+    from cinesets import posters
+    cfg = config.load(os.path.join(ROOT, "config.example.yml"))
+    assert cfg["order"] == config.DEFAULTS["order"] and cfg["alphabetical_groups"] == ["universes"]
+    assert cfg["posters"] == {**posters.STYLE, "artwork": "random"}          # new installs get random artwork
+
+
+@pytest.mark.parametrize("bad, message", [
+    ("{shade: pitch}", "shade must be one of light, medium, dark"),
+    ("{artwork: shuffle}", "artwork must be one of fixed, random"),
+    ("{accent: beige}", "accent must be one of"),
+    ("{accent: '#12345'}", "accent must be one of"),
+    ("{label: maybe}", "label must be true or false"),
+    ("{label_colour: '#zzzzzz'}", "label_colour must be gold, white, accent"),
+    ("loud", "posters must be"),
+])
+def test_poster_settings_are_checked(make_cfg, bad, message):
+    with pytest.raises(SystemExit, match=message):
+        make_cfg(extra=f"posters: {bad}\n")
+
+
+def test_poster_settings_defaults_and_spellings(make_cfg, capsys):
+    from cinesets import posters
+    assert make_cfg()["posters"] == posters.STYLE
+    style = make_cfg(extra="posters: {align: center, label_color: white, Case: upper, accent: ['#ff0000', '#00ff00']}\n")["posters"]
+    assert style["align"] == "centre" and style["label_colour"] == "white" and style["accent"] == ["#ff0000", "#00ff00"]
+    assert "Case" in capsys.readouterr().err                          # unknown settings are noted, not fatal
+
+
+def test_accent_colours():
+    from cinesets import posters
+    assert posters.accent_colours("teal") == posters.ACCENTS["teal"]
+    assert posters.accent_colours(["#ff0000", "#0000ff"])[:2] == ((255, 0, 0), (0, 0, 255))
+    start, end, tint = posters.accent_colours("#ff3366")
+    assert start == (255, 51, 102) and end != start and tint == (96, 19, 38)
+    assert posters.accent_colours("nonsense") == posters.ACCENTS["purple"]   # old behaviour for unknown names
+
+
+def test_every_poster_setting_renders(tmp_path):
+    from PIL import Image
+    from cinesets import posters
+    backdrop = tmp_path / "b.jpg"
+    Image.new("RGB", (1920, 1080), (90, 120, 160)).save(backdrop)
+    variants = [{}, {"accent": "#33ccff"}, {"shade": "light", "tint": "none"}, {"shade": "dark", "tint": "strong"},
+                {"title": "solid"}, {"title": "white", "align": "centre", "case": "upper"},
+                {"label": False, "subtitle_colour": "accent"}, {"label_colour": "#ffffff", "subtitle_colour": "gold"}]
+    made = set()
+    for i, change in enumerate(variants):
+        style = posters.check_style(change)
+        for art in (str(backdrop), None):
+            out = tmp_path / f"p{i}{bool(art)}.jpg"
+            posters.make_poster(str(out), "Movies", "Back to\nthe Future", "Saga", "blue", art, style)
+            assert Image.open(out).size == (posters.W, posters.H)
+            made.add(out.read_bytes())
+        logo = tmp_path / f"l{i}.jpg"
+        posters.make_logo_poster(str(logo), "TV Shows", "netflix", str(tmp_path), "Popular", None, "Netflix", style)
+        assert Image.open(logo).size == (posters.W, posters.H)
+    assert len(made) == 2 * len(variants)                              # every setting changes the picture
+
+
+def test_streaming_posters_only_take_text_settings():
+    from cinesets import posters
+    style = posters.check_style({"accent": "red", "shade": "dark", "artwork": "random", "case": "upper"})
+    assert posters.style_changes(style, logo=True) == {"case": "upper"}
+    assert posters.style_changes(style) == {"accent": "red", "shade": "dark", "case": "upper"}
+    assert posters.style_changes(posters.check_style({})) == {}
+

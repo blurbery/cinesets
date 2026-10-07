@@ -43,6 +43,34 @@ order:
   - universes
 alphabetical_groups: [universes]
 
+# How the posters look. Every setting is optional.
+#   artwork          random: each install picks its own artwork from the top titles in each collection, so no
+#                    two servers look alike. fixed: the title named in collections.yml, or the top title.
+#                    Without this setting it's fixed, as in older versions. Streaming posters keep their own look
+#                    either way. `./run.sh apply --reshuffle` picks new random artwork.
+#   accent           auto: each collection's colour from collections.yml. Or one for every poster: purple, pink,
+#                    blue, gold, green, red, teal, orange, silver, ice, or a colour like "#ff3366"
+#   shade            how dark the artwork is: light, medium or dark
+#   tint             how strongly the colour washes over the artwork: strong, normal, subtle or none
+#   title            title colour: gradient (two colours), solid (one colour) or white
+# These text settings change streaming posters too:
+#   align            left or centre
+#   case             normal or upper (all capitals)
+#   label            the small Movies / TV Shows label at the top: true or false
+#   label_colour     gold, white, accent (the poster's colour) or a colour like "#ffffff"
+#   subtitle_colour  white, gold, accent or a colour like "#ffffff"
+posters:
+  artwork: random
+  accent: auto
+  shade: medium
+  tint: normal
+  title: gradient
+  align: left
+  case: normal
+  label: true
+  label_colour: gold
+  subtitle_colour: white
+
 # Seconds to pause after each write, and the slowest write (seconds) before a run stops to spare the server.
 write_pause: 1.0
 slow_write_limit: 30
