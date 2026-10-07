@@ -1,11 +1,11 @@
 # How CineSets fits together
 
-CineSets is built like an atom. Everything that makes a collection good sits in the centre. Each media server is
-its own module that orbits it, and the centre only ever talks to a server through one short list of operations.
+CineSets is built like a cluster. Everything that makes a collection good sits in the centre. Each media server is
+its own core around it, and the centre only ever talks to a server through one short list of operations.
 So a fix for one server can't change what another one gets, and adding a server doesn't touch the centre. Back
 to the [README](../README.md).
 
-<p align="center"><img src="images/architecture.svg" alt="The CineSets centre as the nucleus of an atom, ringed by the shell of server operations, with Emby and Jellyfin orbiting on one module, Silo on its own, and a dashed spot for the next server" width="900"></p>
+<p align="center"><img src="images/architecture.svg" alt="The CineSets centre as a nucleus ringed by the shell of server operations, with four server cores around it, each bonded to the shell: Emby and Jellyfin on one shared module, Silo on its own, and Plex, dashed, coming next" width="900"></p>
 
 ## The centre
 
@@ -67,6 +67,8 @@ Silo's Jellyfin-compatible port can show collections but can't make them, so thi
 | Order on the page | a locked sort name | Silo's per-library order list, which CineSets rewrites only when it changes and without moving collections it didn't make |
 
 ## Adding a server
+
+Plex is next. Adding it, or any other server, goes like this:
 
 1. Write `cinesets/servers/<name>.py` with a class that answers every operation in the shell. Start from
    `silo.py` if the server has its own way of doing things, or from `emby.py` if it speaks the Emby API.
