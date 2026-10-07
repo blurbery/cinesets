@@ -51,7 +51,9 @@ def make_media(root):
         name = f"{title} ({year}) {tag(main)}"
         folder = os.path.join(root, "movies", name)
         video(os.path.join(folder, name + ".mkv"))
-        nfo(os.path.join(folder, "movie.nfo"), "movie", title, year, [main] + [x for x in (("imdb", imdb), ("tmdb", tmdb)) if x != main], genres)
+        # The Matrix's .nfo has only its IMDb id too: given its TMDb id, Silo would move it to movie-tmdb-603
+        others = [] if title == "The Matrix" else [x for x in (("imdb", imdb), ("tmdb", tmdb)) if x != main]
+        nfo(os.path.join(folder, "movie.nfo"), "movie", title, year, [main] + others, genres)
         picture(os.path.join(folder, "fanart.jpg"), ["navy", "darkred", "darkgreen", "purple"][n % 4])
     for n, (title, year, imdb, tmdb, tvdb, genres) in enumerate(SHOWS):
         folder = os.path.join(root, "tv", f"{title} ({year}) {tag(('tvdb', tvdb))}")
@@ -154,20 +156,20 @@ def catalogue(silo, lib, typ):
 
 
 def wait_titles(silo, libs):
-    """Wait until every test title is listed with its genres and artwork. Returns {title: content id}."""
+    """Wait until every test title is listed with its genres and its artwork (Silo fetches artwork after the
+    details, shows last). Returns {title: content id}."""
     want = len(FILMS) + len(SHOWS)
-    for _ in range(100):
+    for _ in range(90):
         cards = catalogue(silo, libs["Movies"], "movie") + catalogue(silo, libs["TV Shows"], "series")
-        ready = [c for c in cards if c.get("genres")]
+        ready = [c for c in cards if c.get("genres") and (c.get("backdrop_url") or c.get("backdrop_thumbhash"))]
         if len(ready) >= want:
-            for c in cards:
-                log(f"{c['type']}: {c['title']} ({c.get('year')}) {c['content_id']} genres={c.get('genres')} "
-                    f"backdrop={bool(c.get('backdrop_url') or c.get('backdrop_thumbhash'))}")
-            art = [c["title"] for c in cards if c.get("backdrop_url") or c.get("backdrop_thumbhash")]
-            check(len(art) == want, f"every title has artwork from its fanart.jpg ({art})")
-            return {c["title"]: c["content_id"] for c in cards}
+            break
         time.sleep(4)
-    raise SystemExit(f"only {len(ready)} of {want} titles have genres: {[(c['title'], c.get('genres')) for c in cards]}")
+    for c in cards:
+        log(f"{c['type']}: {c['title']} ({c.get('year')}) {c['content_id']} genres={c.get('genres')} "
+            f"backdrop={bool(c.get('backdrop_url') or c.get('backdrop_thumbhash'))}")
+    check(len(ready) == want, f"every title has its genres and the artwork from its fanart.jpg ({len(ready)} of {want})")
+    return {c["title"]: c["content_id"] for c in cards}
 
 
 # ------------------------------------------------------------ CineSets
