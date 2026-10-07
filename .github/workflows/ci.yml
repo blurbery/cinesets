@@ -156,3 +156,33 @@ jobs:
       - name: Server log on failure
         if: failure() && steps.gate.outputs.skip != 'true'
         run: docker logs silo 2>&1 | tail -n 200
+
+  end-to-end-proxies:
+    name: End to end (dashboard behind Caddy and nginx)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Pull Caddy and nginx
+        run: |
+          docker pull -q caddy:2
+          docker pull -q nginx:stable
+      - name: Dashboard on the runner, Caddy and nginx on the host network
+        run: python tests/e2e/run_proxy_e2e.py --docker --caddy-image caddy:2 --nginx-image nginx:stable --logs proxy-logs/host
+      - name: Build the CineSets image
+        run: docker build -q -t cinesets:ci .
+      - name: Dashboard in its own container, Caddy and nginx beside it on a Docker network
+        run: python tests/e2e/run_proxy_e2e.py --image cinesets:ci --caddy-image caddy:2 --nginx-image nginx:stable --logs proxy-logs/network
+      - name: Logs on failure
+        if: failure()
+        run: |
+          docker ps -a
+          for f in proxy-logs/*/*.log; do
+            if [ -f "$f" ]; then echo "===== $f"; tail -n 100 "$f"; fi
+          done
