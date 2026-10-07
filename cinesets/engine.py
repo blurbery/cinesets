@@ -7,7 +7,6 @@
 Safety rules: CineSets only ever changes collections it created (recorded in data/state.json), writes only
 what changed, and backs off when the server is slow.
 """
-import base64
 import contextlib
 import hashlib
 import json
@@ -20,7 +19,7 @@ import requests
 
 from . import posters
 from .lists import fetch_list
-from .server import ServerError
+from .servers import ServerError, chunks
 from .store import load_json, save_json
 
 SAFE_ID = re.compile(r"^[A-Za-z0-9-]+$")
@@ -31,13 +30,6 @@ INDEX_MAX_AGE = 20 * 3600
 
 class Busy(RuntimeError):
     """Another CineSets run holds the lock (raised only when asked not to wait)."""
-PAGE = 5000
-
-
-def chunks(seq, n=40):
-    seq = list(seq)
-    for i in range(0, len(seq), n):
-        yield seq[i:i + n]
 
 
 class Engine:
@@ -53,44 +45,23 @@ class Engine:
         self.logos = os.path.join(self.data, "logos")
         self.posters = os.path.join(self.data, "posters")
 
-    # ------------------------------------------------------------ reads
-    def all_items(self, query, what, pause=0.0):
-        """Every item an /Items query returns, a page at a time. A short page is not taken as the end, since a server
-        or a proxy in front of it may send fewer items than asked for: reading stops at an empty page."""
-        out, seen, start = [], set(), 0
-        while True:
-            page = self.srv.get(f"/Items?{query}&StartIndex={start}&Limit={PAGE}&EnableTotalRecordCount=false")["Items"]
-            new = [i for i in page if i["Id"] not in seen]
-            if not new:
-                if page:  # the same items again: the server ignored StartIndex, so stop rather than loop forever
-                    print(f"   the server sent the same page of {what} twice; anything after it was not read")
-                return out
-            seen.update(i["Id"] for i in new)
-            out += new
-            start += len(page)
-            time.sleep(pause)
-
     # ------------------------------------------------------------ library index
     def build_index(self):
         """One item per title; libraries listed earlier in config.yml win when a title is in several."""
         if not self.cfg["libraries"]:
             raise SystemExit("No libraries in config.yml: list the movie and TV libraries CineSets should use")
-        folders = {f["Name"]: f["ItemId"] for f in self.srv.get("/Library/VirtualFolders")}
+        folders = self.srv.library_folders()
         index = {"built": time.time(), "movie": {"imdb": {}, "tmdb": {}}, "show": {"tvdb": {}, "imdb": {}, "tmdb": {}}, "items": {}}
         for lib in self.cfg["libraries"]:
             name, kind = lib["name"], lib["type"]
             if name not in folders:
                 raise SystemExit(f"library {name!r} not found on the server (found: {', '.join(sorted(folders))})")
-            item_type = "Movie" if kind == "movie" else "Series"
-            # without CollapseBoxSetItems=false, Jellyfin 12 lists a collection in place of the titles in it
-            items = self.all_items(f"Recursive=true&IncludeItemTypes={item_type}&Fields=ProviderIds,ProductionYear"
-                                   f"&CollapseBoxSetItems=false&ParentId={folders[name]}", f"library {name!r}", pause=0.5)
+            items = self.srv.library_items(folders[name], kind, name)
             for it in items:
-                prov = {k.lower(): str(v) for k, v in (it.get("ProviderIds") or {}).items() if v}
                 for key in index[kind]:
-                    if prov.get(key):
-                        index[kind][key].setdefault(prov[key], it["Id"])
-                index["items"][it["Id"]] = {"n": it.get("Name"), "y": it.get("ProductionYear"), "b": bool(it.get("BackdropImageTags")), "k": kind}
+                    if it["ids"].get(key):
+                        index[kind][key].setdefault(it["ids"][key], it["id"])
+                index["items"][it["id"]] = {"n": it["name"], "y": it["year"], "b": it["backdrop"], "k": kind}
             print(f"  indexed {name}: {len(items)}")
         save_json(self.index_file, index)
         return index
@@ -136,8 +107,7 @@ class Engine:
             # drop titles carrying an excluded genre (for example talk shows), keeping list order
             kept, cand = [], ids[:limit * 4]
             for batch in chunks(cand, 100):
-                genres = {i["Id"]: {g.lower() for g in (i.get("Genres") or [])}
-                          for i in self.srv.get(f"/Items?Ids={','.join(batch)}&Fields=Genres")["Items"]}
+                genres = self.srv.genres(batch)
                 kept += [i for i in batch if not genres.get(i, set()) & skip]
             ids = kept
         return ids[:limit], wanted, len(ids)
@@ -237,7 +207,7 @@ class Engine:
             return path
         tmp = path + ".part"
         try:
-            content = self.srv.call("GET", f"/Items/{item_id}/Images/Backdrop?maxWidth=1920&quality=90").content
+            content = self.srv.backdrop_image(item_id, 1920, 90)
             with open(tmp, "wb") as f:
                 f.write(content)
             from PIL import Image
@@ -270,7 +240,7 @@ class Engine:
     # ------------------------------------------------------------ writes
     def collections_by_id(self):
         """Every collection on the server, id -> name."""
-        return {i["Id"]: i.get("Name") for i in self.all_items("IncludeItemTypes=BoxSet&Recursive=true", "collections")}
+        return self.srv.list_collections()
 
     def existing_collections(self):
         return {name: cid for cid, name in self.collections_by_id().items()}
@@ -315,8 +285,7 @@ class Engine:
             st["pending"] = {"name": create_as, "not": None}
             save_json(self.state_file, state)
             try:
-                r, took = self.srv.timed("POST", f"/Collections?Name={requests.utils.quote(create_as)}&Ids={','.join(first)}")
-                cid, slowest = r.json()["Id"], took
+                cid, slowest = self.srv.create_collection(create_as, coll, first)
             except (requests.RequestException, ServerError):
                 # the server may have made the collection before failing; claim it if it is new since this run started
                 cid = self.existing_collections().get(create_as)
@@ -336,24 +305,23 @@ class Engine:
             st["id"], st["name"] = cid, create_as
             st.pop("pending", None)
             save_json(self.state_file, state)
-            self.wait_until_ready(cid, user_id)
+            self.srv.wait_until_ready(cid, user_id)
         # read back what the collection holds, even a new one: Jellyfin 12 can drop the titles it was created with
-        current = self.members(cid, user_id)
+        current = self.srv.members(cid, user_id)
         add = self.existing_ids([i for i in ids if i not in current])
         remove = current - set(ids)
-        for batch in chunks(add):
-            slowest = max(slowest, self.srv.timed("POST", f"/Collections/{cid}/Items?Ids={','.join(batch)}")[1])
-        for batch in chunks(remove):
-            slowest = max(slowest, self.srv.timed("DELETE", f"/Collections/{cid}/Items?Ids={','.join(batch)}")[1])
+        if add:
+            slowest = max(slowest, self.srv.add_items(cid, add))
+        if remove:
+            slowest = max(slowest, self.srv.remove_items(cid, remove))
 
         with open(poster, "rb") as f:
             raw = f.read()
         digest = hashlib.sha1(raw).hexdigest()
         if created or st.get("poster") != digest:
-            before = self.poster_tag(cid, user_id)
-            slowest = max(slowest, self.srv.timed("POST", f"/Items/{cid}/Images/Primary", data=base64.b64encode(raw),
-                                                  headers={"Content-Type": "image/jpeg"})[1])
-            if self.has_poster(cid, user_id, changed_from=before):
+            kept, took = self.srv.upload_poster(cid, raw, user_id)
+            slowest = max(slowest, took)
+            if kept:
                 st["poster"] = digest
             else:  # the server took the upload but did not keep it: try again next run
                 st.pop("poster", None)
@@ -361,56 +329,18 @@ class Engine:
 
         meta = json.dumps([name, coll["sort"], coll.get("overview", ""), coll.get("order", "PremiereDate")])
         if created or st.get("meta") != meta:
-            item = self.srv.item(user_id, cid)
-            item["Name"], item["ForcedSortName"], item["SortName"] = name, coll["sort"], coll["sort"]
-            item["Overview"] = coll.get("overview", "")
-            item["DisplayOrder"] = coll.get("order", "PremiereDate")
-            # Jellyfin has no SortName lock field; Emby does
-            lock = {"Name", "Overview"} | ({"SortName"} if self.srv.kind == "emby" else set())
-            item["LockedFields"] = sorted(set(item.get("LockedFields") or []) | lock)
-            slowest = max(slowest, self.srv.timed("POST", f"/Items/{cid}", json=item)[1])
+            slowest = max(slowest, self.srv.set_details(cid, user_id, coll, name))
             st["meta"] = meta
         st["name"] = name
         st["count"], st["updated"] = len(ids), int(time.time())
         save_json(self.state_file, state)
         return created, added + len(add), len(remove), slowest
 
-    def wait_until_ready(self, cid, user_id, seconds=20):
-        """A new collection is usable once the server has given it a folder (Emby finishes this just after replying)."""
-        deadline = time.time() + seconds
-        while time.time() < deadline:
-            try:
-                if self.srv.item(user_id, cid).get("Path"):
-                    return
-            except ServerError:
-                pass
-            time.sleep(1)
-
-    def poster_tag(self, cid, user_id):
-        try:
-            return (self.srv.item(user_id, cid).get("ImageTags") or {}).get("Primary")
-        except ServerError:
-            return None
-
-    def has_poster(self, cid, user_id, changed_from=None, tries=5):
-        """True once the collection has a poster that differs from `changed_from` (the one before an upload)."""
-        for _ in range(tries):
-            tag = self.poster_tag(cid, user_id)
-            if tag and tag != changed_from:
-                return True
-            time.sleep(1)
-        return False
-
-    def members(self, cid, user_id):
-        # Jellyfin only lists box set children for a user; Emby lists them either way
-        user = f"&UserId={user_id}" if self.srv.kind == "jellyfin" else ""
-        return {i["Id"] for i in self.all_items(f"ParentId={cid}{user}", f"collection {cid}")}
-
     def existing_ids(self, ids):
         """Drop ids the server no longer has (the index can be up to a day old), keeping order."""
         alive = set()
         for batch in chunks(ids, 100):
-            alive |= {i["Id"] for i in self.srv.get(f"/Items?Ids={','.join(batch)}")["Items"]}
+            alive |= self.srv.alive(batch)
         return [i for i in ids if i in alive]
 
     @contextlib.contextmanager
@@ -480,7 +410,7 @@ class Engine:
                 if not self.owned_name_ok(st, live[cid], by_key.get(key)):
                     print(f"{key}: collection {cid} is now called {live[cid]!r}; not deleting it")
                     continue
-                self.srv.timed("DELETE", f"/Items/{cid}")
+                self.srv.delete_collection(cid)
                 print(f"deleted {live[cid]!r}")
                 n += 1
                 state.pop(key, None)

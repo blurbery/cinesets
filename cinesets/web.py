@@ -49,7 +49,7 @@ from PIL import Image
 from . import __version__, catalog, config, posters, scenes
 from .engine import SAFE_ID, Busy, Engine
 from .lists import fetch_list, slug_of
-from .server import MediaServer, ServerError
+from .servers import ServerError, connect
 from .store import load_json, save_json
 
 STATIC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
@@ -206,7 +206,7 @@ class Dashboard:
         else:
             self.cfg_path = config.config_path(cfg_path)
             self.cfg = config.load(self.cfg_path)
-            self.engine = Engine(self.cfg, server or MediaServer(self.cfg))
+            self.engine = Engine(self.cfg, server or connect(self.cfg))
             self.index = self.engine.get_index()
             self.kind = self.cfg["server"]["type"]
 
@@ -370,7 +370,7 @@ class Dashboard:
         with self.fetch_lock:
             if not os.path.exists(path):
                 try:
-                    raw = self.engine.srv.call("GET", f"/Items/{item}/Images/Backdrop?maxWidth=1280&quality=85").content
+                    raw = self.engine.srv.backdrop_image(item, 1280, 85)
                     with Image.open(io.BytesIO(raw)) as im:
                         im.verify()
                 except Exception as e:
@@ -391,7 +391,7 @@ class Dashboard:
         if not os.path.exists(path):
             os.makedirs(folder, exist_ok=True)
             try:
-                raw = self.engine.srv.call("GET", f"/Items/{item}/Images/Backdrop?maxWidth=480&quality=80").content
+                raw = self.engine.srv.backdrop_image(item, 480, 80)
                 with Image.open(io.BytesIO(raw)) as im:
                     im.verify()
             except Exception as e:

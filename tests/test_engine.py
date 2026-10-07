@@ -315,7 +315,7 @@ def test_collections_and_their_titles_are_read_across_pages(make_cfg, kind):
     srv.page_cap = 2
     ids = [srv.add_collection(f"Collection {n}", ["m1", "m2", "m3"]) for n in range(5)]
     assert sorted(eng.existing_collections().values()) == sorted(ids)
-    assert eng.members(ids[0], "admin") == {"m1", "m2", "m3"}
+    assert srv.members(ids[0], "admin") == {"m1", "m2", "m3"}
 
 
 def test_short_pages_do_not_cause_writes(make_cfg):
@@ -331,7 +331,7 @@ def test_a_server_that_ignores_paging_is_read_once_and_reported(make_cfg, capsys
     cfg, srv, eng = setup_run(make_cfg)
     srv.page_cap, srv.ignore_start = 2, True
     cid = srv.add_collection("Collection", ["m1", "m2", "m3"])
-    assert eng.members(cid, "admin") == {"m1", "m2"}
+    assert srv.members(cid, "admin") == {"m1", "m2"}
     assert len(item_reads(srv)) == 2   # it stopped instead of asking for the same page forever
     assert "sent the same page" in capsys.readouterr().out
 
@@ -439,7 +439,7 @@ def test_unpicked_collections_are_kept_until_removed(make_cfg, monkeypatch, caps
     with open(cfg.path("base_dir") + "/config.yml", "a") as f:
         f.write("collections: {exclude: [m-bttf2]}\n")
     path = cfg.path("base_dir") + "/config.yml"
-    monkeypatch.setattr(cli, "MediaServer", lambda cfg: srv)
+    monkeypatch.setattr(cli.servers, "connect", lambda cfg: srv)
     capsys.readouterr()
     monkeypatch.setattr("sys.argv", ["cinesets", "apply", "--config", path])
     cli.main()

@@ -11,7 +11,8 @@ import re
 import pytest
 import yaml
 
-from cinesets import catalog, cli, config, server
+from cinesets import catalog, cli, config
+from cinesets.servers import emby as server
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
