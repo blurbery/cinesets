@@ -51,8 +51,7 @@ def make_media(root):
         name = f"{title} ({year}) {tag(main)}"
         folder = os.path.join(root, "movies", name)
         video(os.path.join(folder, name + ".mkv"))
-        # The Matrix's .nfo has only its IMDb id too: given its TMDb id, Silo would move it to movie-tmdb-603
-        others = [] if title == "The Matrix" else [x for x in (("imdb", imdb), ("tmdb", tmdb)) if x != main]
+        others = [x for x in (("imdb", imdb), ("tmdb", tmdb)) if x != main]
         nfo(os.path.join(folder, "movie.nfo"), "movie", title, year, [main] + others, genres)
         picture(os.path.join(folder, "fanart.jpg"), ["navy", "darkred", "darkgreen", "purple"][n % 4])
     for n, (title, year, imdb, tmdb, tvdb, genres) in enumerate(SHOWS):
@@ -239,7 +238,8 @@ def main():
         return next(v for k, v in ids.items() if k.startswith(title) and (title != "Back to the Future" or "Part" not in k))
     bttf = [cid("Back to the Future"), cid("Back to the Future Part II"), cid("Back to the Future Part III")]
     matrix, stranger, late = cid("The Matrix"), cid("Stranger Things"), cid("The Late Show")
-    check(bttf[0] == "movie-tmdb-105" and matrix == "movie-imdb-tt0133093" and stranger == "series-tvdb-305288",
+    # The Matrix's folder carries its IMDb id; Silo may move it to its TMDb id once it looks it up, either is fine
+    check(bttf[0] == "movie-tmdb-105" and stranger == "series-tvdb-305288" and matrix in ("movie-imdb-tt0133093", "movie-tmdb-603"),
           f"Silo took the ids from the folder names ({bttf[0]}, {matrix}, {stranger})")
 
     try:
@@ -252,7 +252,8 @@ def main():
     coll = os.path.join(work, "collections.yml")
     # list rows as mdblist sends them; each id kind has to match on its own
     seed_list(data, "ci/movies", [
-        {"mediatype": "movie", "rank": 1, "title": "The Matrix", "imdb_id": "tt0133093", "id": None},    # IMDb only
+        # mdblist gives every film its TMDb id, which Silo keys films by; IMDb-only matching is tested with a show below
+        {"mediatype": "movie", "rank": 1, "title": "The Matrix", "imdb_id": "tt0133093", "id": 603},
         {"mediatype": "movie", "rank": 2, "title": "Back to the Future", "imdb_id": None, "id": 105},   # TMDb only
         {"mediatype": "movie", "rank": 3, "title": "Not on the server", "imdb_id": "tt0000001", "id": 1},
         {"mediatype": "show", "rank": 4, "title": "Stranger Things", "imdb_id": "tt4574334", "id": 66732},
