@@ -225,7 +225,7 @@ the collections CineSets made, and delete the folder.
 
 Found a bug or got an idea? [Open an issue](https://github.com/blurbery/cinesets/issues/new/choose). PRs are
 welcome too, just have a read of [CONTRIBUTING.md](CONTRIBUTING.md) first. Using AI is fine, but say so in the
-PR.
+PR. [How CineSets fits together](docs/architecture.md) shows the shared centre and the module each server gets.
 
 > [!CAUTION]
 > Security problems go through [SECURITY.md](SECURITY.md), not public issues.
