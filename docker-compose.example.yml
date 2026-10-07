@@ -8,6 +8,8 @@
 #   docker compose run --rm cinesets logos
 #   docker compose run --rm cinesets plan     # dry run, changes nothing
 #   docker compose up -d                       # starts the schedule (all jobs run once straight away)
+#   docker compose run --rm -p 127.0.0.1:8095:8095 cinesets web --host 0.0.0.0   # the dashboard, while you need it
+#                                                    (or keep it running with the cinesets-web service below)
 #
 # The server address must be reachable from inside the container: use your server's LAN address (for
 # example http://192.0.2.10:8096) or its container name on a shared Docker network (http://emby:8096),
@@ -17,6 +19,7 @@
 services:
   cinesets:
     build: .
+    image: cinesets:local
     container_name: cinesets
     restart: unless-stopped
     volumes:
@@ -26,3 +29,20 @@ services:
       PGID: 1000
     # Optional: keep the API key out of config.yml by putting CINESETS_API_KEY=... in ./config/cinesets.env
     # env_file: ./config/cinesets.env
+
+  # The dashboard, always running (optional; see docs/dashboard.md). It is published on this host's 127.0.0.1 only:
+  # use Tailscale (tailscale serve --bg 8095) or a reverse proxy with HTTPS on the host to reach it from elsewhere.
+  # Get the sign-in link with: docker compose run --rm cinesets web --link
+  # cinesets-web:
+  #   image: cinesets:local
+  #   pull_policy: never
+  #   container_name: cinesets-web
+  #   restart: unless-stopped
+  #   command: ["web", "--host", "0.0.0.0"]
+  #   ports:
+  #     - "127.0.0.1:8095:8095"
+  #   volumes:
+  #     - ./config:/config
+  #   environment:
+  #     PUID: 1000
+  #     PGID: 1000

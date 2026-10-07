@@ -1,0 +1,23 @@
+# /etc/systemd/system/cinesets-web.service: keeps the CineSets dashboard running (see docs/dashboard.md).
+# CineSets by blurbery (https://github.com/blurbery/cinesets). SPDX-License-Identifier: AGPL-3.0-or-later
+# Additional terms under AGPL-3.0 section 7 apply: see NOTICE.
+# Set User to the account that owns /opt/cinesets, and the paths if yours differ. It listens on 127.0.0.1 only;
+# put Tailscale (tailscale serve --bg 8095) or a reverse proxy with HTTPS in front to use it from elsewhere.
+[Unit]
+Description=CineSets dashboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=cinesets
+WorkingDirectory=/opt/cinesets
+ExecStart=/opt/cinesets/run.sh web
+Restart=on-failure
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/opt/cinesets
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,403 @@
+<!doctype html>
+<!-- CineSets by blurbery (https://github.com/blurbery/cinesets). SPDX-License-Identifier: AGPL-3.0-or-later. Additional terms under AGPL-3.0 section 7 apply: see NOTICE. -->
+<html lang="en-AU">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark">
+  <meta name="referrer" content="no-referrer">
+  <title>CineSets</title>
+  <link rel="icon" href="icon.png">
+  <link rel="stylesheet" href="app.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <div id="boot" class="boot" role="status">
+    <span class="spinner" aria-hidden="true"></span>
+    <span>Loading CineSets</span>
+  </div>
+
+  <div id="gate" class="gate" hidden>
+    <div class="gate-card">
+      <div class="brand brand-big">
+        <img class="brand-mark" src="icon.png" alt="" width="56" height="56">
+        <span class="brand-name">CineSets</span>
+      </div>
+      <form id="signin" class="signin" hidden novalidate>
+        <p id="signin-note" class="signin-note" hidden></p>
+        <label class="field-label" for="signin-key">Access key or password</label>
+        <input id="signin-key" class="field" type="password" name="key" autocomplete="current-password" spellcheck="false" autocapitalize="off" required>
+        <p id="signin-error" class="signin-error" role="alert" hidden></p>
+        <button id="signin-btn" class="btn btn-primary btn-block" type="submit">Sign in</button>
+        <p class="signin-help">Find your sign-in link in the terminal where the dashboard started, or run <code>./run.sh web --link</code> (on Docker: <code>docker compose run --rm cinesets web --link</code>).</p>
+      </form>
+      <p id="gate-msg" class="gate-msg" hidden></p>
+      <button id="gate-retry" class="btn btn-primary" type="button" hidden>Try again</button>
+    </div>
+  </div>
+
+  <div id="app" class="app" hidden>
+    <header class="topbar">
+      <div class="brand">
+        <img class="brand-mark" src="icon.png" alt="" width="28" height="28">
+        <span class="brand-name">CineSets</span>
+        <span id="demo-badge" class="badge" hidden title="Demo mode: nothing is saved and nothing runs against a server">Demo</span>
+        <span id="brand-meta" class="brand-meta"></span>
+      </div>
+
+      <div class="tabs seg" role="tablist" aria-label="Views">
+        <button id="tab-collections" class="seg-btn" type="button" role="tab" aria-selected="false" aria-controls="panel-collections" tabindex="-1">Collections</button>
+        <button id="tab-design" class="seg-btn" type="button" role="tab" aria-selected="true" aria-controls="panel-design">Design</button>
+        <button id="tab-lists" class="seg-btn" type="button" role="tab" aria-selected="false" aria-controls="panel-lists" tabindex="-1">Lists</button>
+        <button id="tab-grid" class="seg-btn" type="button" role="tab" aria-selected="false" aria-controls="panel-grid" tabindex="-1">Preview all</button>
+      </div>
+
+      <div class="topbar-actions">
+        <span id="dirty" class="dirty" role="status" aria-live="polite"></span>
+        <button id="discard-btn" class="btn btn-danger-text" type="button" disabled>Discard</button>
+        <button id="save-btn" class="btn btn-primary" type="button" disabled title="Save settings and picks (Ctrl or Cmd + S)">Save</button>
+        <span class="topbar-sep" aria-hidden="true"></span>
+        <span id="run-wrap" class="btn-group">
+          <button id="plan-btn" class="btn" type="button">Dry run</button>
+          <button id="apply-btn" class="btn" type="button">Apply</button>
+        </span>
+        <button id="log-btn" class="btn btn-icon" type="button" aria-label="Show the run log" aria-expanded="false" aria-controls="runlog" title="Run log">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+        </button>
+        <button id="signout-btn" class="btn btn-quiet" type="button" hidden>Sign out</button>
+      </div>
+    </header>
+
+    <div id="conflict" class="banner" role="alert" hidden>
+      <span id="conflict-text" class="banner-text"></span>
+      <span class="banner-actions">
+        <button id="conflict-reload" class="btn btn-small btn-primary" type="button">Reload settings</button>
+        <button id="conflict-keep" class="btn btn-small" type="button">Keep editing</button>
+      </span>
+    </div>
+
+    <main class="main">
+      <!-- Collections: turn collections on and off -->
+      <section id="panel-collections" class="panel-collections" role="tabpanel" aria-labelledby="tab-collections" hidden>
+        <div class="col-wrap">
+          <div class="col-toolbar">
+            <div class="col-title">
+              <h1>Collections</h1>
+              <p id="col-count" class="muted"></p>
+            </div>
+            <div class="search">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 16l4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              <input type="search" id="col-search" class="field" placeholder="Search by name or key" aria-label="Search collections by name or key" autocomplete="off" spellcheck="false">
+            </div>
+            <div class="btn-group">
+              <button id="all-on" class="btn" type="button">Turn all on</button>
+              <button id="all-off" class="btn" type="button">Turn all off</button>
+            </div>
+          </div>
+          <section class="card most-card" aria-labelledby="most-heading">
+            <div class="most-text">
+              <h2 id="most-heading">Most titles per collection</h2>
+              <p class="hint">A cap for every list-based collection. It never makes one bigger, and franchises always keep all their films. Sizes save with Save.</p>
+            </div>
+            <label class="switch-field">
+              <span>Limit every collection</span>
+              <input id="most-switch" class="switch" type="checkbox" role="switch">
+            </label>
+            <label id="most-field" class="size-label" hidden>
+              <span>Up to</span>
+              <input id="most-input" class="num" type="number" step="1" inputmode="numeric" aria-label="Most titles in any collection">
+            </label>
+          </section>
+          <div id="col-cards" class="col-cards"></div>
+          <p id="col-empty" class="empty" hidden>No collections match your search.</p>
+        </div>
+      </section>
+
+      <!-- Lists: where each collection's titles come from, and new collections from MDBList -->
+      <section id="panel-lists" class="panel-lists" role="tabpanel" aria-labelledby="tab-lists" hidden>
+        <div class="col-wrap">
+          <div class="col-toolbar">
+            <div class="col-title">
+              <h1>Lists</h1>
+              <p class="muted">Where each collection's titles come from. List changes save to the server straight away; they are not part of Save.</p>
+            </div>
+            <a class="btn" href="https://mdblist.com/lists/" target="_blank" rel="noopener noreferrer">Find lists on MDBList</a>
+          </div>
+
+          <section class="card newcol" aria-labelledby="nc-heading">
+            <h2 id="nc-heading">New collection from MDBList</h2>
+            <p class="hint">Paste a list address, like https://mdblist.com/lists/user/list-name, or just user/list-name.</p>
+            <div id="nc-lists" class="nc-lists"></div>
+            <div class="nc-actions">
+              <button id="nc-add-list" class="btn btn-small" type="button">Add another list</button>
+              <button id="nc-check" class="btn btn-primary" type="button">Check</button>
+            </div>
+            <div id="nc-result" class="nc-result" role="status" aria-live="polite" hidden></div>
+
+            <div id="nc-mode" class="seg nc-mode" role="radiogroup" aria-label="What to do with these lists" hidden>
+              <label class="seg-opt"><input class="vh" type="radio" name="nc-mode" value="new" checked><span>New collection</span></label>
+              <label class="seg-opt"><input class="vh" type="radio" name="nc-mode" value="existing"><span>Add to an existing collection</span></label>
+            </div>
+
+            <div id="nc-existing" class="nc-existing" hidden>
+              <label class="field-label" for="nc-ex-search">Collection</label>
+              <input id="nc-ex-search" class="field" type="search" placeholder="Search list-based collections" autocomplete="off" spellcheck="false">
+              <select id="nc-ex-select" class="field nc-ex-select" size="7" aria-label="Collection to add the lists to"></select>
+              <p id="nc-ex-error" class="signin-error" role="alert" hidden></p>
+              <div class="nc-actions">
+                <button id="nc-ex-add" class="btn btn-primary" type="button">Add</button>
+              </div>
+            </div>
+
+            <form id="nc-form" class="nc-form" novalidate hidden>
+              <div class="nc-grid">
+                <div class="nc-field nc-wide">
+                  <label class="field-label" for="nc-title">Title</label>
+                  <input id="nc-title" class="field" type="text" maxlength="60" autocomplete="off" required>
+                  <input id="nc-title2" class="field" type="text" maxlength="59" autocomplete="off" aria-label="Title, second line" placeholder="Second line" hidden>
+                  <label class="switch-field nc-two">
+                    <span>Two lines</span>
+                    <input id="nc-twolines" class="switch" type="checkbox" role="switch">
+                  </label>
+                </div>
+                <div class="nc-field">
+                  <label class="field-label" for="nc-subtitle">Subtitle <span class="muted">(optional)</span></label>
+                  <input id="nc-subtitle" class="field" type="text" maxlength="40" autocomplete="off">
+                </div>
+                <div class="nc-field">
+                  <span class="field-label" id="nc-type-label">Type</span>
+                  <div class="seg" role="radiogroup" aria-labelledby="nc-type-label">
+                    <label class="seg-opt"><input class="vh" type="radio" name="nc-type" value="movie" checked><span>Films</span></label>
+                    <label class="seg-opt"><input class="vh" type="radio" name="nc-type" value="show"><span>TV shows</span></label>
+                  </div>
+                </div>
+                <div class="nc-field">
+                  <label class="field-label" for="nc-section">Section</label>
+                  <select id="nc-section" class="field"></select>
+                  <input id="nc-section-name" class="field" type="text" maxlength="40" autocomplete="off" aria-label="New section name" placeholder="New section name" hidden>
+                </div>
+                <div class="nc-field">
+                  <label class="field-label" for="nc-limit">Most titles</label>
+                  <input id="nc-limit" class="field num-wide" type="number" min="1" max="500" step="1" inputmode="numeric">
+                </div>
+                <div class="nc-field nc-wide">
+                  <span class="field-label" id="nc-accent-label">Accent colour</span>
+                  <div id="nc-accent" class="chips" role="radiogroup" aria-labelledby="nc-accent-label"></div>
+                </div>
+              </div>
+              <p id="nc-error" class="signin-error" role="alert" hidden></p>
+              <div class="nc-actions">
+                <button id="nc-create" class="btn btn-primary" type="submit">Create</button>
+              </div>
+            </form>
+            <div id="nc-done" class="nc-done" role="status" hidden></div>
+          </section>
+
+          <div class="lists-toolbar">
+            <h2>Every collection</h2>
+            <div class="search">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 16l4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              <input type="search" id="lists-search" class="field" placeholder="Search by name or key" aria-label="Search collections by name or key" autocomplete="off" spellcheck="false">
+            </div>
+          </div>
+          <div id="lists-body" class="col-cards lists-cards"></div>
+          <p id="lists-empty" class="empty" hidden>No collections match your search.</p>
+        </div>
+      </section>
+
+      <!-- Design: list, poster editor and style controls -->
+      <section id="panel-design" class="panel-design" role="tabpanel" aria-labelledby="tab-design">
+        <nav id="dlist-nav" class="dlist" aria-label="Choose a section to design">
+          <div class="dlist-head">
+            <div class="search search-small">
+              <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 16l4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+              <input type="search" id="list-search" class="field" placeholder="Find a collection" aria-label="Find a collection to design" autocomplete="off" spellcheck="false">
+            </div>
+          </div>
+          <div id="dlist" class="dlist-body"></div>
+          <p id="dlist-empty" class="empty dlist-empty" hidden>Nothing matches your search.</p>
+        </nav>
+
+        <div id="centre" class="centre">
+          <div id="scopebar" class="scopebar">
+            <div class="scopebar-inner">
+              <div class="seg seg-scope" role="radiogroup" aria-label="Design mode">
+                <label class="seg-opt"><input class="vh" type="radio" name="mode" value="section" checked><span>Whole section</span></label>
+                <label class="seg-opt"><input class="vh" type="radio" name="mode" value="poster"><span>Each poster</span></label>
+              </div>
+              <div id="mode-banner" class="mode-banner">
+                <p id="scope-line" class="scope-line" role="status" aria-live="polite"></p>
+                <button id="scope-reset" class="btn btn-small btn-danger-text" type="button" hidden>Reset this section</button>
+              </div>
+              <p id="stream-sec-note" class="scope-sub" hidden>Streaming posters keep their own artwork and layout, so only the text and logo settings change them.</p>
+              <p id="deeper-note" class="scope-sub scope-sub-info" hidden></p>
+            </div>
+          </div>
+          <div class="editor">
+            <div class="editor-head">
+              <div class="editor-title">
+                <h1 id="ed-name"></h1>
+                <div class="ed-meta">
+                  <span id="ed-kind" class="tag"></span>
+                  <span id="ed-section"></span>
+                  <span id="ed-off" class="tag tag-muted" hidden>Off</span>
+                </div>
+              </div>
+              <label id="ed-picked-field" class="switch-field">
+                <span>Collection on</span>
+                <input id="ed-picked" class="switch" type="checkbox" role="switch">
+              </label>
+            </div>
+
+            <div class="stage-wrap">
+              <div id="stage" class="stage">
+                <img id="poster" class="poster" alt="" draggable="false">
+                <div id="stage-empty" class="stage-empty">Rendering preview</div>
+                <div id="overlay" class="overlay">
+                  <div id="guide-centre" class="guide guide-centre" aria-hidden="true"></div>
+                  <div id="guide-left" class="guide guide-left" aria-hidden="true"></div>
+                  <div id="box-label" class="box" tabindex="0" role="button" aria-roledescription="movable text box" aria-label="Label. Drag to move it, or drag its round handle to resize it. Arrow keys move it (hold Shift for bigger steps); plus and minus change its size." hidden><span class="box-tag" aria-hidden="true">Label</span><span class="box-handle" aria-hidden="true" title="Drag to resize the label"></span><span class="box-size" aria-hidden="true" hidden></span></div>
+                  <div id="box-title" class="box" tabindex="0" role="button" aria-roledescription="movable text box" aria-label="Title. Drag to move it, or drag its round handle to resize it. Arrow keys move it (hold Shift for bigger steps); plus and minus change its size." hidden><span class="box-tag" aria-hidden="true">Title</span><span class="box-handle" aria-hidden="true" title="Drag to resize the title and subtitle"></span><span class="box-size" aria-hidden="true" hidden></span></div>
+                </div>
+                <div id="candidate-tag" class="candidate-tag" hidden></div>
+                <span class="stage-spinner spinner" aria-hidden="true"></span>
+              </div>
+            </div>
+
+            <section id="strip" class="strip" aria-labelledby="strip-heading" hidden>
+              <div class="strip-head">
+                <h2 id="strip-heading" class="strip-title"></h2>
+                <span class="hint">Click a poster to show it above.</span>
+              </div>
+              <div id="strip-row" class="strip-row"></div>
+            </section>
+
+            <p id="stream-note" class="note" hidden>The artwork is the service's own. Choose its logo below.</p>
+
+            <section id="logo-panel" class="card logocard" aria-labelledby="logo-heading" hidden>
+              <div class="artwork-head">
+                <h2 id="logo-heading">Logo</h2>
+              </div>
+              <div id="logo-body" class="logo-body"></div>
+            </section>
+
+            <div id="pos-actions" class="pos-actions">
+              <button id="reset-label" class="btn btn-small" type="button">Reset label position</button>
+              <button id="reset-title" class="btn btn-small" type="button">Reset title position</button>
+              <p class="hint">Drag a box to move its text and its round handle to resize it. With a box focused, the arrow keys move it and + or - resize it. Boxes snap to the centre and the left margin.</p>
+            </div>
+
+            <section id="text-panel" class="card textcard" aria-labelledby="text-heading">
+              <div class="artwork-head">
+                <h2 id="text-heading">Text</h2>
+                <span class="art-status">Saves straight away on the server, not with Save.</span>
+              </div>
+              <div class="text-grid">
+                <div class="nc-field">
+                  <label class="field-label" for="tx-label">Label</label>
+                  <input id="tx-label" class="field" type="text" maxlength="30" autocomplete="off">
+                </div>
+                <div class="nc-field">
+                  <label class="field-label" for="tx-subtitle" id="tx-subtitle-label">Subtitle</label>
+                  <input id="tx-subtitle" class="field" type="text" maxlength="40" autocomplete="off" aria-describedby="tx-subtitle-hint">
+                  <p id="tx-subtitle-hint" class="ctl-hint">Can be empty.</p>
+                </div>
+                <div class="nc-field nc-wide">
+                  <label class="field-label" for="tx-title" id="tx-title-label">Title</label>
+                  <textarea id="tx-title" class="field tx-title" rows="2" maxlength="61" aria-describedby="tx-title-hint"></textarea>
+                  <p id="tx-title-hint" class="ctl-hint">Up to 60 characters. Press Return once for a second line.</p>
+                </div>
+              </div>
+              <p id="tx-error" class="signin-error" role="alert" hidden></p>
+              <div class="artwork-actions">
+                <button id="tx-save" class="btn btn-primary btn-small" type="button" disabled>Save text</button>
+                <button id="tx-revert" class="btn btn-small" type="button" hidden>Undo my typing</button>
+                <button id="tx-reset" class="btn btn-small" type="button" hidden>Use the usual words</button>
+              </div>
+            </section>
+
+            <section id="artwork-panel" class="card artwork" aria-labelledby="artwork-heading">
+              <div class="artwork-head">
+                <h2 id="artwork-heading">Artwork</h2>
+                <span id="art-status" class="art-status"></span>
+              </div>
+              <div class="artwork-actions">
+                <button id="art-shuffle" class="btn" type="button">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h3c4 0 6 10 10 10h3M4 17h3c1.6 0 2.8-1.6 3.9-3.6M13.1 9.6C14.2 8.1 15.4 7 17 7h3M17 4l3 3-3 3M17 14l3 3-3 3" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  <span>Shuffle</span>
+                </button>
+                <button id="art-choose" class="btn" type="button" aria-expanded="false" aria-controls="chooser">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="7.5" height="7.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="13.5" y="3" width="7.5" height="7.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="3" y="13.5" width="7.5" height="7.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/><rect x="13.5" y="13.5" width="7.5" height="7.5" rx="1.5" fill="none" stroke="currentColor" stroke-width="1.8"/></svg>
+                  <span>Choose</span>
+                </button>
+                <button id="art-auto" class="btn" type="button">
+                  <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l1.8 4.7L18.5 9.5l-4.7 1.8L12 16l-1.8-4.7L5.5 9.5l4.7-1.8z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/><path d="M18.5 15.5l.8 2 2 .8-2 .8-.8 2-.8-2-2-.8 2-.8z" fill="currentColor"/></svg>
+                  <span>Automatic</span>
+                </button>
+              </div>
+              <p class="hint">Artwork changes save straight away on the server. They are not part of Save.</p>
+              <div id="chooser" class="chooser" hidden>
+                <div class="chooser-head">
+                  <span id="chooser-msg">Hover over a title to preview it, click to use it.</span>
+                  <button id="chooser-close" class="btn btn-icon btn-small" type="button" aria-label="Close the artwork chooser">
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                  </button>
+                </div>
+                <div id="chooser-grid" class="chooser-grid"></div>
+              </div>
+            </section>
+          </div>
+        </div>
+
+        <aside class="controls" aria-labelledby="controls-heading">
+          <div class="controls-head">
+            <h2 id="controls-heading">Style</h2>
+            <span id="controls-scope" class="controls-scope"></span>
+          </div>
+          <div id="controls-body" class="controls-body"></div>
+        </aside>
+      </section>
+
+      <!-- Preview all: every collection that is on, rendered lazily -->
+      <section id="panel-grid" class="panel-grid" role="tabpanel" aria-labelledby="tab-grid" hidden>
+        <div class="grid-wrap">
+          <div class="grid-head">
+            <div>
+              <h1>Preview all</h1>
+              <p class="hint">Every collection that is on, in the current style with unsaved changes. Click a poster to design it.</p>
+            </div>
+            <span id="grid-status" class="grid-status" role="status" aria-live="polite"></span>
+          </div>
+          <div id="grid" class="grid"></div>
+          <p id="grid-empty" class="empty" hidden>No collections are on yet. Turn some on in the Collections tab.</p>
+        </div>
+      </section>
+    </main>
+
+    <section id="runlog" class="runlog" aria-labelledby="runlog-heading" hidden>
+      <div class="runlog-head">
+        <h2 id="runlog-heading">Run log</h2>
+        <span id="run-status" class="run-status" role="status" aria-live="polite"></span>
+        <button id="runlog-close" class="btn btn-icon btn-small" type="button" aria-label="Hide the run log">
+          <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 9l6 6 6-6" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </button>
+      </div>
+      <pre id="runlog-text" class="runlog-text" tabindex="0" aria-label="Run output"></pre>
+    </section>
+  </div>
+
+  <div id="sr-live" class="vh" aria-live="polite"></div>
+  <div id="toasts" class="toasts" role="status" aria-live="polite"></div>
+
+  <dialog id="confirm" class="dialog" aria-labelledby="confirm-title" aria-describedby="confirm-text">
+    <form method="dialog">
+      <h2 id="confirm-title"></h2>
+      <p id="confirm-text"></p>
+      <div class="dialog-actions">
+        <button id="confirm-cancel" class="btn" value="cancel">Cancel</button>
+        <button id="confirm-ok" class="btn btn-primary" value="ok">OK</button>
+      </div>
+    </form>
+  </dialog>
+</body>
+</html>

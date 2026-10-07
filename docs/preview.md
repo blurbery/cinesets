@@ -9,6 +9,17 @@ What CineSets makes, section by section, and how the poster settings change the 
 > Streaming posters show the service's name here; on your server they show its logo once you've run
 > `./run.sh logos`.
 
+## Try it in the dashboard
+
+Everything on this page can be tried live, on your own posters, in the dashboard: `./run.sh web` (or
+`./run.sh web --demo` with made-up artwork and no server). It shows each poster redrawn as you change it, lets you
+drag the text into place and choose each collection's artwork, then saves to `config.yml`.
+
+![The CineSets dashboard in demo mode](images/dashboard.jpg)
+
+[More screenshots](screenshots.md) show designing a whole section, the Collections, Lists and Preview all tabs,
+and signing in.
+
 ## Your Collections page
 
 ![An illustration of a Collections page made by CineSets](images/collections-page.jpg)
@@ -419,4 +430,5 @@ After changing the poster code or `collections.yml`:
 venv/bin/python docs/make_preview.py
 ```
 
-It draws every picture on this page and rewrites the section tables, without talking to any server.
+It draws every picture on this page and rewrites the section tables, without talking to any server. The
+dashboard pictures are screenshots of `./run.sh web --demo` at 1440x900.

@@ -27,6 +27,7 @@
 #   display_order    how titles are ordered inside the collection: SortName or PremiereDate
 #   overview         the collection's description
 #   create_name      a temporary name to create the collection under (needed when its name was used before)
+#   label            the small label at the top, instead of the one in config.yml (labels)
 #
 # A new group shows up in `list` and `pick` with its key as its name. To give it a proper one, add at the top level:
 #   sections:

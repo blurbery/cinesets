@@ -8,6 +8,7 @@
 
 Every poster is drawn by CineSets itself over made-up artwork from cinesets/scenes.py, so no film artwork or
 streaming logo is ever committed. Streaming posters show the service name, as they do before `cinesets logos`.
+The images/dashboard*.jpg pictures are screenshots of `cinesets web --demo` at 1440x900: this script doesn't make them.
 """
 import os
 import re

@@ -27,6 +27,10 @@ SAFE_ID = re.compile(r"^[A-Za-z0-9-]+$")
 RANDOM_FROM = 25  # random artwork comes from the top titles of a collection, so posters show ones people know
 
 INDEX_MAX_AGE = 20 * 3600
+
+
+class Busy(RuntimeError):
+    """Another CineSets run holds the lock (raised only when asked not to wait)."""
 PAGE = 5000
 
 
@@ -122,11 +126,7 @@ class Engine:
                 rows.sort(key=lambda x: x.get("rank") if x.get("rank") is not None else 10 ** 9)
             for row in rows:
                 wanted += 1
-                lookup = index[kind]
-                eid = None
-                if kind == "show" and row.get("tvdbid"):
-                    eid = lookup["tvdb"].get(str(row["tvdbid"]))
-                eid = eid or lookup["imdb"].get(str(row.get("imdb_id") or "")) or lookup["tmdb"].get(str(row.get("id") or ""))
+                eid = self.match_row(row, kind, index)
                 if eid and eid not in seen:
                     seen.add(eid)
                     ids.append(eid)
@@ -142,33 +142,49 @@ class Engine:
             ids = kept
         return ids[:limit], wanted, len(ids)
 
+    @staticmethod
+    def match_row(row, kind, index):
+        """The library item a list row is, by TVDB (shows), IMDb or TMDB id, or None."""
+        lookup = index[kind]
+        eid = lookup["tvdb"].get(str(row["tvdbid"])) if kind == "show" and row.get("tvdbid") else None
+        return eid or lookup["imdb"].get(str(row.get("imdb_id") or "")) or lookup["tmdb"].get(str(row.get("id") or ""))
+
     # ------------------------------------------------------------ posters
     def poster_for(self, coll, ids, index, state, used):
         """Build the poster once and keep it, so daily list churn does not re-upload artwork.
 
         With posters.artwork set to random, each install picks its own artwork from the top titles in the collection
         (ignoring backdrop_title, so no two servers look alike) and keeps it until --reshuffle. Streaming service
-        posters, and collections pinned to one item with backdrop_item, are left as they are."""
+        posters, and collections pinned to one item with backdrop_item, are left as they are. Artwork chosen in the
+        dashboard (state "artwork": "chosen") comes before all of that and stays until it is set back to automatic."""
         os.makedirs(self.posters, exist_ok=True)
         os.makedirs(self.backdrops, exist_ok=True)
         out = os.path.join(self.posters, coll["key"] + ".jpg")
         st = state.setdefault(coll["key"], {})
         logo = coll.get("logo")
-        random_art = self.style["artwork"] == "random" and not logo and not coll.get("backdrop_item")
+        style = posters.style_for(self.style, coll["key"], coll["group"])
+        chosen = st.get("backdrop_item") if st.get("artwork") == "chosen" and not logo else None
+        if chosen and not index["items"].get(chosen, {}).get("b"):
+            print(f"   {coll['key']}: the artwork chosen in the dashboard is no longer in your library, using the default")
+            st.pop("artwork", None)
+            chosen = None
+        random_art = self.style["artwork"] == "random" and not logo and not coll.get("backdrop_item") and not chosen
         parts = [coll["label"], coll["title"], coll.get("subtitle"), coll["accent"], coll.get("backdrop_item"), coll.get("backdrop_title")]
         if logo:
             parts.append("logo:" + logo)
         # only settings changed from the defaults go in, so posters made before these settings existed are kept
-        changed = posters.style_changes(self.style, logo=bool(logo))
+        changed = posters.style_changes(style, logo=bool(logo))
         if changed:
             parts.append("style:" + json.dumps(changed, sort_keys=True))
         if random_art:
             parts.append("artwork:random")
+        if chosen:
+            parts.append("artwork:chosen:" + chosen)
         design = json.dumps(parts)
         if os.path.exists(out) and st.get("design") == design and not (random_art and self.reshuffle):
             used.add(st.get("backdrop_item"))
             return out
-        pick = coll.get("backdrop_item")
+        pick = chosen or coll.get("backdrop_item")
         if not pick and coll.get("backdrop_title") and not random_art:
             pick = next((i for i in ids if index["items"][i]["n"] == coll["backdrop_title"] and index["items"][i]["b"]), None)
             if not pick:
@@ -185,18 +201,23 @@ class Engine:
             bd = self.backdrop(pick)
         if logo:
             posters.make_logo_poster(out, coll["label"], logo, self.logos, coll.get("subtitle") or "Popular", bd, coll["title"],
-                                     self.style)
+                                     style)
         else:
-            posters.make_poster(out, coll["label"], coll["title"], coll.get("subtitle"), coll["accent"], bd, self.style)
+            posters.make_poster(out, coll["label"], coll["title"], coll.get("subtitle"), coll["accent"], bd, style)
         if bd or not pick:
             st["design"], st["backdrop_item"] = design, pick
             if random_art:
                 st["artwork"] = "random"
-            else:
+            elif not chosen:
                 st.pop("artwork", None)
         else:
             st.pop("design", None)  # the artwork could not be fetched: build the poster again next run
         return out
+
+    @staticmethod
+    def candidates(ids, index):
+        """The titles random artwork is picked from: the top ones in the collection that have artwork."""
+        return [i for i in ids if index["items"].get(i, {}).get("b")][:RANDOM_FROM]
 
     def random_pick(self, candidates, st, used):
         """A random title from the top of the collection. A random pick from an earlier run is kept while it is still
@@ -393,8 +414,9 @@ class Engine:
         return [i for i in ids if i in alive]
 
     @contextlib.contextmanager
-    def lock(self):
-        """One run at a time per data folder (cron, Docker scheduler and manual runs)."""
+    def lock(self, wait=True):
+        """One run at a time per data folder (cron, Docker scheduler, manual runs and the dashboard). With wait=False,
+        raise Busy instead of waiting for another run to finish."""
         os.makedirs(self.data, exist_ok=True)
         try:
             import fcntl
@@ -405,6 +427,8 @@ class Engine:
             try:
                 fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
             except BlockingIOError:
+                if not wait:
+                    raise Busy("A CineSets run is in progress. Try again when it has finished.")
                 print("Another CineSets run is in progress; waiting for it to finish...")
                 fcntl.flock(f, fcntl.LOCK_EX)
             except OSError as e:  # for example a network filesystem without lock support
@@ -480,6 +504,8 @@ class Engine:
             top = ", ".join(index["items"][i]["n"] for i in ids[:4])
             print(f"{coll['key']:<28} list {wanted:>4}  in library {matched:>4}  using {len(ids):>4}  | {top}")
             need = coll.get("min", min_items)
+            if not coll.get("titles"):
+                need = min(need, coll["limit"])  # a collection capped at 5 titles is not skipped for having fewer than 8
             if len(ids) < need:
                 print(f"   skipped {coll['key']}: fewer than {need} matches")
                 continue

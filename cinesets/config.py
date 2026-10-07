@@ -3,7 +3,13 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Additional terms under AGPL-3.0 section 7 apply: see NOTICE.
 """Settings: config.yml plus environment overrides (CINESETS_URL, CINESETS_API_KEY, CINESETS_SERVER)."""
+import contextlib
+import errno
+import hashlib
+import json
 import os
+import re
+import tempfile
 
 import yaml
 
@@ -13,6 +19,8 @@ DEFAULTS = {
     "server": {"type": "emby", "url": "http://127.0.0.1:8096", "api_key": ""},
     "libraries": [],
     "collections_file": "collections.yml",
+    # collections added in the dashboard, and lists added to existing ones; read as well as collections_file
+    "custom_collections": "custom-collections.yml",
     "data_dir": "data",
     "labels": {"movie": "Movies", "show": "TV Shows"},
     "defaults": {"limit": 150, "min_items": 8},
@@ -25,6 +33,11 @@ DEFAULTS = {
     "posters": {},
     # which collections to make: whole sections (the `group` in collections.yml), then single collections by key
     "collections": {"sections": "all", "include": [], "exclude": []},
+    # how many titles collections hold: `most` caps every list-based collection; a section's or a collection's own
+    # number replaces its built-in size (up or down). Franchises always keep every title in their list.
+    "limits": {"most": None, "sections": {}, "collections": {}},
+    # the dashboard (cinesets web): see web.py and docs/dashboard.md
+    "web": {"host": "127.0.0.1", "port": 8095, "sign_in": True, "public": False},
 }
 
 
@@ -68,7 +81,51 @@ def load(path=None):
         raise SystemExit("config.yml: posters must be a list of settings (see config.example.yml)")
     cfg["posters"] = posters.check_style(cfg["posters"])
     cfg["collections"] = check_pick(cfg["collections"])
+    cfg["web"] = check_web(cfg["web"])
+    cfg["limits"] = check_limits(cfg["limits"])
     return cfg
+
+
+LIMIT_MOST = 1000
+
+
+def check_limits(raw):
+    """`limits` in config.yml: {most: n or null, sections: {group: n}, collections: {key: n}}."""
+    if raw is None:
+        raw = {}
+    if not isinstance(raw, dict):
+        raise SystemExit("config.yml: limits must have most, sections and collections (see config.example.yml)")
+    count = lambda v: isinstance(v, int) and not isinstance(v, bool) and 1 <= v <= LIMIT_MOST
+    most = raw.get("most")
+    if most is not None and not count(most):
+        raise SystemExit(f"config.yml limits: most must be a number from 1 to {LIMIT_MOST}, or null, not {most!r}")
+    out = {"most": most}
+    for field in ("sections", "collections"):
+        entries = raw.get(field) or {}
+        if not isinstance(entries, dict) or not all(count(v) for v in entries.values()):
+            raise SystemExit(f"config.yml limits: {field} must list keys with a number from 1 to {LIMIT_MOST} each")
+        out[field] = {str(k): v for k, v in entries.items()}
+    return out
+
+
+def limits_block(limits):
+    """The `limits` block for config.yml."""
+    return yaml.safe_dump({"limits": limits}, sort_keys=False, default_flow_style=None, width=110)
+
+
+def check_web(raw):
+    """`web` in config.yml: where the dashboard listens and how people sign in."""
+    if not isinstance(raw, dict):
+        raise SystemExit("config.yml: web must have host, port, sign_in and public (see config.example.yml)")
+    web = {**DEFAULTS["web"], **raw}
+    if not isinstance(web["host"], str) or not web["host"]:
+        raise SystemExit(f"config.yml web: host must be an address like 127.0.0.1, not {web['host']!r}")
+    if not isinstance(web["port"], int) or isinstance(web["port"], bool) or not 1 <= web["port"] <= 65535:
+        raise SystemExit(f"config.yml web: port must be a number from 1 to 65535, not {web['port']!r}")
+    for key in ("sign_in", "public"):
+        if not isinstance(web[key], bool):
+            raise SystemExit(f"config.yml web: {key} must be true or false, not {web[key]!r}")
+    return web
 
 
 def _names(value, what):
@@ -106,3 +163,87 @@ def check_type(kind):
 
 def config_path(path=None):
     return path or os.environ.get("CINESETS_CONFIG") or os.path.join(ROOT, "config.yml")
+
+
+class Changed(RuntimeError):
+    """config.yml changed since it was read (another dashboard tab, another person or a hand edit)."""
+
+
+def file_version(path):
+    """A short fingerprint of config.yml as it is now, to notice changes made elsewhere."""
+    with open(path, "rb") as f:
+        return hashlib.sha1(f.read()).hexdigest()[:16]
+
+
+def _replace(path, text):
+    """Write the whole file atomically, readable by its owner only. A config.yml mounted on its own into a container
+    can't be replaced, so that one is rewritten in place."""
+    fd, tmp = tempfile.mkstemp(dir=os.path.dirname(os.path.abspath(path)), prefix=".tmp-", suffix=".yml")
+    try:
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
+            f.write(text)
+        try:
+            os.replace(tmp, path)
+        except OSError as e:
+            if e.errno not in (errno.EBUSY, errno.EXDEV, errno.EPERM):
+                raise
+            with open(path, "r+", encoding="utf-8", newline="") as f:
+                f.write(text)
+                f.truncate()
+            os.chmod(path, 0o600)
+    finally:
+        with contextlib.suppress(FileNotFoundError):
+            os.remove(tmp)
+
+
+def write_blocks(path, blocks, version=None, backup=False):
+    """Put top-level blocks ({"posters": text, ...}, each `key:` and its indented lines) into config.yml in place of
+    the old ones, keeping every other line and comment, or add them at the end. With `version`, stop with Changed if
+    the file is no longer the one that was read; with `backup`, keep the old file as config.yml.bak. Returns the new
+    version. The file holds the API key, so it stays readable by its owner only."""
+    with open(path, "rb") as f:
+        raw = f.read()
+    old = text = raw.decode("utf-8")
+    if version is not None and hashlib.sha1(raw).hexdigest()[:16] != version:
+        raise Changed(f"{os.path.basename(path)} has changed since it was loaded (in another tab, by someone else or "
+                      "by hand). Reload to see the changes, then make yours again.")
+    for key, block in blocks.items():
+        m = re.search(rf"^{re.escape(key)}:.*?(?=^\S|\Z)", text, flags=re.M | re.S)
+        if m:
+            gap = m.group(0)[len(m.group(0).rstrip("\n")) + 1:]  # keep the blank lines that followed the old block
+            text = text[:m.start()] + block + gap + text[m.end():]
+        else:
+            text = text.rstrip("\n") + "\n\n" + block
+    if backup:
+        _replace(path + ".bak", old)
+    _replace(path, text)
+    return hashlib.sha1(text.encode()).hexdigest()[:16]
+
+
+def write_block(path, key, block):
+    """write_blocks for one block."""
+    return write_blocks(path, {key: block})
+
+
+def collections_block(pick):
+    """The `collections` block for config.yml from checked settings (check_pick): sections in one line, the keys
+    one per line."""
+    plain = lambda g: re.fullmatch(r"[a-z][a-z0-9_-]*", g) and g not in ("yes", "no", "on", "off", "true", "false", "null")
+    name = lambda g: g if plain(g) else json.dumps(g)  # quoted when YAML would read it as something else
+    sections = pick["sections"]
+    lines = ["collections:", "  sections: " + ("all" if sections == "all" else "[" + ", ".join(map(name, sections)) + "]")]
+    for field in ("include", "exclude"):
+        items = pick[field]
+        lines.append(f"  {field}:" + ("".join(f"\n    - {name(k)}" for k in items) if items else " []"))
+    return "\n".join(lines) + "\n"
+
+
+def posters_block(style):
+    """The `posters` block for config.yml: every main setting, plus positions, size and overrides once they are set."""
+    from . import posters
+    out = {k: v for k, v in style.items() if k in posters.STYLE and (k not in posters.LAYOUT or v != posters.STYLE[k])}
+    for layer in posters.LAYERS:
+        if style.get(layer):
+            out[layer] = style[layer]
+    return yaml.safe_dump({"posters": out}, sort_keys=False, default_flow_style=None, allow_unicode=True, width=110)

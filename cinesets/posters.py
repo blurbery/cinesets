@@ -46,6 +46,17 @@ STYLE = {
     "label": True,               # the small label at the top (Movies, TV Shows)
     "label_colour": "gold",      # gold, white, accent or #hex
     "subtitle_colour": "white",  # white, gold, accent or #hex
+    # set by dragging in the dashboard: [x, y] as fractions of the poster. The label's y is its top edge and the
+    # title's y the bottom of the title and subtitle, so extra lines grow upwards; x is the left edge, or the centre
+    # when align is centre. None keeps the usual place.
+    "label_position": None,
+    "title_position": None,
+    "title_size": 1.0,           # 0.5 to 2 times the usual size (long titles still shrink to fit the width)
+    "label_size": 1.0,           # 0.5 to 2 times the usual size
+    "text_shadow": "auto",       # a soft shadow behind the text: auto (only text moved from its usual place), on, off
+    # streaming posters only: which logo (standard, alt or icon, where the service has one) and in what colours
+    "logo": "standard",
+    "logo_colour": "original",
 }
 CHOICES = {
     "artwork": ("fixed", "random"),
@@ -54,9 +65,16 @@ CHOICES = {
     "title": ("gradient", "solid", "white"),
     "align": ("left", "centre"),
     "case": ("normal", "upper"),
+    "text_shadow": ("auto", "on", "off"),
+    "logo": ("standard", "alt", "icon"),
+    "logo_colour": ("original", "white"),
 }
 TEXT_COLOURS = {"gold": LABEL_COLOUR, "white": (255, 255, 255)}
 TEXT_SETTINGS = ("align", "case", "label", "label_colour", "subtitle_colour")
+LOGO_SETTINGS = ("logo", "logo_colour")
+POSITIONS = ("label_position", "title_position")
+SIZES = {"title_size": (0.5, 2.0), "label_size": (0.5, 2.0)}
+LAYOUT = POSITIONS + tuple(SIZES)  # where text sits and how big: streaming posters keep their own
 # shade: (artwork brightness, top darkening, bottom darkening, glow when there is no artwork)
 SHADES = {"light": (0.92, 0.62, 0.86, 0.9), "medium": (0.78, 0.78, 0.95, 0.8), "dark": (0.62, 0.86, 1.0, 0.6)}
 TINTS = {"strong": 0.56, "normal": 0.38, "subtle": 0.2, "none": 0.0}
@@ -89,36 +107,89 @@ def check_accent(accent, where):
                          f"like [\"#ff3366\", \"#ffaa00\"], not {accent!r}")
 
 
-def check_style(raw):
-    """The `posters` settings from config.yml with defaults filled in. Bad values stop with a clear message."""
-    raw = dict(raw or {})
+def _spellings(raw):
+    raw = dict(raw)
     for us, au in (("label_color", "label_colour"), ("subtitle_color", "subtitle_colour")):
         if us in raw:
             raw.setdefault(au, raw.pop(us))
     if raw.get("align") == "center":
         raw["align"] = "centre"
+    return raw
+
+
+def _settings(raw, where):
+    """One full set of settings with defaults filled in. Bad values stop with a clear message."""
     unknown = sorted(set(raw) - set(STYLE))
     if unknown:
-        print(f"Note: config.yml posters: ignoring unknown settings {', '.join(unknown)}", file=sys.stderr)
+        print(f"Note: {where}: ignoring unknown settings {', '.join(map(str, unknown))}", file=sys.stderr)
     style = {k: raw.get(k, v) for k, v in STYLE.items()}
+    if isinstance(style["text_shadow"], bool):  # YAML reads a bare on or off as true or false
+        style["text_shadow"] = "on" if style["text_shadow"] else "off"
     for key, allowed in CHOICES.items():
         style[key] = str(style[key]).lower()
         if style[key] not in allowed:
-            raise SystemExit(f"config.yml posters: {key} must be one of {', '.join(allowed)}, not {raw.get(key)!r}")
+            raise SystemExit(f"{where}: {key} must be one of {', '.join(allowed)}, not {raw.get(key)!r}")
     if style["accent"] != "auto":
-        check_accent(style["accent"], "config.yml posters")
+        check_accent(style["accent"], where)
     if not isinstance(style["label"], bool):
-        raise SystemExit(f"config.yml posters: label must be true or false, not {style['label']!r}")
+        raise SystemExit(f"{where}: label must be true or false, not {style['label']!r}")
     for key in ("label_colour", "subtitle_colour"):
         if not (style[key] in ("gold", "white", "accent") or (isinstance(style[key], str) and HEX.match(style[key]))):
-            raise SystemExit(f"config.yml posters: {key} must be gold, white, accent or a colour like \"#ffffff\", "
+            raise SystemExit(f"{where}: {key} must be gold, white, accent or a colour like \"#ffffff\", "
                              f"not {style[key]!r}")
+    number = lambda v: isinstance(v, (int, float)) and not isinstance(v, bool)
+    for key in POSITIONS:
+        value = style[key]
+        if value is not None:
+            if not (isinstance(value, (list, tuple)) and len(value) == 2 and all(number(v) and 0 <= v <= 1 for v in value)):
+                raise SystemExit(f"{where}: {key} must be two numbers from 0 to 1, like [0.08, 0.93], not {value!r}")
+            style[key] = [round(float(v), 4) for v in value]
+    for key, (low, high) in SIZES.items():
+        if not (number(style[key]) and low <= style[key] <= high):
+            raise SystemExit(f"{where}: {key} must be a number from {low} to {high}, not {style[key]!r}")
+        style[key] = round(float(style[key]), 2)
     return style
+
+
+LAYERS = ("sections", "overrides")  # settings for whole sections (by group), then single collections (by key)
+
+
+def check_style(raw):
+    """The `posters` settings from config.yml with defaults filled in, plus `sections` (settings for every collection
+    in a section, by its group) and `overrides` (settings for single collections, by key). Either can hold anything
+    but artwork. Bad values stop with a clear message."""
+    raw = _spellings(raw or {})
+    layers = {layer: raw.pop(layer, None) or {} for layer in LAYERS}
+    style = _settings(raw, "config.yml posters")
+    base = dict(style)
+    for layer, entries in layers.items():
+        if not isinstance(entries, dict):
+            raise SystemExit(f"config.yml posters: {layer} must list keys, each with its own settings")
+        style[layer] = {}
+        for key, own in entries.items():
+            where = f"config.yml posters {layer} {key}"
+            if not isinstance(own, dict):
+                raise SystemExit(f"{where}: must be a list of settings, like {{accent: red}}")
+            own = _spellings(own)
+            if "artwork" in own:
+                raise SystemExit(f"{where}: artwork can only be set for every poster")
+            merged = _settings({**base, **own}, where)
+            style[layer][str(key)] = {k: merged[k] for k in STYLE if k in own}
+    return style
+
+
+def style_for(style, key, group=None):
+    """One collection's settings: those for every poster, then its section's, then its own."""
+    style = style or STYLE
+    out = {k: v for k, v in style.items() if k not in LAYERS}
+    out.update((style.get("sections") or {}).get(group, {}))
+    out.update((style.get("overrides") or {}).get(key, {}))
+    return out
 
 
 def style_changes(style, logo=False):
     """The settings that differ from the defaults and change this kind of poster, for its design record."""
-    keys = TEXT_SETTINGS if logo else [k for k in STYLE if k != "artwork"]
+    keys = TEXT_SETTINGS + LOGO_SETTINGS if logo else [k for k in STYLE if k != "artwork" and k not in LOGO_SETTINGS]
     return {k: style[k] for k in keys if style and style[k] != STYLE[k]}
 
 
@@ -207,47 +278,115 @@ def _fit(weight, lines, start, max_w):
 
 
 def _x(style, font, text):
-    """Left edge of a line: the margin, or centred when align is centre."""
+    """Left edge of a line in the usual place: the margin, or centred when align is centre."""
     return (W - font.getbbox(text)[2]) // 2 if style["align"] == "centre" else PAD
 
 
+def _moved_x(style, width, block_w, anchor):
+    """Left edge of a line in a block moved to `anchor` (a fraction across), kept inside the poster."""
+    if style["align"] == "centre":
+        centre = min(max(anchor * W, block_w / 2), W - block_w / 2)
+        return round(centre - width / 2)
+    return round(min(max(anchor * W, 0), W - block_w))
+
+
+def _label_place(style, label):
+    """Where the label goes: (text, font, x, y), or None when it is switched off."""
+    if not style["label"]:
+        return None
+    size = style.get("label_size", 1.0)
+    f = _font("SemiBold", 66 if size == 1 else round(66 * size))
+    label = label.upper() if style["case"] == "upper" else label
+    box = f.getbbox(label)
+    moved = style.get("label_position")
+    if moved:
+        return label, f, _moved_x(style, box[2], box[2], moved[0]), round(min(max(moved[1] * H, 0), H - box[3]))
+    return label, f, _x(style, f, label), PAD
+
+
 def _label(draw, style, label, accent):
-    if style["label"]:
-        f = _font("SemiBold", 66)
-        label = label.upper() if style["case"] == "upper" else label
-        draw.text((_x(style, f, label), PAD), label, font=f, fill=_text_colour(style["label_colour"], accent))
+    """Draw the label; its box (left, top, right, bottom) in pixels, or None when it is switched off."""
+    place = _label_place(style, label)
+    if not place:
+        return None
+    text, f, x, y = place
+    draw.text((x, y), text, font=f, fill=_text_colour(style["label_colour"], accent))
+    box = f.getbbox(text)
+    return (x, y, x + box[2], y + box[3])
 
 
-def make_poster(out_path, label, title, subtitle=None, accent="purple", backdrop=None, style=None):
-    """label: 'Movies' / 'TV Shows'. title: coloured big text (may contain a newline). subtitle: white line(s).
-    style: the `posters` settings (check_style), or None for the defaults."""
+def _shadow(img, parts):
+    """A soft dark shadow under text: parts are (text, font, x, y). Lets text moved over bright artwork read."""
+    mask = Image.new("L", img.size, 0)
+    draw = ImageDraw.Draw(mask)
+    for text, f, x, y in parts:
+        draw.text((x, y + max(3, f.size // 30)), text, font=f, fill=255)
+    radius = max(6, max(f.size for _, f, _, _ in parts) // 12)
+    mask = mask.filter(ImageFilter.MaxFilter(5)).filter(ImageFilter.GaussianBlur(radius)).point(lambda v: int(v * 0.8))
+    img.paste((0, 0, 0), (0, 0), mask)
+
+
+def _fraction(box):
+    return [round(box[0] / W, 4), round(box[1] / H, 4), round(box[2] / W, 4), round(box[3] / H, 4)] if box else None
+
+
+def poster_image(label, title, subtitle=None, accent="purple", backdrop=None, style=None):
+    """The poster as an image, plus where its text sits: {"label": box or None, "title": box}, each box
+    [left, top, right, bottom] as fractions of the poster (the dashboard draws its drag handles from these)."""
     style = style or STYLE
     c1, c2, tint = accent_colours(accent if style["accent"] == "auto" else style["accent"])
-    img = _background(backdrop, tint, style["shade"], style["tint"])
-    draw = ImageDraw.Draw(img)
-    _label(draw, style, label, c1)
-
     if style["case"] == "upper":
         title, subtitle = title.upper(), subtitle.upper() if subtitle else subtitle
     title_lines = title.split("\n")
     sub_lines = subtitle.split("\n") if subtitle else []
     max_w = W - 2 * PAD
-    tf = _fit("SemiBold", title_lines, 150, max_w)
-    sf = _fit("Regular", sub_lines, min(tf.size, 132), max_w) if sub_lines else None
+    size = style.get("title_size", 1.0)
+    tf = _fit("SemiBold", title_lines, 150 if size == 1 else round(150 * size), max_w)
+    sf = _fit("Regular", sub_lines, min(tf.size, 132 if size == 1 else round(132 * size)), max_w) if sub_lines else None
     line_h = lambda f: int(f.size * 1.12)
     total = len(title_lines) * line_h(tf) + (len(sub_lines) * line_h(sf) if sf else 0)
-    y = H - PAD - 30 - total
+    lines = [(t, tf) for t in title_lines] + [(t, sf) for t in sub_lines]
+    block_w = max(f.getbbox(t)[2] for t, f in lines)
+    moved = style.get("title_position")
+    if moved:
+        y = round(min(max(moved[1] * H - total, 0), H - total))
+        place = lambda f, t: _moved_x(style, f.getbbox(t)[2], block_w, moved[0])
+    else:
+        y = H - PAD - 30 - total
+        place = lambda f, t: _x(style, f, t)
+    title_box = (min(place(f, t) for t, f in lines), y, max(place(f, t) + f.getbbox(t)[2] for t, f in lines), y + total)
+
+    img = _background(backdrop, tint, style["shade"], style["tint"])
+    shadow = style.get("text_shadow", "auto")
+    parts = []
+    if shadow == "on" or (shadow == "auto" and style.get("label_position")):
+        parts += [_label_place(style, label)] if style["label"] else []
+    if shadow == "on" or (shadow == "auto" and moved):
+        at = y
+        for t, f in lines:
+            parts.append((t, f, place(f, t), at))
+            at += line_h(f)
+    if parts:
+        _shadow(img, parts)
+    draw = ImageDraw.Draw(img)
+    label_box = _label(draw, style, label, c1)
     for t in title_lines:
         if style["title"] == "gradient":
-            _gradient_text(img, (_x(style, tf, t), y), t, tf, c1, c2)
+            _gradient_text(img, (place(tf, t), y), t, tf, c1, c2)
         else:
-            draw.text((_x(style, tf, t), y), t, font=tf, fill=c1 if style["title"] == "solid" else (255, 255, 255))
+            draw.text((place(tf, t), y), t, font=tf, fill=c1 if style["title"] == "solid" else (255, 255, 255))
         y += line_h(tf)
     sub_colour = _text_colour(style["subtitle_colour"], c1)
     for t in sub_lines:
-        draw.text((_x(style, sf, t), y), t, font=sf, fill=sub_colour)
+        draw.text((place(sf, t), y), t, font=sf, fill=sub_colour)
         y += line_h(sf)
-    img.save(out_path, "JPEG", quality=88, optimize=True)
+    return img, {"label": _fraction(label_box), "title": _fraction(title_box)}
+
+
+def make_poster(out_path, label, title, subtitle=None, accent="purple", backdrop=None, style=None):
+    """label: 'Movies' / 'TV Shows'. title: coloured big text (may contain a newline). subtitle: white line(s).
+    style: one collection's `posters` settings (style_for), or None for the defaults."""
+    poster_image(label, title, subtitle, accent, backdrop, style)[0].save(out_path, "JPEG", quality=88, optimize=True)
     return out_path
 
 
@@ -268,8 +407,9 @@ SERVICES = {
 LIGHT_ON_DARK = {"disney": ((255, 255, 255), (150, 215, 255)), "paramount": ((255, 255, 255), (225, 235, 255))}
 
 
-def _logo_image(path, key):
-    """Load a service logo; grey or black parts become white so the logo reads on a dark poster."""
+def _logo_image(path, key, white=False):
+    """Load a service logo; grey or black parts become white so the logo reads on a dark poster. white=True makes
+    the whole logo white."""
     logo = Image.open(path).convert("RGBA")
     px = logo.load()
     for y in range(logo.height):
@@ -279,6 +419,10 @@ def _logo_image(path, key):
                 px[x, y] = (255, 255, 255, a)
     box = logo.getbbox()
     logo = logo.crop(box) if box else logo
+    if white:
+        plain = Image.new("RGBA", logo.size, (255, 255, 255, 0))
+        plain.putalpha(logo.split()[3])
+        return plain
     if key in LIGHT_ON_DARK:
         top, bottom = LIGHT_ON_DARK[key]
         fill = Image.new("RGB", (1, logo.height))
@@ -294,8 +438,15 @@ def _logo_image(path, key):
 def make_logo_poster(out_path, label, logo_key, logos_dir, subtitle="Popular", backdrop=None, fallback_title=None,
                      style=None):
     """Service poster. If the logo file has not been downloaded (`cinesets logos`), the service name is drawn instead.
-    Only the text settings in `style` apply here; the artwork and logo always look the same."""
-    style = style or STYLE
+    Only the text settings in `style` apply here; the artwork, logo and layout always look the same."""
+    img = logo_poster_image(label, logo_key, logos_dir, subtitle, backdrop, fallback_title, style)[0]
+    img.save(out_path, "JPEG", quality=88, optimize=True)
+    return out_path
+
+
+def logo_poster_image(label, logo_key, logos_dir, subtitle="Popular", backdrop=None, fallback_title=None, style=None):
+    """The service poster as an image, plus where its text sits (see poster_image). Text cannot be moved here."""
+    style = {k: v for k, v in (style or STYLE).items() if k not in LAYOUT}
     colour, tint = SERVICES.get(logo_key, ((255, 255, 255), (16, 14, 22)))
     if backdrop:
         img = _cover(Image.open(backdrop).convert("RGB"), W, H).filter(ImageFilter.GaussianBlur(18))
@@ -306,11 +457,15 @@ def make_logo_poster(out_path, label, logo_key, logos_dir, subtitle="Popular", b
     ImageDraw.Draw(glow).ellipse((W * 0.02, H * 0.2, W * 0.98, H * 0.64), fill=255)
     img.paste(tuple(int(c * 0.6) for c in colour), (0, 0), glow.filter(ImageFilter.GaussianBlur(170)).point(lambda v: int(v * 0.32)))
     draw = ImageDraw.Draw(img)
-    _label(draw, style, label, colour)
+    label_box = _label(draw, style, label, colour)
 
+    white = style.get("logo_colour") == "white"
     path = os.path.join(logos_dir, logo_key + ".png")
+    other = os.path.join(logos_dir, f"{logo_key}--{style.get('logo', 'standard')}.png")
+    if style.get("logo", "standard") != "standard" and os.path.exists(other):
+        path = other  # another version of the logo, when the service has one and it has been downloaded
     if os.path.exists(path):
-        logo = _logo_image(path, logo_key)
+        logo = _logo_image(path, logo_key, white)
         max_w, max_h = W - 2 * PAD - 20, 360
         r = min(max_w / logo.width, max_h / logo.height)
         logo = logo.resize((int(logo.width * r), int(logo.height * r)), Image.LANCZOS)
@@ -321,11 +476,11 @@ def make_logo_poster(out_path, label, logo_key, logos_dir, subtitle="Popular", b
     else:
         name = (fallback_title or logo_key).replace("\n", " ")
         f = _fit("SemiBold", [name], 170, W - 2 * PAD)
-        draw.text(((W - f.getbbox(name)[2]) // 2, int(H * 0.42) - f.size // 2), name, font=f, fill=colour)
+        draw.text(((W - f.getbbox(name)[2]) // 2, int(H * 0.42) - f.size // 2), name, font=f,
+                  fill=(255, 255, 255) if white else colour)
 
     f = _font("SemiBold", 150)
     subtitle = subtitle.upper() if style["case"] == "upper" else subtitle
-    draw.text((_x(style, f, subtitle), H - PAD - 30 - int(f.size * 1.12)), subtitle, font=f,
-              fill=_text_colour(style["subtitle_colour"], colour))
-    img.save(out_path, "JPEG", quality=88, optimize=True)
-    return out_path
+    x, y = _x(style, f, subtitle), H - PAD - 30 - int(f.size * 1.12)
+    draw.text((x, y), subtitle, font=f, fill=_text_colour(style["subtitle_colour"], colour))
+    return img, {"label": _fraction(label_box), "title": _fraction((x, y, x + f.getbbox(subtitle)[2], y + int(f.size * 1.12)))}

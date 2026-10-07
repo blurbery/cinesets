@@ -1,4 +1,6 @@
 config.yml
+config.yml.bak
+custom-collections.yml
 config/
 .env
 .env.*

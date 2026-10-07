@@ -22,7 +22,8 @@ It only ever touches collections it made itself. Your films, shows, libraries, u
 alone. It talks to your server, public [mdblist](https://mdblist.com) lists and Wikimedia Commons (for the
 streaming logos), and that's it. No account, no tracking.
 
-<p align="center"><b><a href="docs/preview.md">See every section and poster style in the preview</a></b></p>
+<p align="center"><b><a href="docs/preview.md">See every section and poster style in the preview</a> ·
+<a href="docs/screenshots.md">See the dashboard</a></b></p>
 
 > [!NOTE]
 > Emby is fully supported. Jellyfin works and is tested on every change, but it's beta until more people have
@@ -63,8 +64,9 @@ docker compose up -d
 ```
 
 Inside the container `127.0.0.1` is the container itself, so give it your server's LAN address. `up -d` runs
-the schedule from `config.yml`. Restart the container after you change `config.yml`. Any command below works
-as `docker compose run --rm cinesets <command>`.
+the schedule from `config.yml`. Changes to `config.yml` (from the dashboard or by hand) apply from the next job;
+restart the container only after changing the `schedule` itself. Any command below works as
+`docker compose run --rm cinesets <command>`.
 
 </details>
 
@@ -75,6 +77,7 @@ as `docker compose run --rm cinesets <command>`.
 | `./run.sh plan` | Dry run, shows what would change |
 | `./run.sh apply` | Creates and updates the collections |
 | `./run.sh posters` | Makes the posters only, with preview sheets in `data/samples` |
+| `./run.sh web` | Opens the dashboard: pick collections, style the posters and choose their artwork |
 | `./run.sh pick` | Asks which sections or collections you want and saves it in `config.yml` |
 | `./run.sh list` | Lists every section and collection with its key, and what's picked |
 | `./run.sh apply --reshuffle` | Picks new random artwork for the posters (with `artwork: random`) |
@@ -83,11 +86,27 @@ as `docker compose run --rm cinesets <command>`.
 
 Most of them take `--only key1,key2` or `--group streaming`. `./run.sh --help` shows the rest.
 
+## Dashboard
+
+`./run.sh web` starts a web page where you pick collections, change the poster colours, shading and text, drag and
+resize the title and label (for every poster, a whole section or one collection), shuffle or choose each
+collection's artwork, set how many titles each collection holds, add MDBList lists or make new collections from
+them, preview every poster, then save and apply. It prints a sign-in link; `./run.sh web --demo` tries it with
+made-up artwork and no server.
+
+[Screenshots](docs/screenshots.md) show each part of it. It listens on this machine only, needs you signed in,
+and never shows your API key to the browser. Sign-in can be
+turned off for use on this machine alone, or the dashboard can go on the internet behind its sign-in page and
+your HTTPS proxy. To use it from another computer, put Tailscale or a reverse proxy with HTTPS in front of it.
+[docs/dashboard.md](docs/dashboard.md) covers signing in, how your settings are kept, Tailscale, Caddy, nginx, and
+keeping it running on Docker or systemd.
+
 ## Picking collections
 
 The collections come in sections: trending and charts, genres, streaming, best of, kids and family, seasonal,
 regional, and franchises and studios. Make them all, pick whole sections or pick single collections.
-`./run.sh pick` asks you a section at a time and saves your answer, or edit `collections` in `config.yml`:
+Use the dashboard, or `./run.sh pick` asks you a section at a time and saves your answer, or edit `collections`
+in `config.yml`:
 
 ```yaml
 collections:
@@ -101,7 +120,8 @@ doesn't delete it from your server, it just stops updating; `./run.sh remove --u
 
 ## Poster style
 
-Colours, shading and text are settings under `posters` in `config.yml`. New installs also give every server its
+Colours, shading, text and where the text sits are settings under `posters` in `config.yml`, easiest changed in the
+dashboard. New installs also give every server its
 own random artwork from its library, so no two look the same (streaming posters keep their own look). The
 [preview](docs/preview.md#poster-style) has pictures of every setting.
 
