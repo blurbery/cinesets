@@ -33,6 +33,7 @@ import random
 import re
 import secrets
 import shutil
+import signal
 import socket
 import subprocess
 import sys
@@ -77,17 +78,26 @@ def _new_access():
 
 
 def read_access(path):
-    """The access key, cookie secret and password hash, made on first use. Made with an exclusive create, so two
-    processes starting together can't end up with different keys."""
+    """The access key, cookie secret and password hash, made on first use. The new file is written in full beside it
+    and then linked into place, which fails if it's already there, so two processes starting together end up with
+    the same key and neither reads it half written."""
     if not os.path.exists(path):
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+        folder = os.path.dirname(path)
+        os.makedirs(folder, exist_ok=True)
+        fd, part = tempfile.mkstemp(dir=folder, prefix=".web-", suffix=".json")  # only you can read it
         try:
-            fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
-        except FileExistsError:
-            pass
-        else:
             with os.fdopen(fd, "w") as f:
                 json.dump(_new_access(), f)
+            try:
+                os.link(part, path)
+            except FileExistsError:
+                pass  # another process made it first: use theirs
+            except OSError:  # a filesystem without hard links: an exclusive create instead
+                with contextlib.suppress(FileExistsError), open(path, "x") as f:
+                    os.chmod(path, 0o600)
+                    json.dump(_new_access(), f)
+        finally:
+            os.remove(part)
     access = load_json(path, None)
     if not isinstance(access, dict) or not access.get("key") or not access.get("secret"):
         raise SystemExit(f"{path} is damaged. Delete it and start the dashboard again to make a new access key.")
@@ -933,6 +943,10 @@ def serve(cfg_path=None, host=None, port=None, demo=False, sign_in=None, public=
               "the internet (see docs/dashboard.md).")
     print("Press Ctrl+C to stop it.")
     sys.stdout.flush()
+
+    def stop(signum, frame):
+        raise KeyboardInterrupt  # docker stop and systemctl stop: tidy up as Ctrl+C does
+    signal.signal(signal.SIGTERM, stop)
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
