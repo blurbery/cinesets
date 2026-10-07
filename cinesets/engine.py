@@ -62,6 +62,8 @@ class Engine:
                     if it["ids"].get(key):
                         index[kind][key].setdefault(it["ids"][key], it["id"])
                 index["items"][it["id"]] = {"n": it["name"], "y": it["year"], "b": it["backdrop"], "k": kind}
+                if "genres" in it:  # a server that lists genres with the titles (Silo) needs no more requests for them
+                    index["items"][it["id"]]["g"] = [g.lower() for g in it["genres"]]
             print(f"  indexed {name}: {len(items)}")
         save_json(self.index_file, index)
         return index
@@ -107,7 +109,8 @@ class Engine:
             # drop titles carrying an excluded genre (for example talk shows), keeping list order
             kept, cand = [], ids[:limit * 4]
             for batch in chunks(cand, 100):
-                genres = self.srv.genres(batch)
+                known = {i: set(index["items"][i]["g"]) for i in batch if "g" in index["items"].get(i, {})}
+                genres = known if len(known) == len(batch) else self.srv.genres(batch)
                 kept += [i for i in batch if not genres.get(i, set()) & skip]
             ids = kept
         return ids[:limit], wanted, len(ids)
@@ -476,3 +479,9 @@ class Engine:
             if slowest > self.cfg["slow_write_limit"]:
                 print("Server is taking writes very slowly; stopping this run.")
                 break
+        else:
+            if hasattr(self.srv, "arrange"):  # a server that places collections by order, not sort name (Silo)
+                try:
+                    self.srv.arrange({k: v["id"] for k, v in state.items() if v.get("id")})
+                except (requests.RequestException, ServerError) as e:
+                    print(f"!! could not put the collections in order: {e}")

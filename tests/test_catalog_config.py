@@ -112,10 +112,10 @@ def test_environment_overrides(make_cfg, monkeypatch):
     assert cfg["server"]["api_key"] == "from-env" and cfg["server"]["type"] == "jellyfin"
 
 
-@pytest.mark.parametrize("kind, message", [("silo", "coming soon"), ("plex", "emby or jellyfin")])
-def test_server_type_checked(make_cfg, kind, message):
-    with pytest.raises(SystemExit, match=message):
-        make_cfg(kind)
+def test_server_type_checked(make_cfg):
+    with pytest.raises(SystemExit, match="emby, jellyfin or silo"):
+        make_cfg("plex")
+    assert make_cfg("silo")["server"]["type"] == "silo"
 
 
 def test_library_types(tmp_path):
@@ -151,6 +151,12 @@ class _Info:
     ({"/System/Info/Public": (200, {"ServerName": "media", "Version": "4.9.0.0", "Id": "abc"})}, "emby"),
     ({"/System/Info/Public": (404, None), "/emby/System/Info/Public": (200, {"ProductName": "Emby Server"})}, "emby"),
     ({"/System/Info/Public": (200, None), "/emby/System/Info/Public": (500, None)}, None),
+    ({"/api/v2/system/info": (200, {"server_version": "abc", "api_major": 2, "contract_digest": "d"}),
+      "/System/Info/Public": (200, {"ProductName": "Jellyfin Server"})}, "silo"),
+    ({"/Branding/Configuration": (200, {"LoginDisclaimer": "Silo provides Jellyfin-compatible app support."}),
+      "/System/Info/Public": (200, {"ProductName": "Jellyfin Server"})}, "silo-compat"),
+    ({"/api/v2/system/info": (200, None), "/Branding/Configuration": (200, {"LoginDisclaimer": ""}),
+      "/System/Info/Public": (200, {"ProductName": "Jellyfin Server"})}, "jellyfin"),
 ])
 def test_setup_works_out_the_server_from_its_address(monkeypatch, answers, found):
     import requests as req

@@ -26,6 +26,7 @@ import re
 import sys
 import time
 import traceback
+from urllib.parse import urlparse
 
 import requests
 
@@ -217,25 +218,58 @@ def detect_server(url):
     return servers.detect(url)
 
 
-def setup(path):
-    """Interactive first-run setup: find the server and what it is, test the key, detect libraries, write config.yml."""
-    path = config.config_path(path)
-    if os.path.exists(path) and input(f"{path} exists. Overwrite it? [y/N] ").strip().lower() != "y":
-        return
-    url = input("Server address, as you open it in a browser [http://127.0.0.1:8096]: ").strip() or "http://127.0.0.1:8096"
+def find_server(url):
+    """(address, kind) for the address typed at setup. A browser address with a page on the end works too, and Silo's
+    Jellyfin-compatible port leads to Silo's own address (its web app's), which is the one CineSets needs."""
+    kind = detect_server(url)
+    origin = "{0.scheme}://{0.netloc}".format(urlparse(url))
+    if not kind and origin != url:
+        kind = detect_server(origin)
+        url = origin if kind else url
+    if kind == "silo-compat":
+        print("That is Silo's Jellyfin-compatible port. CineSets needs Silo's own address, the one its web app opens on.")
+        guess = urlparse(url)._replace(netloc=f"{urlparse(url).hostname}:8080", path="").geturl()
+        if detect_server(guess) == "silo":
+            return guess, "silo"
+        url = clean_address(input("Silo's address, as you open it in a browser: "))
+        kind = detect_server(url)
+        if kind != "silo":
+            raise SystemExit(f"Silo's own API did not answer at {url}. Check the address Silo's web app opens on.")
+    return url, kind
+
+
+def clean_address(url):
+    url = url.strip()
     if not url.startswith(("http://", "https://")):
         url = "http://" + url
     url = url.split("/web/")[0].split("/web#")[0].rstrip("/")  # a pasted browser address works too
     for tail in ("/web", "/emby"):
         if url.endswith(tail):
             url = url[: -len(tail)]
-    kind = detect_server(url)
+    return url
+
+
+KEY_PAGES = {"emby": "Dashboard > API Keys", "jellyfin": "Dashboard > API Keys", "silo": "Admin > API keys"}
+
+
+def setup(path):
+    """Interactive first-run setup: find the server and what it is, test the key, detect libraries, write config.yml."""
+    path = config.config_path(path)
+    if os.path.exists(path) and input(f"{path} exists. Overwrite it? [y/N] ").strip().lower() != "y":
+        return
+    url = clean_address(input("Server address, as you open it in a browser [http://127.0.0.1:8096]: ").strip()
+                        or "http://127.0.0.1:8096")
+    url, kind = find_server(url)
     if kind:
         print(f"Found {servers.NAMES[kind]} at {url}.")
     else:
-        kind = input("Couldn't tell what server that is. Emby or Jellyfin? [emby]: ").strip().lower() or "emby"
+        kind = input("Couldn't tell what server that is. Emby, Jellyfin or Silo? [emby]: ").strip().lower() or "emby"
         config.check_type(kind)
-    key = getpass.getpass("API key (Dashboard > API Keys on your server; typing is hidden): ").strip()
+    where = KEY_PAGES.get(kind, KEY_PAGES["emby"])
+    if kind == "silo":
+        print("CineSets needs a Silo API key that belongs to an administrator and has no scopes. Make one under "
+              f"{where} (name it CineSets).")
+    key = getpass.getpass(f"API key ({where} on your server; typing is hidden): ").strip()
     cfg = config.Config(config._merge(config.DEFAULTS, {"server": {"type": kind, "url": url, "api_key": key}}))
     cfg["base_dir"] = os.path.dirname(os.path.abspath(path))
     try:
@@ -245,7 +279,7 @@ def setup(path):
     except RuntimeError as e:
         status = getattr(e, "status", None)
         if status in (401, 403):
-            raise SystemExit("The server rejected the API key. Check it under Dashboard > API Keys.")
+            raise SystemExit(f"The server rejected the API key. Check it under {where}.")
         raise SystemExit(f"The server at {url} answered unexpectedly ({e}). Check the address and the API key.")
     if not libs:
         raise SystemExit("Connected, but found no Movies or TV Shows libraries. Add them to config.yml by hand "
@@ -274,7 +308,7 @@ def setup(path):
 
 
 def main():
-    ap = argparse.ArgumentParser(prog="cinesets", description="Automatic, beautiful collections for Emby and Jellyfin. By blurbery.")
+    ap = argparse.ArgumentParser(prog="cinesets", description="Automatic, beautiful collections for Emby, Jellyfin and Silo. By blurbery.")
     ap.add_argument("cmd", choices=["index", "plan", "posters", "apply", "logos", "list", "pick", "web", "schedule", "setup",
                                     "adopt", "remove", "version"])
     ap.add_argument("--only", help="comma-separated collection keys")
