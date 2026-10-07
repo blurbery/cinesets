@@ -731,7 +731,7 @@ ROUTES = {
 
 
 OPEN = {("GET", "/api/session"), ("POST", "/api/login"), ("POST", "/api/logout")}
-# a request carrying any of these came through a proxy, a tunnel or Tailscale, not straight from a browser here
+# a request carrying any of these was passed on by a proxy, Cloudflare or Tailscale, not sent straight from here
 PROXIED = ("X-Forwarded-For", "X-Forwarded-Host", "X-Forwarded-Proto", "Forwarded", "X-Real-IP", "Via",
            "Tailscale-User-Login", "CF-Connecting-IP", "True-Client-IP")
 
@@ -772,8 +772,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.cookie_out = None
         try:
             if self.server.local_only and not self.from_here():
-                raise Problem("Sign-in is turned off, so this dashboard only answers a browser on the machine it runs on.",
-                              403)
+                raise Problem("Sign-in is turned off, so this dashboard only answers a browser on the machine it runs on "
+                              "(or an SSH tunnel to it).", 403)
             if method == "GET" and url.path in FILES:
                 name, kind = FILES[url.path]
                 with open(os.path.join(STATIC, name), "rb") as f:
@@ -865,7 +865,8 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
 def make_server(app, host="127.0.0.1", port=8095, sign_in=True, public=False):
     """sign_in=False is allowed only on this machine's own address, and then only a browser on this machine is
-    answered (nothing through a proxy or Tailscale). public=True accepts sign-ins only over HTTPS."""
+    answered, or an SSH tunnel to it (which looks the same, and needs a login to the machine); nothing passed on by a
+    proxy or Tailscale. public=True accepts sign-ins only over HTTPS."""
     if not sign_in and not app.demo and host not in LOCAL:
         raise SystemExit("Sign-in can only be turned off when the dashboard listens on this machine only "
                          "(host 127.0.0.1). For other computers, keep sign-in on.")
@@ -917,7 +918,8 @@ def serve(cfg_path=None, host=None, port=None, demo=False, sign_in=None, public=
     if demo or not sign_in:
         print(f"\nCineSets dashboard{' (demo)' if demo else ''}: {address}\n")
         if not sign_in and not demo:
-            print("Sign-in is off: it answers only a browser on this machine, not through a proxy, a tunnel or Tailscale.")
+            print("Sign-in is off: it answers only this machine (an SSH tunnel from your own computer counts), never a "
+                  "proxy or Tailscale.")
     elif sys.stdout.isatty():
         print(f"\nCineSets dashboard: {link(app.cfg, host, port)}\n")
         print("That link signs you in. Keep it private: anyone with it can change your CineSets settings.")

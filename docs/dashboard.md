@@ -59,9 +59,9 @@ web:
 ```
 
 Or just for one run: `./run.sh web --no-sign-in`. It only works when the dashboard listens on 127.0.0.1, and then
-it answers only a browser on that same machine. Anything that comes through a proxy, a tunnel or Tailscale, or
-uses another name for the machine, is turned away. So turning sign-in off can't put an open dashboard on your
-network or the internet.
+it answers only that machine: a browser on it, or an SSH tunnel from your own computer (which needs a login to the
+machine anyway). Anything passed on by a proxy or Tailscale, or using another name for the machine, is turned
+away. So turning sign-in off can't put an open dashboard on your network or the internet.
 
 ## On the internet, behind the sign-in page
 

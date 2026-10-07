@@ -129,8 +129,57 @@ def test_library_types(tmp_path):
 
 
 # ---------------------------------------------------------------- setup
+@pytest.fixture(autouse=True)
+def emby_found(monkeypatch):
+    """Setup asks the server what it is; these tests talk to no server, so it is Emby unless a test says otherwise."""
+    monkeypatch.setattr(cli, "detect_server", lambda url: "emby")
+
+
+class _Info:
+    def __init__(self, status, data):
+        self.status_code, self._data = status, data
+
+    def json(self):
+        if self._data is None:
+            raise ValueError("not json")
+        return self._data
+
+
+@pytest.mark.parametrize("answers, found", [
+    ({"/System/Info/Public": (200, {"ProductName": "Jellyfin Server", "Version": "10.11.0"})}, "jellyfin"),
+    ({"/System/Info/Public": (200, {"ServerName": "media", "Version": "4.9.0.0", "Id": "abc"})}, "emby"),
+    ({"/System/Info/Public": (404, None), "/emby/System/Info/Public": (200, {"ProductName": "Emby Server"})}, "emby"),
+    ({"/System/Info/Public": (200, None), "/emby/System/Info/Public": (500, None)}, None),
+])
+def test_setup_works_out_the_server_from_its_address(monkeypatch, answers, found):
+    import requests as req
+    seen = {}
+
+    def fake_get(url, **kw):
+        seen.update(kw)
+        path = url.split("8096", 1)[1]
+        if path not in answers:
+            raise req.ConnectionError("nothing there")
+        return _Info(*answers[path])
+    monkeypatch.undo()
+    monkeypatch.setattr(req, "get", fake_get)
+    assert cli.detect_server("http://192.0.2.10:8096") == found
+    assert seen["allow_redirects"] is False and "X-Emby-Token" not in (seen.get("headers") or {})   # no key sent
+
+
+def test_setup_asks_when_it_cannot_tell(tmp_path, monkeypatch):
+    monkeypatch.setattr(cli, "detect_server", lambda url: None)
+    answers = iter(["192.0.2.10:8096", "jellyfin"])
+    monkeypatch.setattr(builtins, "input", lambda prompt="": next(answers))
+    monkeypatch.setattr(getpass, "getpass", lambda prompt="": "key")
+    monkeypatch.setattr(server.MediaServer, "get", lambda self, path: [{"Name": "Movies", "CollectionType": "movies"}])
+    cli.setup(str(tmp_path / "config.yml"))
+    assert config.load(str(tmp_path / "config.yml"))["server"]["type"] == "jellyfin"
+
+
 def test_setup_writes_private_valid_config(tmp_path, monkeypatch):
-    answers = iter(["jellyfin", "192.0.2.10:8096"])
+    monkeypatch.setattr(cli, "detect_server", lambda url: "jellyfin")
+    answers = iter(["192.0.2.10:8096"])
     monkeypatch.setattr(builtins, "input", lambda prompt="": next(answers))
     monkeypatch.setattr(getpass, "getpass", lambda prompt="": 'k"ey\\with: odd')
     monkeypatch.setattr(server.MediaServer, "get", lambda self, path: [
@@ -147,7 +196,7 @@ def test_setup_writes_private_valid_config(tmp_path, monkeypatch):
 def test_setup_uses_cinesets_config(tmp_path, monkeypatch):
     target = tmp_path / "docker" / "config.yml"
     monkeypatch.setenv("CINESETS_CONFIG", str(target))
-    answers = iter(["emby", ""])
+    answers = iter([""])
     monkeypatch.setattr(builtins, "input", lambda prompt="": next(answers))
     monkeypatch.setattr(getpass, "getpass", lambda prompt="": "key")
     monkeypatch.setattr(server.MediaServer, "get", lambda self, path: [{"Name": "Movies", "CollectionType": "movies"}])
@@ -156,7 +205,7 @@ def test_setup_uses_cinesets_config(tmp_path, monkeypatch):
 
 
 def test_setup_stops_without_libraries(tmp_path, monkeypatch):
-    answers = iter(["emby", ""])
+    answers = iter([""])
     monkeypatch.setattr(builtins, "input", lambda prompt="": next(answers))
     monkeypatch.setattr(getpass, "getpass", lambda prompt="": "key")
     monkeypatch.setattr(server.MediaServer, "get", lambda self, path: [{"Name": "Mixed", "CollectionType": None}])
@@ -212,7 +261,7 @@ def test_setup_tightens_an_existing_file(tmp_path, monkeypatch):
     out = tmp_path / "config.yml"
     out.write_text("old")
     os.chmod(out, 0o644)
-    answers = iter(["y", "emby", "http://192.0.2.10:8096/web/index.html#!/home"])
+    answers = iter(["y", "http://192.0.2.10:8096/web/index.html#!/home"])
     monkeypatch.setattr(builtins, "input", lambda prompt="": next(answers))
     monkeypatch.setattr(getpass, "getpass", lambda prompt="": "key")
     monkeypatch.setattr(server.MediaServer, "get", lambda self, path: [{"Name": "Movies", "CollectionType": "movies"}])
@@ -222,7 +271,7 @@ def test_setup_tightens_an_existing_file(tmp_path, monkeypatch):
 
 
 def test_setup_reports_a_rejected_key(tmp_path, monkeypatch):
-    answers = iter(["emby", ""])
+    answers = iter([""])
     monkeypatch.setattr(builtins, "input", lambda prompt="": next(answers))
     monkeypatch.setattr(getpass, "getpass", lambda prompt="": "wrong")
 
@@ -245,7 +294,7 @@ def test_unknown_keys_are_skipped_but_nothing_matching_is_an_error(make_cfg, cap
 
 
 def test_setup_trims_emby_web_address(tmp_path, monkeypatch):
-    answers = iter(["emby", "http://192.0.2.10:8096/emby/web/index.html#!/home"])
+    answers = iter(["http://192.0.2.10:8096/emby/web/index.html#!/home"])
     monkeypatch.setattr(builtins, "input", lambda prompt="": next(answers))
     monkeypatch.setattr(getpass, "getpass", lambda prompt="": "key")
     monkeypatch.setattr(server.MediaServer, "get", lambda self, path: [{"Name": "Movies", "CollectionType": "movies"}])

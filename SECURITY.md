@@ -30,6 +30,7 @@ For example:
 - the API key showing up in logs, output or files that other users can read
 - CineSets changing or deleting anything it didn't create
 - the Docker container keeping root or getting more access than it needs
+- getting into the dashboard without signing in, or another web site using someone's dashboard session
 
 > [!NOTE]
 > Problems in Emby, Jellyfin or mdblist themselves should go to those projects.

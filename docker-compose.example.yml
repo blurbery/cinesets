@@ -4,10 +4,9 @@
 #
 #   cp docker-compose.example.yml docker-compose.yml
 #   docker compose build
-#   docker compose run --rm cinesets setup    # asks for your server and writes ./config/config.yml
+#   docker compose run --rm cinesets setup    # your server's address and API key, and which collections
 #   docker compose run --rm cinesets logos
-#   docker compose run --rm cinesets plan     # dry run, changes nothing
-#   docker compose up -d                       # starts the schedule (all jobs run once straight away)
+#   docker compose up -d                       # creates the collections, then keeps them updated
 #   docker compose run --rm -p 127.0.0.1:8095:8095 cinesets web --host 0.0.0.0   # the dashboard, while you need it
 #                                                    (or keep it running with the cinesets-web service below)
 #
