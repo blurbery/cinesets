@@ -47,6 +47,22 @@ def test_readme_settings_examples_load(make_cfg):
         make_cfg(extra=block)                                         # loads without complaint
 
 
+def test_preview_page_settings_load(make_cfg):
+    page = open(os.path.join(ROOT, "docs", "preview.md")).read()
+    blocks = re.findall(r"```yaml\n(.*?)```", page, re.S)
+    assert len(blocks) >= 5
+    for block in blocks:
+        for one in re.split(r"\n(?=# )", block):                     # the looks are separate examples
+            make_cfg(extra=one)
+
+
+def test_scenes_are_original_and_repeatable():
+    from cinesets import scenes
+    assert len(scenes.SCENES) >= 10
+    a, b = scenes.make("city", 160, 90), scenes.make("city", 160, 90)
+    assert a.size == (160, 90) and a.tobytes() == b.tobytes()
+
+
 def test_readme_examples_load(make_cfg, tmp_path):
     readme = open(os.path.join(ROOT, "README.md")).read()
     section = readme.split("## Your own collections", 1)[1].split("\n## ", 1)[0]
