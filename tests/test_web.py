@@ -670,3 +670,31 @@ def test_renaming_keeps_the_collection_and_renames_it_on_the_server(site):
     eng = Engine(config.load(app.cfg_path), srv)
     eng.run("apply", catalog.load(eng.cfg), 2)
     assert srv.collections[cid]["Name"] == "Movies - Back to the Future Trilogy" and len(srv.collections) == 2
+
+
+# ---------------------------------------------------------------- streaming logos
+def test_streaming_posters_can_use_another_logo_or_a_white_one(tmp_path):
+    from cinesets import logos
+    folder = tmp_path / "logos"
+    folder.mkdir()
+    for name, colour in (("netflix.png", (229, 9, 20, 255)), ("netflix--icon.png", (0, 200, 0, 255))):
+        Image.new("RGBA", (300, 100), colour).save(folder / name)
+    draw = lambda **change: posters.logo_poster_image("Movies", "netflix", str(folder), "Popular", None, "Netflix",
+                                                      posters.check_style(change))[0]
+    centre = lambda img: img.getpixel((500, 630))
+    assert centre(draw())[0] > 150                                            # the standard (red) logo
+    assert centre(draw(logo="icon"))[1] > 150 and centre(draw(logo="icon"))[0] < 100   # the icon (green here)
+    assert min(centre(draw(logo_colour="white"))) > 200                       # all white
+    assert draw(logo="alt").tobytes() == draw().tobytes()                     # no alternative: the standard logo
+    assert logos.file_name("netflix") == "netflix.png" and logos.file_name("netflix", "icon") == "netflix--icon.png"
+    assert set(logos.VARIANTS) <= set(logos.FILES)
+    assert posters.style_changes(posters.check_style({"logo": "icon", "shade": "dark"}), logo=True) == {"logo": "icon"}
+    assert posters.style_changes(posters.check_style({"logo": "icon"})) == {}  # other posters don't change
+
+
+def test_logo_versions_are_listed_for_the_page(site):
+    info = site[0]("/api/info")[1]
+    assert [v["key"] for v in info["logo_versions"]["prime"]] == ["standard", "alt", "icon"]
+    assert info["logo_versions"]["stan"] == [{"key": "standard", "label": "Standard", "downloaded": False}]
+    netflix = [c for s in site[0]("/api/collections")[1]["sections"] for c in s["collections"] if c["key"] == "m-netflix"]
+    assert netflix[0]["service"] == "netflix"

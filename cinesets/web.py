@@ -253,7 +253,17 @@ class Dashboard:
                 "text_colours": list(posters.TEXT_COLOURS) + ["accent"], "gold": _hex(posters.LABEL_COLOUR),
                 "defaults": posters.STYLE, "limits": {k: list(v) for k, v in posters.SIZES.items()},
                 "custom_file": os.path.basename(self.cfg.path("custom_collections")),
+                "logo_versions": self.logo_versions(),
                 "limit_range": [1, config.LIMIT_MOST], "default_limit": self.cfg["defaults"]["limit"]}
+
+    def logo_versions(self):
+        """Each streaming service's logos: [{"key", "label", "downloaded"}], standard first."""
+        from . import logos
+        folder = self.logos_dir()
+        have = lambda key, v: os.path.exists(os.path.join(folder, logos.file_name(key, v)))
+        return {key: [{"key": "standard", "label": "Standard", "downloaded": have(key, "standard")}] +
+                [{"key": v, "label": label, "downloaded": have(key, v)} for v, (label, _) in logos.VARIANTS.get(key, {}).items()]
+                for key in logos.FILES}
 
     def settings(self):
         cfg = self.settings_now()
@@ -266,7 +276,7 @@ class Dashboard:
         for group, members in catalog.sections(cfg, list(self.catalogue().values())):
             out.append({"key": group, "name": members[0]["section"], "collections": [{
                 "key": c["key"], "name": c["name"], "title": c["title"], "subtitle": c.get("subtitle"), "label": c["label"],
-                "kind": c["kind"], "accent": c["accent"], "streaming": bool(c.get("logo")),
+                "kind": c["kind"], "accent": c["accent"], "streaming": bool(c.get("logo")), "service": c.get("logo"),
                 "artwork": self.artwork_of(c, state), "lists": c.get("lists") or [], "added_lists": c.get("added_lists") or [],
                 "fixed_titles": len(c["titles"]) if c.get("titles") else None, "custom": bool(c.get("custom")),
                 "limit": c.get("limit"), "built_in_limit": c.get("built_in_limit"),

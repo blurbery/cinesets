@@ -22,13 +22,31 @@ FILES = {
     "peacock": "File:NBCUniversal Peacock Logo.svg",
     "stan": "File:Stan logo.svg",
 }
+# other logos a streaming poster can use instead: "alt" (another version of the logo) and "icon" (the mark alone)
+VARIANTS = {
+    "netflix": {"icon": ("Netflix N", "File:Netflix 2015 N logo.svg")},
+    "prime": {"alt": ("Prime Video 2024", "File:Prime Video logo (2024).svg"),
+              "icon": ("Prime Video icon", "File:Amazon Prime Video logo (2024).svg")},
+    "disney": {"alt": ("Disney+ alternative", "File:Disney Plus logo.svg")},
+    "hbomax": {"alt": ("Max 2023", "File:Max logo.svg")},
+    "apple": {"alt": ("Apple TV", "File:Apple TV logo.svg")},
+    "hulu": {"alt": ("Hulu 2018", "File:Hulu logo (2018).svg")},
+    "paramount": {"alt": ("Paramount+ stacked", "File:Paramount Plus.svg")},
+}
+
+
+def file_name(key, variant="standard"):
+    """The downloaded file for a service's logo: netflix.png, or netflix--icon.png for another version."""
+    return f"{key}.png" if variant == "standard" else f"{key}--{variant}.png"
 
 
 def download(logos_dir, force=False):
     os.makedirs(logos_dir, exist_ok=True)
     s = requests.Session()
     s.headers["User-Agent"] = "CineSets/1.0 (+https://github.com/blurbery/cinesets; self-hosted media server posters)"
-    want = {k: t for k, t in FILES.items() if force or not os.path.exists(os.path.join(logos_dir, k + ".png"))}
+    every = {file_name(k): t for k, t in FILES.items()}
+    every.update({file_name(k, v): t for k, versions in VARIANTS.items() for v, (_, t) in versions.items()})
+    want = {name: t for name, t in every.items() if force or not os.path.exists(os.path.join(logos_dir, name))}
     if not want:
         print("All logos already downloaded.")
         return
@@ -37,14 +55,15 @@ def download(logos_dir, force=False):
         "titles": "|".join(want.values())}, timeout=30).json()["query"]
     norm = {n["from"]: n["to"] for n in q.get("normalized", [])}
     urls = {p["title"]: p["imageinfo"][0]["thumburl"] for p in q["pages"].values() if p.get("imageinfo")}
-    for key, title in want.items():
+    for name, title in want.items():
+        key = name[:-4]
         url = urls.get(norm.get(title, title))
         if not url:
             print(f"  {key}: not found on Wikimedia Commons, posters will show the service name instead")
             continue
         r = s.get(url, timeout=60)
         if r.ok and r.headers.get("Content-Type", "").startswith("image/png"):
-            with open(os.path.join(logos_dir, key + ".png"), "wb") as f:
+            with open(os.path.join(logos_dir, name), "wb") as f:
                 f.write(r.content)
             print(f"  {key}: {len(r.content) // 1024} KB")
         else:

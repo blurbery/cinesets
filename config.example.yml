@@ -82,6 +82,9 @@ alphabetical_groups: [universes]
 #   title_position   where the title sits: [x, y] (its left edge or centre, and the bottom of the subtitle)
 #   title_size       0.5 to 2 times the usual size (drag the corner of the title in the dashboard)
 #   label_size       0.5 to 2 times the usual size
+#   text_shadow      a soft shadow behind text: auto (only text that has been moved), on or off
+#   logo             streaming posters: standard, alt or icon (another version where the service has one)
+#   logo_colour      streaming posters: original or white
 #   sections         settings for every collection in a section, like  genres: {accent: red, align: centre}
 #   overrides        settings for single collections, like  m-action: {accent: red, title_position: [0.5, 0.6]}
 #                    (a collection's own settings win over its section's, which win over the ones above)

@@ -37,6 +37,18 @@ What keeps other people and other sites out:
 - Your media server's API key never reaches the browser.
 - The page loads nothing from the internet.
 
+## Designing
+
+The Design tab has two modes:
+
+- **Whole section:** pick a section, or **Every section**, and change the text and the poster colour, shade and
+  tint for every poster in it.
+- **Each poster:** pick one poster and change anything about it, including its artwork and its words.
+
+A poster's own settings win over its section's, which win over Every section. Streaming posters keep the service's
+artwork, but can use another version of its logo where there is one (the Netflix N, the 2024 Prime Video logo,
+the Apple TV logo and others), in its own colours or all white. `./run.sh logos` downloads every version.
+
 ## No sign-in, on this machine only
 
 If you only ever use the dashboard on the machine CineSets runs on, you can turn sign-in off:

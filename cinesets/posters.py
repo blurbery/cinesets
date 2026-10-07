@@ -54,6 +54,9 @@ STYLE = {
     "title_size": 1.0,           # 0.5 to 2 times the usual size (long titles still shrink to fit the width)
     "label_size": 1.0,           # 0.5 to 2 times the usual size
     "text_shadow": "auto",       # a soft shadow behind the text: auto (only text moved from its usual place), on, off
+    # streaming posters only: which logo (standard, alt or icon, where the service has one) and in what colours
+    "logo": "standard",
+    "logo_colour": "original",
 }
 CHOICES = {
     "artwork": ("fixed", "random"),
@@ -63,9 +66,12 @@ CHOICES = {
     "align": ("left", "centre"),
     "case": ("normal", "upper"),
     "text_shadow": ("auto", "on", "off"),
+    "logo": ("standard", "alt", "icon"),
+    "logo_colour": ("original", "white"),
 }
 TEXT_COLOURS = {"gold": LABEL_COLOUR, "white": (255, 255, 255)}
 TEXT_SETTINGS = ("align", "case", "label", "label_colour", "subtitle_colour")
+LOGO_SETTINGS = ("logo", "logo_colour")
 POSITIONS = ("label_position", "title_position")
 SIZES = {"title_size": (0.5, 2.0), "label_size": (0.5, 2.0)}
 LAYOUT = POSITIONS + tuple(SIZES)  # where text sits and how big: streaming posters keep their own
@@ -183,7 +189,7 @@ def style_for(style, key, group=None):
 
 def style_changes(style, logo=False):
     """The settings that differ from the defaults and change this kind of poster, for its design record."""
-    keys = TEXT_SETTINGS if logo else [k for k in STYLE if k != "artwork"]
+    keys = TEXT_SETTINGS + LOGO_SETTINGS if logo else [k for k in STYLE if k != "artwork" and k not in LOGO_SETTINGS]
     return {k: style[k] for k in keys if style and style[k] != STYLE[k]}
 
 
@@ -401,8 +407,9 @@ SERVICES = {
 LIGHT_ON_DARK = {"disney": ((255, 255, 255), (150, 215, 255)), "paramount": ((255, 255, 255), (225, 235, 255))}
 
 
-def _logo_image(path, key):
-    """Load a service logo; grey or black parts become white so the logo reads on a dark poster."""
+def _logo_image(path, key, white=False):
+    """Load a service logo; grey or black parts become white so the logo reads on a dark poster. white=True makes
+    the whole logo white."""
     logo = Image.open(path).convert("RGBA")
     px = logo.load()
     for y in range(logo.height):
@@ -412,6 +419,10 @@ def _logo_image(path, key):
                 px[x, y] = (255, 255, 255, a)
     box = logo.getbbox()
     logo = logo.crop(box) if box else logo
+    if white:
+        plain = Image.new("RGBA", logo.size, (255, 255, 255, 0))
+        plain.putalpha(logo.split()[3])
+        return plain
     if key in LIGHT_ON_DARK:
         top, bottom = LIGHT_ON_DARK[key]
         fill = Image.new("RGB", (1, logo.height))
@@ -448,9 +459,13 @@ def logo_poster_image(label, logo_key, logos_dir, subtitle="Popular", backdrop=N
     draw = ImageDraw.Draw(img)
     label_box = _label(draw, style, label, colour)
 
+    white = style.get("logo_colour") == "white"
     path = os.path.join(logos_dir, logo_key + ".png")
+    other = os.path.join(logos_dir, f"{logo_key}--{style.get('logo', 'standard')}.png")
+    if style.get("logo", "standard") != "standard" and os.path.exists(other):
+        path = other  # another version of the logo, when the service has one and it has been downloaded
     if os.path.exists(path):
-        logo = _logo_image(path, logo_key)
+        logo = _logo_image(path, logo_key, white)
         max_w, max_h = W - 2 * PAD - 20, 360
         r = min(max_w / logo.width, max_h / logo.height)
         logo = logo.resize((int(logo.width * r), int(logo.height * r)), Image.LANCZOS)
@@ -461,7 +476,8 @@ def logo_poster_image(label, logo_key, logos_dir, subtitle="Popular", backdrop=N
     else:
         name = (fallback_title or logo_key).replace("\n", " ")
         f = _fit("SemiBold", [name], 170, W - 2 * PAD)
-        draw.text(((W - f.getbbox(name)[2]) // 2, int(H * 0.42) - f.size // 2), name, font=f, fill=colour)
+        draw.text(((W - f.getbbox(name)[2]) // 2, int(H * 0.42) - f.size // 2), name, font=f,
+                  fill=(255, 255, 255) if white else colour)
 
     f = _font("SemiBold", 150)
     subtitle = subtitle.upper() if style["case"] == "upper" else subtitle
