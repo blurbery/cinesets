@@ -17,8 +17,8 @@ drag the text into place and choose each collection's artwork, then saves to `co
 
 ![The CineSets dashboard in demo mode](images/dashboard.jpg)
 
-[docs/dashboard.md](dashboard.md) has more screenshots: designing a whole section, the Collections, Lists and
-Preview all tabs, and signing in.
+[More screenshots](screenshots.md) show designing a whole section, the Collections, Lists and Preview all tabs,
+and signing in.
 
 ## Your Collections page
 

@@ -22,7 +22,8 @@ It only ever touches collections it made itself. Your films, shows, libraries, u
 alone. It talks to your server, public [mdblist](https://mdblist.com) lists and Wikimedia Commons (for the
 streaming logos), and that's it. No account, no tracking.
 
-<p align="center"><b><a href="docs/preview.md">See every section and poster style in the preview</a></b></p>
+<p align="center"><b><a href="docs/preview.md">See every section and poster style in the preview</a> ·
+<a href="docs/screenshots.md">See the dashboard</a></b></p>
 
 > [!NOTE]
 > Emby is fully supported. Jellyfin works and is tested on every change, but it's beta until more people have
@@ -93,9 +94,8 @@ collection's artwork, set how many titles each collection holds, add MDBList lis
 them, preview every poster, then save and apply. It prints a sign-in link; `./run.sh web --demo` tries it with
 made-up artwork and no server.
 
-<p align="center"><img src="docs/images/dashboard.jpg" alt="The CineSets dashboard" width="820"></p>
-
-It listens on this machine only, needs you signed in, and never shows your API key to the browser. Sign-in can be
+[Screenshots](docs/screenshots.md) show each part of it. It listens on this machine only, needs you signed in,
+and never shows your API key to the browser. Sign-in can be
 turned off for use on this machine alone, or the dashboard can go on the internet behind its sign-in page and
 your HTTPS proxy. To use it from another computer, put Tailscale or a reverse proxy with HTTPS in front of it.
 [docs/dashboard.md](docs/dashboard.md) covers signing in, how your settings are kept, Tailscale, Caddy, nginx, and
