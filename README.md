@@ -17,8 +17,7 @@
 <p align="center">
   <a href="docs/setup.md"><b>Setup</b></a> ·
   <a href="docs/preview.md"><b>Preview</b></a> ·
-  <a href="docs/screenshots.md"><b>Screenshots</b></a> ·
-  <a href="docs/dashboard.md"><b>Dashboard</b></a> ·
+  <a href="docs/screenshots.md"><b>Dashboard tour</b></a> ·
   <a href="docs/architecture.md"><b>How it fits together</b></a> ·
   <a href="https://github.com/blurbery/cinesets/releases"><b>Releases</b></a> ·
   <a href="https://github.com/sponsors/blurbery"><b>♥ Sponsor</b></a>
@@ -76,8 +75,8 @@ them, preview every poster, then save and apply. It prints a sign-in link; `./ru
 made-up artwork and no server.
 
 It listens on this machine only, needs you signed in and never shows your API key to the browser.
-[Screenshots](docs/screenshots.md) show each part of it, and [docs/dashboard.md](docs/dashboard.md) covers signing
-in, reaching it from another computer (Tailscale, Caddy, nginx) and keeping it running.
+The [dashboard tour](docs/screenshots.md) shows each part of it, and the [dashboard guide](docs/dashboard.md) covers
+signing in, reaching it from another computer (Tailscale, Caddy, nginx) and keeping it running.
 
 ## Picking collections
 
@@ -160,8 +159,8 @@ A franchise from a fixed list of films. It needs `min` because there are only th
 
 - [Setup guide](docs/setup.md): installing, each server's address and API key, Docker, updating and uninstalling
 - [Preview](docs/preview.md): every section and poster style
-- [Dashboard](docs/dashboard.md) and its [screenshots](docs/screenshots.md): signing in, Tailscale, proxies, keeping
-  it running
+- [Dashboard tour](docs/screenshots.md): every tab of the dashboard, in pictures
+- [Dashboard guide](docs/dashboard.md): signing in, Tailscale, proxies and keeping it running
 - [How CineSets fits together](docs/architecture.md): the shared centre and the module each server gets
 
 If CineSets is useful to you, you can [sponsor me on GitHub](https://github.com/sponsors/blurbery). Thank you.

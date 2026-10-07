@@ -1,9 +1,9 @@
-# Screenshots
+# Dashboard tour
 
-What the CineSets dashboard (`./run.sh web`) looks like. Back to the [README](../README.md).
+The CineSets dashboard (`./run.sh web`), tab by tab. Back to the [README](../README.md).
 
 These are from `./run.sh web --demo`, which uses made-up artwork. On your own server the posters use artwork from
-your library, and streaming posters show the services' logos. [docs/dashboard.md](dashboard.md) explains how to
+your library, and streaming posters show the services' logos. The [dashboard guide](dashboard.md) explains how to
 use it, and [the preview](preview.md) shows the posters themselves, section by section.
 
 ## Design, each poster
