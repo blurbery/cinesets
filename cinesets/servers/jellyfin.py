@@ -12,7 +12,7 @@ import time
 import requests
 
 from .. import __version__
-from . import ServerError, chunks, warn_plain_http
+from . import ServerError, chunks, public_info, warn_plain_http
 from .base import Server
 
 PAGE = 5000
@@ -171,16 +171,16 @@ class JellyfinServer(JellyfinCalls):
     @staticmethod
     def detect(url):
         """("jellyfin", url, None) from the server's public information (no API key needed), or None."""
+        # the first of these that says which server it is decides
         for path in ("/System/Info/Public", "/emby/System/Info/Public"):
-            try:
-                r = requests.get(url + path, timeout=10, allow_redirects=False, headers={"accept": "application/json"})
-                info = r.json() if r.status_code == 200 else None
-            except (requests.RequestException, ValueError):
+            info = public_info(url, path)
+            if info is None:
                 continue
-            if not isinstance(info, dict):
-                continue
-            if "jellyfin" in str(info.get("ProductName") or "").lower():
+            product = str(info.get("ProductName") or "").lower()
+            if "jellyfin" in product:
                 return "jellyfin", url, None
+            if "emby" in product or info.get("ServerName") or info.get("Id"):
+                return None  # Emby's, not Jellyfin's
         return None
 
     def __init__(self, cfg):

@@ -20,7 +20,7 @@ import requests
 
 from .. import __version__
 from ..store import load_json, save_json
-from . import ServerError, warn_plain_http
+from . import ServerError, public_info, warn_plain_http
 from .base import Server
 
 PAGE = 200            # the most Silo sends in one page
@@ -44,17 +44,8 @@ def provider_id(value):
 COMPAT_NOTE = "That is Silo's Jellyfin-compatible port. CineSets needs Silo's own address, the one its web app opens on."
 
 
-def _answers(url, path):
-    try:
-        r = requests.get(url + path, timeout=10, allow_redirects=False, headers={"accept": "application/json"})
-        info = r.json() if r.status_code == 200 else None
-    except (requests.RequestException, ValueError):
-        return None
-    return info if isinstance(info, dict) else None
-
-
 def _own_api(url):
-    info = _answers(url, "/api/v2/system/info")
+    info = public_info(url, "/api/v2/system/info")
     return bool(info and info.get("api_major") and "contract_digest" in info)
 
 
@@ -75,7 +66,7 @@ class SiloServer(Server):
         isn't there, so setup asks for it."""
         if _own_api(url):
             return "silo", url, None
-        info = _answers(url, "/Branding/Configuration")
+        info = public_info(url, "/Branding/Configuration")
         if info and "Silo" in str(info.get("LoginDisclaimer") or ""):
             guess = urlparse(url)._replace(netloc=f"{urlparse(url).hostname}:8080", path="").geturl()
             return "silo", (guess if _own_api(guess) else None), COMPAT_NOTE

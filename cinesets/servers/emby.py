@@ -12,7 +12,7 @@ import time
 import requests
 
 from .. import __version__
-from . import ServerError, chunks, warn_plain_http
+from . import ServerError, chunks, public_info, warn_plain_http
 from .base import Server
 
 PAGE = 5000
@@ -172,13 +172,10 @@ class EmbyServer(EmbyCalls):
     @staticmethod
     def detect(url):
         """("emby", url, None) from the server's public information (no API key needed), or None."""
+        # the first of these that says which server it is decides
         for path in ("/System/Info/Public", "/emby/System/Info/Public"):
-            try:
-                r = requests.get(url + path, timeout=10, allow_redirects=False, headers={"accept": "application/json"})
-                info = r.json() if r.status_code == 200 else None
-            except (requests.RequestException, ValueError):
-                continue
-            if not isinstance(info, dict):
+            info = public_info(url, path)
+            if info is None:
                 continue
             product = str(info.get("ProductName") or "").lower()
             if "jellyfin" in product:

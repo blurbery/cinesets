@@ -12,6 +12,8 @@ import ipaddress
 import sys
 from urllib.parse import urlparse
 
+import requests
+
 
 class ServerError(RuntimeError):
     def __init__(self, message, status=None):
@@ -69,14 +71,37 @@ def connect(cfg):
     return load(cfg["server"]["type"])(cfg)
 
 
+_read = None  # public pages already read during one detect(), so modules asking for the same one share a request
+
+
+def public_info(url, path):
+    """The JSON a server shows anyone at url + path (no API key goes with it), or None."""
+    if _read is not None and url + path in _read:
+        return _read[url + path]
+    try:
+        r = requests.get(url + path, timeout=10, allow_redirects=False, headers={"accept": "application/json"})
+        info = r.json() if r.status_code == 200 else None
+    except (requests.RequestException, ValueError):
+        info = None
+    info = info if isinstance(info, dict) else None
+    if _read is not None:
+        _read[url + path] = info
+    return info
+
+
 def detect(url):
     """(server type, its address, a note for setup to show) for the server that answers at `url`, from its public
     information, or None. The address is None when a module knows the server but needs its own address typed in."""
-    for kind in ASK_ORDER:
-        found = load(kind).detect(url)
-        if found:
-            return found
-    return None
+    global _read
+    _read = {}
+    try:
+        for kind in ASK_ORDER:
+            found = load(kind).detect(url)
+            if found:
+                return found
+        return None
+    finally:
+        _read = None
 
 
 def trim(url):
