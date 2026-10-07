@@ -7,6 +7,8 @@
 The Collections page is ordered by sort title. `order` in config.yml lists the groups top to bottom; an entry
 can be a list of groups that share one block (for example charts then genres). Collections with `pin` sit above
 everything, and groups in `alphabetical_groups` are sorted A-Z ignoring a leading "The".
+
+Each group is a section people can pick as a whole, or collection by collection, under `collections` in config.yml.
 """
 import os
 import re
@@ -18,6 +20,17 @@ from .config import ROOT
 NOUN = {"movie": "movies", "show": "TV shows"}
 KINDS = {"movie": "movie", "movies": "movie", "show": "show", "shows": "show", "tv": "show", "tvshows": "show", "series": "show"}
 KEY = re.compile(r"^[a-z0-9][a-z0-9-]{1,60}$")
+# what each group is called in `list`, `pick` and the docs; a collections file can add or change names under `sections`
+SECTIONS = {
+    "charts": "Trending and charts",
+    "genres": "Popular genres",
+    "streaming": "Streaming services",
+    "bestof": "Best of",
+    "kids": "Kids and family",
+    "seasonal": "Seasonal",
+    "regional": "Regional",
+    "universes": "Franchises and studios",
+}
 
 
 def _blocks(order):
@@ -33,7 +46,9 @@ def load(cfg):
     if not os.path.exists(path) and not os.path.isabs(cfg["collections_file"]):
         path = os.path.join(ROOT, cfg["collections_file"])  # fall back to the catalogue shipped with CineSets
     with open(path) as f:
-        spec = yaml.safe_load(f)["collections"]
+        doc = yaml.safe_load(f)
+    spec = doc["collections"]
+    names = {**SECTIONS, **(doc.get("sections") or {})}
     blocks = _blocks(cfg["order"])
     alpha_groups = set(cfg["alphabetical_groups"])
     out, pos = [], {}
@@ -68,6 +83,7 @@ def load(cfg):
         else:
             sort = f"+{block:02d}{sub}_{pair:02d}{twin} {label} - {words}"
         c.update({
+            "section": str(names.get(group) or group.replace("-", " ").replace("_", " ").capitalize()),
             "label": label,
             "name": f"{label} - {words}",
             "sort": sort,
@@ -81,3 +97,28 @@ def load(cfg):
     if dupes:
         raise SystemExit(f"collections.yml has duplicate keys: {sorted(dupes)}")
     return out
+
+
+def sections(cfg, colls):
+    """[(group, [collections])] in Collections page order, each group's collections in page order too."""
+    blocks = _blocks(cfg["order"])
+    groups = {}
+    for c in sorted(colls, key=lambda c: c["sort"]):
+        groups.setdefault(c["group"], []).append(c)
+    return sorted(groups.items(), key=lambda g: blocks.get(g[0], (len(blocks) + 1, 0)))
+
+
+def picked(cfg, colls, quiet=False):
+    """The collections config.yml picks: its whole sections and its included keys, less its excluded keys.
+    Names that are not in the collections file (for example seasonal ones after the season) are noted, not errors."""
+    pick = cfg["collections"]
+    groups, keys = {c["group"] for c in colls}, {c["key"] for c in colls}
+    chosen = groups if pick["sections"] == "all" else set(pick["sections"])
+    include, exclude = set(pick["include"]), set(pick["exclude"])
+    if not quiet:
+        if chosen - groups:
+            print(f"Note: config.yml collections: no such sections, ignored: {', '.join(sorted(chosen - groups))}")
+        if (include | exclude) - keys:
+            print(f"Note: config.yml collections: not in the collections file, ignored: "
+                  f"{', '.join(sorted((include | exclude) - keys))}")
+    return [c for c in colls if (c["group"] in chosen or c["key"] in include) and c["key"] not in exclude]

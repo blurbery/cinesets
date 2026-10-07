@@ -23,6 +23,8 @@ DEFAULTS = {
     "slow_write_limit": 30,
     # poster colours, text and artwork: see posters.STYLE
     "posters": {},
+    # which collections to make: whole sections (the `group` in collections.yml), then single collections by key
+    "collections": {"sections": "all", "include": [], "exclude": []},
 }
 
 
@@ -65,7 +67,31 @@ def load(path=None):
     if not isinstance(cfg["posters"], dict):
         raise SystemExit("config.yml: posters must be a list of settings (see config.example.yml)")
     cfg["posters"] = posters.check_style(cfg["posters"])
+    cfg["collections"] = check_pick(cfg["collections"])
     return cfg
+
+
+def _names(value, what):
+    """A list of names from YAML: a list, one name, or a comma-separated string."""
+    if value is None:
+        return []
+    if isinstance(value, str):
+        value = value.split(",")
+    if not isinstance(value, list):
+        raise SystemExit(f"config.yml collections: {what} must be a list, not {value!r}")
+    return [str(v).strip() for v in value if str(v).strip()]
+
+
+def check_pick(raw):
+    """`collections` in config.yml: `all`, or {sections: all | [names], include: [keys], exclude: [keys]}."""
+    if raw is None or raw == "all":
+        raw = {}
+    if not isinstance(raw, dict):
+        raise SystemExit("config.yml: collections must be `all` or have sections, include and exclude "
+                         "(see config.example.yml)")
+    sections = raw.get("sections", "all")
+    return {"sections": "all" if sections in ("all", None) else _names(sections, "sections"),
+            "include": _names(raw.get("include"), "include"), "exclude": _names(raw.get("exclude"), "exclude")}
 
 
 LIBRARY_TYPES = {"movies": "movie", "movie": "movie", "shows": "show", "show": "show", "tv": "show", "tvshows": "show", "series": "show"}

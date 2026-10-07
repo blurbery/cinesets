@@ -9,17 +9,21 @@
   cinesets posters [--only KEYS] [--group GROUPS] [--reshuffle]   build posters and contact sheets, no server writes
   cinesets apply   [--only KEYS] [--group GROUPS] [--reshuffle]   create or update collections
   cinesets logos   [--force]              download streaming service logos from Wikimedia Commons
-  cinesets list                           show every collection key, group and name
+  cinesets list                           show every section and collection, and which are picked
+  cinesets pick                           choose sections or single collections to make (writes config.yml)
   cinesets schedule                       run forever on the schedule in config.yml (for Docker)
   cinesets setup                          ask for server details and write config.yml
   cinesets adopt   --only KEYS | --all    take over existing collections with CineSets' names (after a reinstall)
-  cinesets remove  --only KEYS | --all    delete collections CineSets created (asks first; --yes to skip)
+  cinesets remove  --only KEYS | --all | --unpicked   delete collections CineSets created (asks first; --yes to skip)
 """
 import argparse
+import contextlib
 import getpass
 import json
 import os
+import re
 import sys
+import tempfile
 import time
 import traceback
 
@@ -30,24 +34,35 @@ from .engine import Engine
 from .server import MediaServer
 
 
-def select(colls, only=None, group=None):
+def select(colls, only=None, group=None, unpicked=()):
     """Pick collections by key and/or group. Unknown names are reported and skipped (for example the
-    Halloween entries after the season); it is an error only if nothing at all matches."""
-    picked = colls
+    Halloween entries after the season); it is an error only if nothing at all matches. `unpicked` are the
+    collections left out under `collections` in config.yml, so asking for one says so."""
+    picked, skipped = colls, False
+    left_out = {c["key"] for c in unpicked}
     if only:
         want = {k.strip() for k in only.split(",") if k.strip()}
         unknown = want - {c["key"] for c in colls}
-        if unknown:
-            print(f"Note: not in the collections file, skipped: {', '.join(sorted(unknown))}")
+        if unknown & left_out:
+            skipped = True
+            print(f"Note: not picked in config.yml (collections), skipped: {', '.join(sorted(unknown & left_out))}")
+        if unknown - left_out:
+            print(f"Note: not in the collections file, skipped: {', '.join(sorted(unknown - left_out))}")
         picked = [c for c in picked if c["key"] in want]
     if group:
         groups = {g.strip() for g in group.split(",") if g.strip()}
         unknown = groups - {c["group"] for c in colls}
+        if unknown & {c["group"] for c in unpicked}:
+            skipped = True
+            print(f"Note: nothing picked in config.yml (collections) from group(s) "
+                  f"{', '.join(sorted(unknown & {c['group'] for c in unpicked}))}, skipped")
+            unknown -= {c["group"] for c in unpicked}
         if unknown:
             print(f"Note: no collections in group(s) {', '.join(sorted(unknown))}, skipped")
         picked = [c for c in picked if c["group"] in groups]
     if (only or group) and not picked:
-        raise SystemExit("No collections match. See: cinesets list")
+        raise SystemExit("Nothing to do: none of those are picked in config.yml (collections). See: cinesets list"
+                         if skipped else "No collections match. See: cinesets list")
     return picked
 
 
@@ -71,7 +86,9 @@ def schedule(cfg, engine):
                 print(f"--- {time.strftime('%Y-%m-%d %H:%M')} job {i + 1}")
                 try:
                     colls = catalog.load(cfg)  # re-read each time, so edits apply without a restart
-                    picked = colls if job.get("all") else select(colls, job.get("only"), job.get("group"))
+                    chosen = catalog.picked(cfg, colls)
+                    unpicked = [c for c in colls if c not in chosen]
+                    picked = chosen if job.get("all") else select(chosen, job.get("only"), job.get("group"), unpicked)
                     engine.run("apply", picked, cfg["defaults"]["min_items"])
                 except SystemExit as e:  # for example a renamed library: report it and try again next time
                     print(f"!! job {i + 1} stopped: {e}")
@@ -80,6 +97,134 @@ def schedule(cfg, engine):
                 last[i] = time.time()
         sys.stdout.flush()
         time.sleep(300)
+
+
+def show_list(cfg, colls, chosen):
+    keys = {c["key"] for c in chosen}
+    for group, members in catalog.sections(cfg, colls):
+        n = sum(c["key"] in keys for c in members)
+        print(f"{members[0]['section']} (section: {group}), {n} of {len(members)} picked")
+        for c in members:
+            print(f"  [{'x' if c['key'] in keys else ' '}] {c['key']:<24} {c['name']}")
+
+
+def note_unpicked(engine, chosen):
+    """Collections CineSets made that are no longer picked stay on the server untouched; say so once per run."""
+    keys = {c["key"] for c in chosen}
+    left = [k for k in engine.owned_keys() if k not in keys]
+    if left:
+        print(f"Note: these collections CineSets made are not picked any more, so they are no longer updated. They stay "
+              f"on your server until you delete them with `remove --unpicked`: {', '.join(left)}")
+
+
+def _numbers(text, most):
+    """'1,3,5-8' -> {1, 3, 5, 6, 7, 8}. None if anything is not a number from 1 to `most`."""
+    out = set()
+    for part in re.split(r"[,\s]+", text.strip()):
+        if not part:
+            continue
+        m = re.fullmatch(r"(\d+)(?:-(\d+))?", part)
+        if not m:
+            return None
+        lo, hi = int(m.group(1)), int(m.group(2) or m.group(1))
+        if not 1 <= lo <= hi <= most:
+            return None
+        out.update(range(lo, hi + 1))
+    return out
+
+
+def _ask(prompt, allowed, default):
+    while True:
+        answer = input(prompt).strip().lower() or default
+        if answer[:1] in allowed:
+            return answer[:1]
+        print(f"  Please answer {', '.join(sorted(allowed))}.")
+
+
+def pick_block(cfg, colls, keys):
+    """The `collections` block for config.yml that picks exactly `keys`, in as few lines as it can: a section that is
+    mostly picked is listed with exclude for the rest, a section that is mostly not is left out with include."""
+    sections, include, exclude = [], [], []
+    for group, members in catalog.sections(cfg, colls):
+        on = [c["key"] for c in members if c["key"] in keys]
+        off = [c["key"] for c in members if c["key"] not in keys]
+        if on and len(on) >= len(off):
+            sections.append(group)
+            exclude += off
+        else:
+            include += on
+    # quoted when YAML would read it as something else, such as `on` (true) or `123` (a number)
+    plain = lambda g: re.fullmatch(r"[a-z][a-z0-9_-]*", g) and g not in ("yes", "no", "on", "off", "true", "false", "null")
+    name = lambda g: g if plain(g) else json.dumps(g)
+    groups = {c["group"] for c in colls}
+    lines = ["collections:", "  sections: " + ("all" if set(sections) == groups else
+                                               "[" + ", ".join(name(g) for g in sections) + "]")]
+    for field, items in (("include", include), ("exclude", exclude)):
+        lines.append(f"  {field}:" + ("".join(f"\n    - {name(k)}" for k in items) if items else " []"))
+    return "\n".join(lines) + "\n"
+
+
+def write_pick(path, block):
+    """Put the `collections` block into config.yml in place of the old one, keeping every other line and comment.
+    The file holds the API key, so it stays readable by its owner only."""
+    with open(path) as f:
+        text = f.read()
+    m = re.search(r"^collections:.*?(?=^\S|\Z)", text, flags=re.M | re.S)
+    if m:
+        gap = m.group(0)[len(m.group(0).rstrip("\n")) + 1:]  # keep the blank lines that followed the old block
+        text = text[:m.start()] + block + gap + text[m.end():]
+    else:
+        text = text.rstrip("\n") + "\n\n# Which collections to make (see config.example.yml, or run: cinesets pick)\n" + block
+    folder = os.path.dirname(os.path.abspath(path))
+    fd, tmp = tempfile.mkstemp(dir=folder, prefix=".tmp-", suffix=".yml")
+    try:
+        os.fchmod(fd, 0o600)
+        with os.fdopen(fd, "w") as f:
+            f.write(text)
+        os.replace(tmp, path)
+    except BaseException:
+        with contextlib.suppress(FileNotFoundError):
+            os.remove(tmp)
+        raise
+
+
+def pick(path):
+    """Ask section by section which collections to make, then write the choice to config.yml."""
+    if not sys.stdin.isatty():
+        raise SystemExit("pick asks questions, so run it in a terminal (on Docker: docker compose run --rm cinesets pick). "
+                         "Or edit `collections` in config.yml by hand.")
+    path = config.config_path(path)
+    cfg = config.load(path)
+    colls = catalog.load(cfg)
+    now = {c["key"] for c in catalog.picked(cfg, colls, quiet=True)}
+    keys = set()
+    print("Pick the collections CineSets makes, a section at a time. Press Enter to keep what is picked now.")
+    for group, members in catalog.sections(cfg, colls):
+        on = [c for c in members if c["key"] in now]
+        default = "a" if len(on) == len(members) else "n" if not on else "c"
+        shown = [c["name"].split(" - ", 1)[-1] for c in members]
+        preview = ", ".join(shown[:10]) + (f" and {len(shown) - 10} more" if len(shown) > 10 else "")
+        print(f"\n{members[0]['section']} ({len(members)}, {len(on)} picked now): {preview}")
+        answer = _ask(f"  Use all of them, none, or choose? [a/n/c, Enter = {default}] ", {"a", "n", "c"}, default)
+        if answer == "a":
+            keys.update(c["key"] for c in members)
+        elif answer == "c":
+            for i, c in enumerate(members, start=1):
+                print(f"  {i:>3}. [{'x' if c['key'] in now else ' '}] {c['name']}")
+            while True:
+                text = input("  Numbers to use, for example 1,3,5-8 (Enter keeps the ones marked x): ")
+                chosen = _numbers(text, len(members)) if text.strip() else {
+                    i for i, c in enumerate(members, start=1) if c["key"] in now}
+                if chosen is not None:
+                    break
+                print(f"  Use numbers from 1 to {len(members)}, separated by commas, with a dash for a range.")
+            keys.update(members[i - 1]["key"] for i in chosen)
+    write_pick(path, pick_block(cfg, colls, keys))
+    print(f"\nPicked {len(keys)} of {len(colls)} collections. Wrote them to `collections` in {path}.")
+    print("Nothing on your server has changed yet: `plan` shows what would be made and `apply` makes it.")
+    if now - keys:
+        print("Any collections you unpicked that CineSets already made stay on your server: `remove --unpicked` "
+              "deletes them.")
 
 
 def setup(path):
@@ -129,18 +274,24 @@ def setup(path):
         f.write(text)
     print(f"Wrote {path}.")
     print("Check it: remove any library you don't want CineSets to use, and put your main one first.")
+    if sys.stdin.isatty():
+        answer = input("\nMake every collection? Answer n to choose sections or single collections now "
+                       "(you can change this any time with `pick`). [Y/n] ").strip().lower()
+        if answer.startswith("n"):
+            pick(path)
 
 
 def main():
     ap = argparse.ArgumentParser(prog="cinesets", description="Automatic, beautiful collections for Emby and Jellyfin. By blurbery.")
-    ap.add_argument("cmd", choices=["index", "plan", "posters", "apply", "logos", "list", "schedule", "setup", "adopt", "remove",
-                                    "version"])
+    ap.add_argument("cmd", choices=["index", "plan", "posters", "apply", "logos", "list", "pick", "schedule", "setup", "adopt",
+                                    "remove", "version"])
     ap.add_argument("--only", help="comma-separated collection keys")
     ap.add_argument("--group", help="comma-separated groups")
     ap.add_argument("--min", type=int, help="skip collections with fewer matches than this")
     ap.add_argument("--config", help="path to config.yml")
     ap.add_argument("--force", action="store_true", help="logos: download again even if present")
     ap.add_argument("--all", action="store_true", help="adopt/remove: every collection in the catalogue")
+    ap.add_argument("--unpicked", action="store_true", help="remove: the ones CineSets made that config.yml no longer picks")
     ap.add_argument("--reshuffle", action="store_true", help="posters/apply: new random artwork (posters: artwork: random)")
     ap.add_argument("--yes", action="store_true", help="remove: do not ask for confirmation")
     args = ap.parse_args()
@@ -154,6 +305,9 @@ def main():
     if args.cmd == "setup":
         setup(args.config)
         return
+    if args.cmd == "pick":
+        pick(args.config)
+        return
     cfg = config.load(args.config)
     if args.cmd == "logos":
         try:
@@ -162,9 +316,10 @@ def main():
             raise SystemExit(f"Could not download logos ({e}). Posters will show service names until you run this again.")
         return
     colls = catalog.load(cfg)
+    chosen = catalog.picked(cfg, colls)
+    unpicked = [c for c in colls if c not in chosen]
     if args.cmd == "list":
-        for c in colls:
-            print(f"{c['key']:<24} {c['group']:<10} {c['name']}")
+        show_list(cfg, colls, chosen)
         return
     engine = Engine(cfg, MediaServer(cfg))
     if args.cmd == "adopt":
@@ -173,8 +328,8 @@ def main():
         engine.adopt(colls if args.all else select(colls, args.only, args.group))
         return
     if args.cmd == "remove":
-        if not (args.only or args.group or args.all):
-            raise SystemExit("remove needs --only KEYS, --group GROUPS or --all")
+        if not (args.only or args.group or args.all or args.unpicked):
+            raise SystemExit("remove needs --only KEYS, --group GROUPS, --unpicked or --all")
         owned = engine.owned_keys()
         if args.all:
             keys = owned
@@ -182,6 +337,8 @@ def main():
             keys = [k.strip() for k in (args.only or "").split(",") if k.strip()]
             if args.group:
                 keys += [c["key"] for c in colls if c["group"] in args.group.split(",")]
+            if args.unpicked:
+                keys += [k for k in owned if k not in {c["key"] for c in chosen}]
             keys = [k for k in dict.fromkeys(keys) if k in owned]
         if not keys:
             print("CineSets owns none of those collections; nothing to delete.")
@@ -199,7 +356,10 @@ def main():
         if args.reshuffle and cfg["posters"]["artwork"] != "random":
             print("Note: --reshuffle only changes posters when config.yml has posters: artwork: random")
         engine.reshuffle = args.reshuffle
-        engine.run(args.cmd, select(colls, args.only, args.group), args.min if args.min is not None else cfg["defaults"]["min_items"])
+        engine.run(args.cmd, select(chosen, args.only, args.group, unpicked),
+                   args.min if args.min is not None else cfg["defaults"]["min_items"])
+        if not (args.only or args.group):
+            note_unpicked(engine, chosen)
 
 
 if __name__ == "__main__":

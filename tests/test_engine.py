@@ -429,6 +429,26 @@ def test_streaming_and_pinned_posters_are_not_randomised(make_cfg):
     assert st["m-bttf"]["backdrop_item"] == "m2" and "artwork" not in st["m-bttf"]
 
 
+# ---------------------------------------------------------------- unpicking
+def test_unpicked_collections_are_kept_until_removed(make_cfg, monkeypatch, capsys):
+    from cinesets import cli
+    two = FRANCHISE + FRANCHISE.replace("collections:\n", "").replace("m-bttf", "m-bttf2").replace("Back to\\nthe", "Back to\\nThe")
+    cfg, srv, eng = setup_run(make_cfg, yml=two)
+    eng.run("apply", catalog.load(cfg), 8)
+    assert len(srv.collections) == 2
+    with open(cfg.path("base_dir") + "/config.yml", "a") as f:
+        f.write("collections: {exclude: [m-bttf2]}\n")
+    path = cfg.path("base_dir") + "/config.yml"
+    monkeypatch.setattr(cli, "MediaServer", lambda cfg: srv)
+    capsys.readouterr()
+    monkeypatch.setattr("sys.argv", ["cinesets", "apply", "--config", path])
+    cli.main()
+    assert len(srv.collections) == 2                                         # unpicking never deletes
+    assert "not picked any more" in capsys.readouterr().out
+    monkeypatch.setattr("sys.argv", ["cinesets", "remove", "--unpicked", "--yes", "--config", path])
+    cli.main()
+    assert [c["Name"] for c in srv.collections.values()] == ["Movies - Back to the Future"]
+
 
 def test_random_artwork_comes_from_the_top_titles_and_a_pick_further_down_is_kept(make_cfg):
     from cinesets.engine import RANDOM_FROM

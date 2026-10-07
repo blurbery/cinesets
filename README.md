@@ -36,8 +36,9 @@ sudo chown -R "$(id -un)" /opt/cinesets
 cd /opt/cinesets && ./install.sh
 ```
 
-The installer asks for your server address and API key, finds your libraries and does a dry run that doesn't
-change anything. Check `config.yml` (every setting is explained in `config.example.yml`), then:
+The installer asks for your server address and API key, finds your libraries, asks whether you want every
+collection or just some, and does a dry run that doesn't change anything. Check `config.yml` (every setting is
+explained in `config.example.yml`), then:
 
 ```bash
 ./run.sh apply
@@ -72,12 +73,29 @@ as `docker compose run --rm cinesets <command>`.
 | `./run.sh plan` | Dry run, shows what would change |
 | `./run.sh apply` | Creates and updates the collections |
 | `./run.sh posters` | Makes the posters only, with preview sheets in `data/samples` |
-| `./run.sh list` | Lists every collection and its key |
+| `./run.sh pick` | Asks which sections or collections you want and saves it in `config.yml` |
+| `./run.sh list` | Lists every section and collection with its key, and what's picked |
 | `./run.sh apply --reshuffle` | Picks new random artwork for the posters (with `artwork: random`) |
 | `./run.sh adopt --all` | Takes your collections back after a reinstall |
-| `./run.sh remove --only KEY` | Deletes a collection CineSets made (`--all` for all of them) |
+| `./run.sh remove --only KEY` | Deletes a collection CineSets made (`--unpicked` for the ones you unpicked, `--all` for all of them) |
 
 Most of them take `--only key1,key2` or `--group streaming`. `./run.sh --help` shows the rest.
+
+## Picking collections
+
+The collections come in sections: trending and charts, genres, streaming, best of, kids and family, seasonal,
+regional, and franchises and studios. Make them all, pick whole sections or pick single collections.
+`./run.sh pick` asks you a section at a time and saves your answer, or edit `collections` in `config.yml`:
+
+```yaml
+collections:
+  sections: [charts, genres, kids]   # or: all
+  include: [m-oscars]                # single collections from other sections
+  exclude: [s-trending]              # single collections to leave out
+```
+
+`./run.sh list` shows every section with its collection keys. Unpicking a collection doesn't delete it from your
+server, it just stops updating; `./run.sh remove --unpicked` deletes those.
 
 ## Poster style
 
