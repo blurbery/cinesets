@@ -4,9 +4,13 @@
 # Additional terms under AGPL-3.0 section 7 apply: see NOTICE.
 """The dashboard against the in-memory server: signing in, previews, artwork choices, saving and runs."""
 import base64
+import contextlib
 import io
 import json
 import os
+import signal
+import socket
+import subprocess
 import sys
 import threading
 import time
@@ -20,6 +24,8 @@ from cinesets import catalog, cli, config, posters, web
 from cinesets.engine import Engine
 from cinesets.store import load_json
 from conftest import FakeServer, seed_index
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 YML = """collections:
   - key: m-bttf
@@ -698,3 +704,61 @@ def test_logo_versions_are_listed_for_the_page(site):
     assert info["logo_versions"]["stan"] == [{"key": "standard", "label": "Standard", "downloaded": False}]
     netflix = [c for s in site[0]("/api/collections")[1]["sections"] for c in s["collections"] if c["key"] == "m-netflix"]
     assert netflix[0]["service"] == "netflix"
+
+
+# ---------------------------------------------------------------- starting and stopping
+def test_dashboards_starting_together_share_one_access_key(tmp_path, monkeypatch):
+    """Several dashboards (or a dashboard and `web --link`) making the access file at once: all get the same key, and
+    none reads it half written, even when writing it is slow."""
+    import json as json_module
+    real_dumps = json_module.dumps
+
+    def slow_dump(obj, f, **kw):
+        text = real_dumps(obj, **kw)
+        f.write(text[:10])
+        f.flush()
+        time.sleep(0.2)  # another process looking now would find half a file
+        f.write(text[10:])
+    monkeypatch.setattr(web.json, "dump", slow_dump)
+    path = str(tmp_path / "data" / "web.json")
+    start, keys, errors = threading.Barrier(6), [], []
+
+    def open_dashboard():
+        start.wait()
+        try:
+            keys.append(web.read_access(path)["key"])
+        except SystemExit as e:
+            errors.append(str(e))
+    threads = [threading.Thread(target=open_dashboard) for _ in range(6)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+    assert not errors and len(keys) == 6 and len(set(keys)) == 1
+    assert oct(os.stat(path).st_mode & 0o777) == "0o600"
+    assert sorted(os.listdir(tmp_path / "data")) == ["web.json"]   # no half-made files left beside it
+
+
+@pytest.mark.skipif(not hasattr(signal, "SIGTERM") or os.name == "nt", reason="needs SIGTERM")
+def test_a_stopped_dashboard_tidies_up(tmp_path):
+    """docker stop and systemctl stop send SIGTERM: the dashboard stops cleanly and takes its temporary folder with it."""
+    with socket.socket() as s:
+        s.bind(("127.0.0.1", 0))
+        port = s.getsockname()[1]
+    env = {**os.environ, "TMPDIR": str(tmp_path), "PYTHONUNBUFFERED": "1"}
+    proc = subprocess.Popen([sys.executable, "-m", "cinesets", "web", "--demo", "--port", str(port)], cwd=ROOT, env=env,
+                            stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+    try:
+        deadline = time.time() + 30
+        while time.time() < deadline:
+            with contextlib.suppress(OSError), socket.create_connection(("127.0.0.1", port), timeout=1):
+                break
+            time.sleep(0.2)
+        assert [p for p in os.listdir(tmp_path) if p.startswith("cinesets-web-")]   # it made its folder
+        proc.send_signal(signal.SIGTERM)
+        out, _ = proc.communicate(timeout=20)
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+    assert proc.returncode == 0 and "Dashboard stopped." in out
+    assert not [p for p in os.listdir(tmp_path) if p.startswith("cinesets-web-")]
