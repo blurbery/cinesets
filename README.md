@@ -160,7 +160,8 @@ A franchise from a fixed list of films. It needs `min` because there are only th
 - [Setup guide](docs/setup.md): installing, each server's address and API key, Docker, updating and uninstalling
 - [Preview](docs/preview.md): every section and poster style
 - [Dashboard tour](docs/screenshots.md): every tab of the dashboard, in pictures
-- [Dashboard guide](docs/dashboard.md): signing in, Tailscale, proxies and keeping it running
+- [Dashboard guide](docs/dashboard.md): signing in, [reaching it from another computer](docs/dashboard.md#reaching-it-from-another-computer)
+  (Tailscale, Caddy, nginx, Docker) and keeping it running
 - [How CineSets fits together](docs/architecture.md): the shared centre and the module each server gets
 
 If CineSets is useful to you, you can [sponsor me on GitHub](https://github.com/sponsors/blurbery). Thank you.

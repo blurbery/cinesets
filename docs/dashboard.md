@@ -30,7 +30,8 @@ What keeps other people and other sites out:
 
 - It listens on this machine only (127.0.0.1) unless you ask for more with `--host`.
 - Every request needs your session, which is an HttpOnly, SameSite=Strict cookie signed with a secret only this
-  machine knows. It's marked Secure behind an HTTPS proxy.
+  machine knows. It's marked Secure behind an HTTPS proxy that says the visitor used HTTPS (see
+  [Reaching it from another computer](#reaching-it-from-another-computer)).
 - Every request must also carry a header that other web sites can't add, so a page you visit elsewhere can't use
   your session.
 - Wrong keys and passwords are rate limited.
@@ -60,19 +61,27 @@ web:
 
 Or just for one run: `./run.sh web --no-sign-in`. It only works when the dashboard listens on 127.0.0.1, and then
 it answers only that machine: a browser on it, or an SSH tunnel from your own computer (which needs a login to the
-machine anyway). Anything passed on by a proxy or Tailscale, or using another name for the machine, is turned
-away. So turning sign-in off can't put an open dashboard on your network or the internet.
+machine anyway). Requests that come through Tailscale, Caddy or the nginx setups below, or use another name for the
+machine, are turned away. It isn't available for the Docker service, which listens on every address in its
+container.
+
+> [!WARNING]
+> Never put a proxy in front of a dashboard with sign-in off. A proxy on the same machine that doesn't say it's a
+> proxy (for example an nginx `proxy_pass` with no `proxy_set_header` lines) looks exactly like a browser on the
+> machine, and the dashboard can't tell it apart. Keep sign-in on whenever anything sits in front of it.
 
 ## On the internet, behind the sign-in page
 
-To reach it from anywhere, put it behind a reverse proxy with HTTPS (see below) and tell CineSets it's public:
+To reach it from anywhere, put it behind a reverse proxy with HTTPS (see
+[Reaching it from another computer](#reaching-it-from-another-computer)) and tell CineSets it's public:
 
 ```yaml
 web:
   public: true
 ```
 
-Or `./run.sh web --public` for one run. Then:
+Or `./run.sh web --public` for one run. The proxy has to serve HTTPS and send `X-Forwarded-Proto` (Caddy does on
+its own; nginx needs the line shown below). Then:
 
 - sign-ins are only taken over HTTPS;
 - browsers are told to always use HTTPS;
@@ -113,18 +122,27 @@ usual. Franchises always keep every film in their list. These are saved under `l
 - **When posters change:** on the next apply, whether that's the Apply button, `./run.sh apply` or the schedule. On
   Docker the schedule reads `config.yml` again before every job, so there's nothing to restart.
 
-## Using it from another computer
+## Reaching it from another computer
 
-Keep the dashboard on 127.0.0.1 and put something in front of it that adds HTTPS and keeps it off the open
-internet. Tailscale is the easiest.
+Keep the dashboard on 127.0.0.1 with sign-in on, and put something in front of it that adds HTTPS. Every change to
+CineSets is tested with the Caddy and nginx setups below, on their own name and under a path.
+
+| Way in | Who can reach it | HTTPS | `public: true` | Good for |
+|---|---|---|---|---|
+| [Tailscale](#tailscale) | your own devices on your tailnet | yes, with a real certificate | not needed | most people: private, nothing opened to the internet |
+| [Caddy](#caddy) | anyone who can reach Caddy | yes, certificates handled for you | yes, if it's on the internet | your own domain |
+| [nginx](#nginx) | anyone who can reach nginx | yes, with your certificate | yes, if it's on the internet | an nginx you already run |
+| [An SSH tunnel](#an-ssh-tunnel) | you, with a login to the machine | not needed: it stays on the machine | not needed | now and then, from your own computer |
+| [Your home network](#your-home-network) | anyone on your network | no | not needed | a network you fully trust |
 
 > [!CAUTION]
 > Don't open the port straight to the internet, and don't use `tailscale funnel`, which makes it public. If it
-> must be reachable from the internet, use HTTPS and add your proxy's own sign-in on top (basic auth, Authelia,
-> Authentik or similar).
+> must be reachable from the internet, use HTTPS, set `public: true`, and add your proxy's own sign-in on top
+> (basic auth, Authelia, Authentik or similar).
 
-<details>
-<summary><b>Tailscale</b></summary>
+Sign in by opening the sign-in link with the proxy's address in front: `https://cinesets.example.com/#key=...`.
+
+### Tailscale
 
 On the machine running CineSets, with the dashboard running:
 
@@ -133,18 +151,16 @@ tailscale serve --bg 8095
 ```
 
 It's then at `https://<machine>.<tailnet>.ts.net/` for devices on your tailnet only, with a proper certificate.
-If something else already uses that address, give the dashboard its own port:
-`tailscale serve --bg --https 8443 8095`. `tailscale serve reset` turns it off.
+Tailscale tells the dashboard the visitor used HTTPS, so the session cookie is marked Secure. If something else
+already uses that address, give the dashboard its own port: `tailscale serve --bg --https=8443 8095`.
+`tailscale serve reset` turns it off.
 
 Or skip `serve` and listen on the machine's Tailscale address, plain http inside your tailnet:
 `./run.sh web --host 100.x.y.z`.
 
-</details>
+### Caddy
 
-<details>
-<summary><b>Caddy</b></summary>
-
-Its own name:
+Its own name, with HTTPS set up by Caddy:
 
 ```caddy
 cinesets.example.com {
@@ -163,27 +179,64 @@ example.com {
 }
 ```
 
-</details>
+Caddy tells the dashboard when the visitor used HTTPS on its own, so there's nothing else to add.
 
-<details>
-<summary><b>nginx</b></summary>
+### nginx
+
+Its own name:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name cinesets.example.com;
+    ssl_certificate     /path/to/fullchain.pem;
+    ssl_certificate_key /path/to/privkey.pem;
+
+    location / {
+        proxy_pass http://127.0.0.1:8095;
+        proxy_set_header X-Forwarded-Proto $scheme;    # required
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+}
+```
+
+Or under a path, inside the `server` block of a site you already serve over HTTPS:
 
 ```nginx
 location = /cinesets { return 301 /cinesets/; }
 location /cinesets/ {
     proxy_pass http://127.0.0.1:8095/;    # the slash at the end takes /cinesets off
+    proxy_set_header X-Forwarded-Proto $scheme;    # required
     proxy_set_header Host $host;
-    proxy_set_header X-Forwarded-Proto $scheme;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
 }
 ```
 
-For its own name, use `location /` with `proxy_pass http://127.0.0.1:8095;` and the same headers.
+> [!IMPORTANT]
+> Keep the `X-Forwarded-Proto` line. It tells the dashboard whether the visitor used HTTPS, and it replaces
+> anything a visitor sends in that header themselves. Without it, nginx passes on whatever the browser claims, so
+> someone could sign in over plain http by pretending to be on HTTPS. `Host` and `X-Forwarded-For` are optional.
 
-</details>
+If nginx runs in Docker with its port mapped to a different one on the host, add `absolute_redirect off;` to the
+`server` block, so the redirect from `/cinesets` keeps the port people use.
 
-<details>
-<summary><b>An SSH tunnel</b></summary>
+### With Docker
+
+The `cinesets-web` service in `docker-compose.example.yml` publishes the dashboard on the host's own
+127.0.0.1:8095.
+
+- **A proxy on the host** (Tailscale, or Caddy or nginx installed on the machine) uses `127.0.0.1:8095`, exactly as
+  above.
+- **A proxy in its own container in the same compose file** uses the service's name instead:
+  `reverse_proxy cinesets-web:8095` for Caddy, `proxy_pass http://cinesets-web:8095;` for nginx.
+- **A proxy in another compose project** needs a Docker network both projects join (an `external` network), and
+  then uses `cinesets-web:8095` too.
+
+Sign-in has to stay on with Docker: the service listens on every address in its container, where sign-in off isn't
+allowed.
+
+### An SSH tunnel
 
 From your own computer:
 
@@ -193,16 +246,11 @@ ssh -L 8095:127.0.0.1:8095 you@your-server
 
 Then open the sign-in link on your own computer. It's already `http://127.0.0.1:8095/#key=...`.
 
-</details>
-
-<details>
-<summary><b>Your home network</b></summary>
+### Your home network
 
 `./run.sh web --host 0.0.0.0` listens on every address of the machine. It's plain http, so the sign-in travels
 unencrypted on your network, and anyone there who gets the link can change your settings. Tailscale or a proxy
 with HTTPS is better.
-
-</details>
 
 ## Keeping it running
 
