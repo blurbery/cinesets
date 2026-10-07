@@ -11,19 +11,19 @@
   cinesets logos   [--force]              download streaming service logos from Wikimedia Commons
   cinesets list                           show every section and collection, and which are picked
   cinesets pick                           choose sections or single collections to make (writes config.yml)
+  cinesets web     [--host H] [--port P] [--demo]   the dashboard: pick, style and preview in a web page
+  cinesets web     --link | --new-key | --set-password   its sign-in link, a new access key, or a password
   cinesets schedule                       run forever on the schedule in config.yml (for Docker)
   cinesets setup                          ask for server details and write config.yml
   cinesets adopt   --only KEYS | --all    take over existing collections with CineSets' names (after a reinstall)
   cinesets remove  --only KEYS | --all | --unpicked   delete collections CineSets created (asks first; --yes to skip)
 """
 import argparse
-import contextlib
 import getpass
 import json
 import os
 import re
 import sys
-import tempfile
 import time
 import traceback
 
@@ -73,8 +73,19 @@ DEFAULT_SCHEDULE = [
 ]
 
 
-def schedule(cfg, engine):
-    jobs = cfg.get("schedule") or DEFAULT_SCHEDULE
+def reload(path, cfg, engine):
+    """config.yml read again before each scheduled job, so changes (from the dashboard, for example) apply without a
+    restart. If it no longer loads, say so and carry on with the settings from before."""
+    try:
+        fresh = config.load(path)
+    except SystemExit as e:
+        print(f"!! config.yml has a problem, so this job uses the settings from before: {e}")
+        return cfg, engine
+    return fresh, Engine(fresh, MediaServer(fresh))
+
+
+def schedule(cfg, engine, path=None):
+    jobs = cfg.get("schedule") or DEFAULT_SCHEDULE  # the jobs themselves change only with a restart
     for job in jobs:
         if not isinstance(job, dict) or float(job.get("every_hours", 0)) <= 0:
             raise SystemExit(f"schedule: every job needs every_hours greater than 0: {job}")
@@ -85,6 +96,7 @@ def schedule(cfg, engine):
             if time.time() - last[i] >= float(job["every_hours"]) * 3600:
                 print(f"--- {time.strftime('%Y-%m-%d %H:%M')} job {i + 1}")
                 try:
+                    cfg, engine = reload(path, cfg, engine)
                     colls = catalog.load(cfg)  # re-read each time, so edits apply without a restart
                     chosen = catalog.picked(cfg, colls)
                     unpicked = [c for c in colls if c not in chosen]
@@ -153,39 +165,13 @@ def pick_block(cfg, colls, keys):
             exclude += off
         else:
             include += on
-    # quoted when YAML would read it as something else, such as `on` (true) or `123` (a number)
-    plain = lambda g: re.fullmatch(r"[a-z][a-z0-9_-]*", g) and g not in ("yes", "no", "on", "off", "true", "false", "null")
-    name = lambda g: g if plain(g) else json.dumps(g)
-    groups = {c["group"] for c in colls}
-    lines = ["collections:", "  sections: " + ("all" if set(sections) == groups else
-                                               "[" + ", ".join(name(g) for g in sections) + "]")]
-    for field, items in (("include", include), ("exclude", exclude)):
-        lines.append(f"  {field}:" + ("".join(f"\n    - {name(k)}" for k in items) if items else " []"))
-    return "\n".join(lines) + "\n"
+    every = set(sections) == {c["group"] for c in colls}
+    return config.collections_block({"sections": "all" if every else sections, "include": include, "exclude": exclude})
 
 
 def write_pick(path, block):
-    """Put the `collections` block into config.yml in place of the old one, keeping every other line and comment.
-    The file holds the API key, so it stays readable by its owner only."""
-    with open(path) as f:
-        text = f.read()
-    m = re.search(r"^collections:.*?(?=^\S|\Z)", text, flags=re.M | re.S)
-    if m:
-        gap = m.group(0)[len(m.group(0).rstrip("\n")) + 1:]  # keep the blank lines that followed the old block
-        text = text[:m.start()] + block + gap + text[m.end():]
-    else:
-        text = text.rstrip("\n") + "\n\n# Which collections to make (see config.example.yml, or run: cinesets pick)\n" + block
-    folder = os.path.dirname(os.path.abspath(path))
-    fd, tmp = tempfile.mkstemp(dir=folder, prefix=".tmp-", suffix=".yml")
-    try:
-        os.fchmod(fd, 0o600)
-        with os.fdopen(fd, "w") as f:
-            f.write(text)
-        os.replace(tmp, path)
-    except BaseException:
-        with contextlib.suppress(FileNotFoundError):
-            os.remove(tmp)
-        raise
+    """Put the `collections` block into config.yml in place of the old one (see config.write_block)."""
+    config.write_block(path, "collections", block)
 
 
 def pick(path):
@@ -283,8 +269,8 @@ def setup(path):
 
 def main():
     ap = argparse.ArgumentParser(prog="cinesets", description="Automatic, beautiful collections for Emby and Jellyfin. By blurbery.")
-    ap.add_argument("cmd", choices=["index", "plan", "posters", "apply", "logos", "list", "pick", "schedule", "setup", "adopt",
-                                    "remove", "version"])
+    ap.add_argument("cmd", choices=["index", "plan", "posters", "apply", "logos", "list", "pick", "web", "schedule", "setup",
+                                    "adopt", "remove", "version"])
     ap.add_argument("--only", help="comma-separated collection keys")
     ap.add_argument("--group", help="comma-separated groups")
     ap.add_argument("--min", type=int, help="skip collections with fewer matches than this")
@@ -294,6 +280,15 @@ def main():
     ap.add_argument("--unpicked", action="store_true", help="remove: the ones CineSets made that config.yml no longer picks")
     ap.add_argument("--reshuffle", action="store_true", help="posters/apply: new random artwork (posters: artwork: random)")
     ap.add_argument("--yes", action="store_true", help="remove: do not ask for confirmation")
+    ap.add_argument("--host", help="web: address to listen on (default from config.yml, else 127.0.0.1; 0.0.0.0 for "
+                                   "other computers too)")
+    ap.add_argument("--port", type=int, help="web: port (default from config.yml, else 8095)")
+    ap.add_argument("--no-sign-in", action="store_true", help="web: no sign-in (only for a browser on this machine)")
+    ap.add_argument("--public", action="store_true", help="web: reachable from the internet: sign-ins only over HTTPS")
+    ap.add_argument("--demo", action="store_true", help="web: try the dashboard with made-up artwork, no server")
+    ap.add_argument("--link", action="store_true", help="web: show the sign-in link and stop")
+    ap.add_argument("--new-key", action="store_true", help="web: make a new access key, signing everyone out")
+    ap.add_argument("--set-password", action="store_true", help="web: set a password to sign in with")
     args = ap.parse_args()
 
     if args.cmd == "version":
@@ -307,6 +302,15 @@ def main():
         return
     if args.cmd == "pick":
         pick(args.config)
+        return
+    if args.cmd == "web":
+        from . import web
+        what = "link" if args.link else "new-key" if args.new_key else "set-password" if args.set_password else None
+        if what:
+            web.manage(args.config, what, args.host, args.port)
+        else:
+            web.serve(args.config, args.host, args.port, args.demo, False if args.no_sign_in else None,
+                      True if args.public else None)
         return
     cfg = config.load(args.config)
     if args.cmd == "logos":
@@ -351,7 +355,7 @@ def main():
     if args.cmd == "index":
         engine.get_index(force=True)
     elif args.cmd == "schedule":
-        schedule(cfg, engine)
+        schedule(cfg, engine, args.config)
     else:
         if args.reshuffle and cfg["posters"]["artwork"] != "random":
             print("Note: --reshuffle only changes posters when config.yml has posters: artwork: random")

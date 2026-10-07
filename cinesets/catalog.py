@@ -9,6 +9,9 @@ can be a list of groups that share one block (for example charts then genres). C
 everything, and groups in `alphabetical_groups` are sorted A-Z ignoring a leading "The".
 
 Each group is a section people can pick as a whole, or collection by collection, under `collections` in config.yml.
+
+custom-collections.yml (made by the dashboard, next to config.yml) is read as well: new collections in the same
+format, and `{key, add_lists}` entries that add lists to an existing collection. Updates to CineSets never touch it.
 """
 import os
 import re
@@ -16,6 +19,7 @@ import re
 import yaml
 
 from .config import ROOT
+from .lists import SLUG
 
 NOUN = {"movie": "movies", "show": "TV shows"}
 KINDS = {"movie": "movie", "movies": "movie", "show": "show", "shows": "show", "tv": "show", "tvshows": "show", "series": "show"}
@@ -41,14 +45,62 @@ def _blocks(order):
     return out
 
 
+def read_custom(cfg):
+    """custom-collections.yml as {"sections": {...}, "collections": [...]}, empty if there is none yet."""
+    path = cfg.path("custom_collections")
+    if not os.path.exists(path):
+        return {"sections": {}, "collections": []}
+    with open(path) as f:
+        doc = yaml.safe_load(f) or {}
+    if not isinstance(doc, dict) or not isinstance(doc.get("collections") or [], list):
+        raise SystemExit(f"{path}: expected `collections:` with a list of entries")
+    return {"sections": dict(doc.get("sections") or {}), "collections": list(doc.get("collections") or [])}
+
+
+TEXT = ("label", "title", "subtitle")  # words on a poster that can be changed for one collection
+
+
+def _merge_custom(spec, custom, where):
+    """The main catalogue plus custom collections, and changes to existing ones: lists added to them, and their
+    label, title or subtitle."""
+    out, at = list(spec), {raw.get("key"): n for n, raw in enumerate(spec)}
+    for raw in custom["collections"]:
+        if not isinstance(raw, dict):
+            raise SystemExit(f"{where}: every entry must be a collection, or a key with changes to one")
+        key = raw.get("key")
+        if set(raw) > {"key"} and set(raw) <= {"key", "add_lists", *TEXT}:
+            if key not in at:
+                print(f"Note: {where}: {key!r} is not a collection any more, so the changes to it are skipped")
+                continue
+            base = dict(out[at[key]])
+            if raw.get("add_lists"):
+                if base.get("titles"):
+                    raise SystemExit(f"{where}: {key} is a fixed list of titles, lists can't be added to it")
+                added = [x for x in raw["add_lists"] if x not in (base.get("lists") or [])]
+                base["lists"], base["added_lists"] = list(base.get("lists") or []) + added, added
+            base["built_in_text"] = {f: base.get(f) for f in TEXT}
+            for field in TEXT:
+                if field in raw:
+                    base[field] = raw[field]
+            base["edited_text"] = [f for f in TEXT if f in raw]
+            out[at[key]] = base
+        elif key in at:
+            print(f"Note: {where}: there is already a collection called {key!r}, so this one is skipped")
+        else:
+            at[key] = len(out)
+            out.append({**raw, "custom": True})
+    return out
+
+
 def load(cfg):
     path = cfg.path("collections_file")
     if not os.path.exists(path) and not os.path.isabs(cfg["collections_file"]):
         path = os.path.join(ROOT, cfg["collections_file"])  # fall back to the catalogue shipped with CineSets
     with open(path) as f:
         doc = yaml.safe_load(f)
-    spec = doc["collections"]
-    names = {**SECTIONS, **(doc.get("sections") or {})}
+    custom = read_custom(cfg)
+    spec = _merge_custom(doc["collections"], custom, os.path.basename(cfg.path("custom_collections")))
+    names = {**SECTIONS, **(doc.get("sections") or {}), **custom["sections"]}
     blocks = _blocks(cfg["order"])
     alpha_groups = set(cfg["alphabetical_groups"])
     out, pos = [], {}
@@ -62,12 +114,15 @@ def load(cfg):
         if str(c["type"]).lower() not in KINDS:
             raise SystemExit(f"collections.yml: {c['key']}: type must be movie or show")
         c["kind"] = KINDS[str(c.pop("type")).lower()]
-        c.setdefault("subtitle", None)
+        bad = [x for x in c.get("lists") or [] if not (isinstance(x, str) and SLUG.match(x) and ".." not in x)]
+        if bad:
+            raise SystemExit(f"collections.yml: {c['key']}: {bad[0]!r} is not an mdblist list (like user/list-name)")
+        c["subtitle"] = c.get("subtitle") or None
         c.setdefault("accent", "purple")
         c.setdefault("lists", [])
         if c.get("titles"):
             c["titles"] = [(t, y) for t, y in c["titles"]]
-        label = cfg["labels"][c["kind"]]
+        label = str(c.get("label") or cfg["labels"][c["kind"]])
         words = " ".join(x for x in [c["title"].replace("-\n", "-").replace("\n", " "), c["subtitle"]] if x)
         twin = 0 if c["kind"] == "movie" else 1
         group = c["group"]
@@ -82,6 +137,12 @@ def load(cfg):
             sort = f"+{block:02d}{sub}_{alpha} {twin}"
         else:
             sort = f"+{block:02d}{sub}_{pair:02d}{twin} {label} - {words}"
+        if not c.get("titles"):  # how many titles: the collection's own number, then its section's, then the cap
+            limits = cfg.get("limits") or {}
+            built_in = c.get("limit", cfg["defaults"]["limit"])
+            own = (limits.get("collections") or {}).get(c["key"]) or (limits.get("sections") or {}).get(group)
+            c["limit"] = own or (min(built_in, limits["most"]) if limits.get("most") else built_in)
+            c["built_in_limit"] = built_in
         c.update({
             "section": str(names.get(group) or group.replace("-", " ").replace("_", " ").capitalize()),
             "label": label,

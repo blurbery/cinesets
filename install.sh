@@ -46,7 +46,8 @@ CineSets is installed. Check the dry run, then create your collections:
 
   ./run.sh apply
 
-To change which collections are made, run ./run.sh pick (./run.sh list shows them all).
+To pick collections, style the posters and preview them in your browser, run ./run.sh web (or ./run.sh pick
+to choose collections in the terminal).
 
 To keep them updated, install the schedule (trending every 6 hours, charts daily at 04:30, everything on
 Sundays at 05:00, in this machine's time zone):

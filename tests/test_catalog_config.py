@@ -258,7 +258,7 @@ def test_example_config_loads_with_the_documented_defaults():
     from cinesets import posters
     cfg = config.load(os.path.join(ROOT, "config.example.yml"))
     assert cfg["order"] == config.DEFAULTS["order"] and cfg["alphabetical_groups"] == ["universes"]
-    assert cfg["posters"] == {**posters.STYLE, "artwork": "random"}          # new installs get random artwork
+    assert cfg["posters"] == {**posters.STYLE, "artwork": "random", "sections": {}, "overrides": {}}   # new installs get random artwork
     assert cfg["collections"] == {"sections": "all", "include": [], "exclude": []}
 
 
@@ -278,7 +278,7 @@ def test_poster_settings_are_checked(make_cfg, bad, message):
 
 def test_poster_settings_defaults_and_spellings(make_cfg, capsys):
     from cinesets import posters
-    assert make_cfg()["posters"] == posters.STYLE
+    assert make_cfg()["posters"] == {**posters.STYLE, "sections": {}, "overrides": {}}
     style = make_cfg(extra="posters: {align: center, label_color: white, Case: upper, accent: ['#ff0000', '#00ff00']}\n")["posters"]
     assert style["align"] == "centre" and style["label_colour"] == "white" and style["accent"] == ["#ff0000", "#00ff00"]
     assert "Case" in capsys.readouterr().err                          # unknown settings are noted, not fatal

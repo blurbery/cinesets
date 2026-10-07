@@ -41,6 +41,14 @@ collections:
   include: []
   exclude: []
 
+# How many titles collections hold. `most` caps every collection (null: no cap); a section's or a collection's own
+# number replaces its usual size, up or down. Franchises always keep every film in their list. The dashboard sets
+# these too.
+limits:
+  most: null
+  sections: {}
+  collections: {}
+
 # Collections page, top to bottom. A nested list shares one block (charts then genres).
 # Collections with `pin` in collections.yml always sit above all of these.
 order:
@@ -69,6 +77,14 @@ alphabetical_groups: [universes]
 #   label            the small Movies / TV Shows label at the top: true or false
 #   label_colour     gold, white, accent (the poster's colour) or a colour like "#ffffff"
 #   subtitle_colour  white, gold, accent or a colour like "#ffffff"
+# Easiest set from the dashboard (`./run.sh web`), where you drag the text into place:
+#   label_position   where the label sits: [x, y] from 0 to 1 (its left edge, or its centre when centred, and its top)
+#   title_position   where the title sits: [x, y] (its left edge or centre, and the bottom of the subtitle)
+#   title_size       0.5 to 2 times the usual size (drag the corner of the title in the dashboard)
+#   label_size       0.5 to 2 times the usual size
+#   sections         settings for every collection in a section, like  genres: {accent: red, align: centre}
+#   overrides        settings for single collections, like  m-action: {accent: red, title_position: [0.5, 0.6]}
+#                    (a collection's own settings win over its section's, which win over the ones above)
 posters:
   artwork: random
   accent: auto
@@ -80,6 +96,18 @@ posters:
   label: true
   label_colour: gold
   subtitle_colour: white
+
+# The dashboard (`./run.sh web`). docs/dashboard.md explains each way to reach it.
+#   host     127.0.0.1: this machine only (Tailscale serve and a proxy on this machine work with it).
+#            0.0.0.0: other computers too. Put HTTPS in front either way.
+#   sign_in  false: no sign-in. Only allowed with host 127.0.0.1, and then it answers only a browser on this same
+#            machine, never through a proxy, tunnel or Tailscale.
+#   public   true when it can be reached from the internet through your HTTPS proxy: sign-ins only over HTTPS.
+web:
+  host: 127.0.0.1
+  port: 8095
+  sign_in: true
+  public: false
 
 # Seconds to pause after each write, and the slowest write (seconds) before a run stops to spare the server.
 write_pause: 1.0
