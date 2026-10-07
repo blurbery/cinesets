@@ -155,8 +155,8 @@ LIBRARY_TYPES = {"movies": "movie", "movie": "movie", "shows": "show", "show": "
 
 
 def check_type(kind):
-    from .servers import names  # each server module says which types it handles
-    known = list(names())
+    from .servers import SERVERS
+    known = list(SERVERS)
     if kind not in known:
         raise SystemExit(f"server.type must be {', '.join(known[:-1])} or {known[-1]}, not {kind!r}")
 

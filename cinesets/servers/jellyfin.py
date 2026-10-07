@@ -2,7 +2,7 @@
 # Copyright (C) 2026 blurbery
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Additional terms under AGPL-3.0 section 7 apply: see NOTICE.
-"""Emby: a thin client for the parts of its API CineSets uses, served under /emby.
+"""Jellyfin: a thin client for the parts of its API CineSets uses, served at the root.
 
 Jellyfin began as a fork of Emby and the two APIs are still close, but each server has its own module, so a change
 for one can't change what the other gets."""
@@ -18,9 +18,9 @@ from .base import Server
 PAGE = 5000
 
 
-class EmbyCalls(Server):
-    """What CineSets reads and writes on Emby, on top of get, call, timed and item. The tests' fake Emby shares
-    these, so it answers exactly the requests a real Emby server gets."""
+class JellyfinCalls(Server):
+    """What CineSets reads and writes on Jellyfin, on top of get, call, timed and item. The tests' fake Jellyfin shares
+    these, so it answers exactly the requests a real Jellyfin server gets."""
 
     def all_items(self, query, what, pause=0.0):
         """Every item an /Items query returns, a page at a time. A short page is not taken as the end, since a server
@@ -50,7 +50,7 @@ class EmbyCalls(Server):
     def library_items(self, folder, kind, name):
         """Every movie or show in a library: id, name, year, provider ids and whether it has a backdrop."""
         item_type = "Movie" if kind == "movie" else "Series"
-        # CollapseBoxSetItems=false: titles that are in a collection are listed as themselves
+        # without CollapseBoxSetItems=false, Jellyfin 12 lists a collection in place of the titles in it
         items = self.all_items(f"Recursive=true&IncludeItemTypes={item_type}&Fields=ProviderIds,ProductionYear"
                                f"&CollapseBoxSetItems=false&ParentId={folder}", f"library {name!r}", pause=0.5)
         return [{"id": it["Id"], "name": it.get("Name"), "year": it.get("ProductionYear"),
@@ -74,7 +74,7 @@ class EmbyCalls(Server):
         return {i["Id"]: i.get("Name") for i in self.all_items("IncludeItemTypes=BoxSet&Recursive=true", "collections")}
 
     def narrow(self, coll, ids):
-        """Emby collections are server-wide, so every matched title can go in."""
+        """Jellyfin collections are server-wide, so every matched title can go in."""
         return ids
 
     def create_collection(self, name, coll, ids):
@@ -83,7 +83,7 @@ class EmbyCalls(Server):
         return r.json()["Id"], took
 
     def wait_until_ready(self, cid, user_id, seconds=20):
-        """A new collection is usable once the server has given it a folder (Emby finishes this just after replying)."""
+        """A new collection is usable once the server has given it a folder, which can finish just after it replies."""
         deadline = time.time() + seconds
         while time.time() < deadline:
             try:
@@ -94,11 +94,11 @@ class EmbyCalls(Server):
             time.sleep(1)
 
     def prepare(self, cid, coll):
-        """Nothing to do: Emby collections aren't tied to a library."""
+        """Nothing to do: Jellyfin collections aren't tied to a library."""
 
     def members(self, cid, user_id):
-        # Emby lists a collection's titles without a user
-        return {i["Id"] for i in self.all_items(f"ParentId={cid}", f"collection {cid}")}
+        # Jellyfin only lists a collection's titles for a user
+        return {i["Id"] for i in self.all_items(f"ParentId={cid}&UserId={user_id}", f"collection {cid}")}
 
     def add_items(self, cid, ids):
         """Returns the slowest write."""
@@ -142,7 +142,7 @@ class EmbyCalls(Server):
         item["Name"], item["ForcedSortName"], item["SortName"] = name, coll["sort"], coll["sort"]
         item["Overview"] = coll.get("overview", "")
         item["DisplayOrder"] = coll.get("order", "PremiereDate")
-        lock = {"Name", "Overview", "SortName"}
+        lock = {"Name", "Overview"}  # Jellyfin has no lock for the sort name
         item["LockedFields"] = sorted(set(item.get("LockedFields") or []) | lock)
         return self.timed("POST", f"/Items/{cid}", json=item)[1]
 
@@ -150,26 +150,25 @@ class EmbyCalls(Server):
         self.timed("DELETE", f"/Items/{cid}")
 
     def arrange(self, owned):
-        """Nothing to do: the sort names set_details writes keep Emby's Collections page in order."""
+        """Nothing to do: the sort names set_details writes keep Jellyfin's Collections page in order."""
 
 
-class EmbyServer(EmbyCalls):
-    TYPE = "emby"
+class JellyfinServer(JellyfinCalls):
+    TYPE = "jellyfin"
     KEY_PAGE = "Dashboard > API Keys"
     SETUP_NOTE = None
 
     @staticmethod
     def trim(url):
-        """A pasted web app address works too: drop /web/index.html#... and a trailing /web or /emby."""
+        """A pasted web app address works too: drop /web/index.html#... and a trailing /web."""
         url = url.split("/web/")[0].split("/web#")[0].rstrip("/")
-        for tail in ("/web", "/emby"):
-            if url.endswith(tail):
-                url = url[: -len(tail)]
+        if url.endswith("/web"):
+            url = url[: -len("/web")]
         return url
 
     @staticmethod
     def detect(url):
-        """("emby", url, None) from the server's public information (no API key needed), or None."""
+        """("jellyfin", url, None) from the server's public information (no API key needed), or None."""
         for path in ("/System/Info/Public", "/emby/System/Info/Public"):
             try:
                 r = requests.get(url + path, timeout=10, allow_redirects=False, headers={"accept": "application/json"})
@@ -178,23 +177,23 @@ class EmbyServer(EmbyCalls):
                 continue
             if not isinstance(info, dict):
                 continue
-            product = str(info.get("ProductName") or "").lower()
-            if "jellyfin" in product:
-                return None  # Jellyfin's, not Emby's
-            if "emby" in product or info.get("ServerName") or info.get("Id"):  # Emby's public information has no product name
-                return "emby", url, None
+            if "jellyfin" in str(info.get("ProductName") or "").lower():
+                return "jellyfin", url, None
         return None
 
     def __init__(self, cfg):
         srv = cfg["server"]
         if not srv["api_key"]:
             raise SystemExit("No API key: set server.api_key in config.yml or CINESETS_API_KEY")
-        self.base = srv["url"] + "/emby"
+        self.base = srv["url"]
         warn_plain_http(srv["url"])
         self.pause = float(cfg["write_pause"])
         self.session = requests.Session()
         self.session.headers.update({"accept": "application/json", "X-Emby-Token": srv["api_key"],
                                      "User-Agent": f"CineSets/{__version__} (+https://github.com/blurbery/cinesets)"})
+        self.session.headers["Authorization"] = (
+            f'MediaBrowser Client="CineSets", Device="CineSets", DeviceId="cinesets", '
+            f'Version="{__version__}", Token="{srv["api_key"]}"')
 
     def call(self, method, path, timeout=120, **kw):
         # never follow redirects: the API key travels in headers and must not reach another host
@@ -222,7 +221,7 @@ class EmbyServer(EmbyCalls):
 
     def item(self, user_id, item_id):
         """One item with full metadata, as the edit endpoint expects it back."""
-        return self.get(f"/Users/{user_id}/Items/{item_id}")
+        return self.get(f"/Items/{item_id}?userId={user_id}")
 
 
-SERVER = EmbyServer
+SERVER = JellyfinServer

@@ -18,6 +18,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from cinesets import config  # noqa: E402
 from cinesets.servers import ServerError  # noqa: E402
 from cinesets.servers.emby import EmbyCalls  # noqa: E402
+from cinesets.servers.jellyfin import JellyfinCalls  # noqa: E402
 from cinesets.store import save_json  # noqa: E402
 
 
@@ -35,9 +36,10 @@ class Resp:
         return self._data
 
 
-class FakeServer(EmbyCalls):
-    """Collections, items and calls, all in memory. The collection operations are the real ones (EmbyCalls), so the
-    requests checked here are the ones Emby and Jellyfin get."""
+class FakeBase:
+    """Collections, items and calls, all in memory, behind the paths Emby and Jellyfin share. The collection operations
+    come from the real server module (FakeEmby uses emby.py, FakeJellyfin jellyfin.py), so the requests checked here
+    are the ones each server gets."""
 
     def __init__(self, kind="emby"):
         self.kind = kind
@@ -157,6 +159,19 @@ class FakeServer(EmbyCalls):
         tags = {"Primary": hashlib.sha1(c["image"]).hexdigest()[:12]} if c["image"] else {}  # a new image, a new tag
         return {"Id": item_id, "Name": c["Name"], "LockedFields": [], "Path": f"/collections/{item_id}", **c["meta"],
                 "ImageTags": tags}
+
+
+class FakeEmby(FakeBase, EmbyCalls):
+    pass
+
+
+class FakeJellyfin(FakeBase, JellyfinCalls):
+    pass
+
+
+def FakeServer(kind="emby"):
+    """An in-memory Emby or Jellyfin, using that server's own module."""
+    return (FakeJellyfin if kind == "jellyfin" else FakeEmby)(kind)
 
 
 @pytest.fixture

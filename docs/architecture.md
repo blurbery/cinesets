@@ -5,7 +5,7 @@ its own core around it, and the centre only ever talks to a server through one s
 So a fix for one server can't change what another one gets, and adding a server doesn't touch the centre. Back
 to the [README](../README.md).
 
-<p align="center"><img src="images/architecture.svg" alt="The CineSets centre as a nucleus ringed by the shell of server operations, with four server cores around it, each bonded to the shell: Emby and Jellyfin on one shared module, Silo on its own, and Plex, dashed, coming next" width="900"></p>
+<p align="center"><img src="images/architecture.svg" alt="The CineSets centre as a nucleus ringed by the shell of server questions, with four server cores around it, each on its own module and bonded to the shell: Emby, Jellyfin, Silo and Plex, dashed, coming next" width="900"></p>
 
 ## The centre
 
@@ -26,69 +26,73 @@ it sits on the page, without knowing which server it's talking to.
 
 ## The shell
 
-`cinesets/servers/__init__.py` lists what the centre asks of a server. Every server module answers the same
-questions:
+`cinesets/servers/base.py` is the shell: the `Server` class lists every question the centre asks a server, and
+nothing else. Each server module subclasses it and answers every question itself, including the ones where its
+answer is "nothing to do", so no server inherits behaviour it didn't choose.
 
-| Group | Operations |
+| Group | Questions |
 |---|---|
+| Setup | `TYPE` (its `server.type`), `KEY_PAGE`, `SETUP_NOTE`, `trim(url)` (tidy a pasted address) and `detect(url)` (is this my kind of server, and what's its own address? no API key needed) |
 | Reads | `media_libraries`, `library_folders`, `library_items`, `genres`, `alive`, `backdrop_image` |
-| Collections | `list_collections`, `create_collection`, `wait_until_ready`, `members`, `add_items`, `remove_items`, `upload_poster`, `set_details`, `delete_collection`, `admin_user` |
-| Setup | `NAMES`, `KEY_PAGE`, `SETUP_NOTE` and `trim(url)`: what setup says for this server and how it tidies a pasted address. `detect(url)`: is this my kind of server, and what's its own address? (no API key needed) |
-| Optional | `arrange`, `narrow` and `prepare`, for a server that orders collections by number or keeps each one in a single library (Silo) |
+| Collections | `admin_user`, `list_collections`, `create_collection`, `wait_until_ready`, `members`, `add_items`, `remove_items`, `upload_poster`, `set_details`, `delete_collection` |
+| Placement | `narrow` (which matched titles a collection can hold), `prepare` (get a collection ready before its titles change) and `arrange` (put the collections in page order after a run) |
 
-`servers.connect(cfg)` picks the module from `server.type` in `config.yml`, and `servers.detect(url)` asks each
-module in turn during setup. The engine never builds a request itself, and setup never mentions a server by name.
-`tests/test_layout.py` checks that: it fails if a server's name or API path turns up anywhere outside
-`cinesets/servers/`, or if the centre imports a server module directly.
+`SERVERS` in `cinesets/servers/__init__.py` lists the server types and their names. Each type's module is
+`cinesets/servers/<type>.py`, and `servers.connect(cfg)` loads only the one in `config.yml`, so an Emby install
+never loads Jellyfin's, Silo's or anyone else's code. Setup is the one time CineSets asks every module, to work out
+which server answers at an address.
+
+`tests/test_layout.py` keeps it that way. It fails if:
+
+- the centre asks a server anything that isn't in the shell, or checks what a server has (`hasattr`, `getattr`);
+- a server's name or API path turns up anywhere outside `cinesets/servers/`, or the centre imports a server module;
+- a server module leaves any question to the base instead of answering it;
+- loading one server loads another.
 
 ## The servers
 
-### Emby and Jellyfin: `servers/emby.py`
+| | Emby: `emby.py` | Jellyfin: `jellyfin.py` | Silo: `silo.py` |
+|---|---|---|---|
+| API | `/emby/...`, key in `X-Emby-Token` | `/...`, key in `X-Emby-Token` and a `MediaBrowser` `Authorization` header | `/api/v2/...`, `Authorization: Bearer` with an administrator's key that has no scopes |
+| A collection is | a BoxSet, shown server-wide | a BoxSet, shown server-wide | a manual library collection, in one library |
+| Which titles it can hold (`narrow`) | all of them | all of them | those in its library: the first of its type in `config.yml`, or the one holding at least two thirds of its titles (an anime or an international library, say). Setup lists each type's biggest library first |
+| A title is | Emby's item id | Jellyfin's item id | a Silo content id such as `movie-tmdb-105` |
+| Matching ids | every provider id comes with the title | every provider id comes with the title | a content id carries one; a show's others are looked up once and kept in `data/silo-ids.json` |
+| A collection's titles | read without a user | read as the administrator (Jellyfin only lists them for a user) | read from the collection |
+| Adding titles | 40 at a time | 40 at a time | one at a time, with a short pause between them |
+| Poster | uploaded as base64 | uploaded as base64 | uploaded as a file |
+| Order inside a collection | `DisplayOrder` | `DisplayOrder` | a default sort: release date or title |
+| Order on the page (`arrange`) | a locked sort name, so nothing to do | a sort name (Jellyfin can't lock it), so nothing to do | Silo's per-library order list, rewritten only when it changes and without moving collections CineSets didn't make |
 
-Emby and Jellyfin share one API (Jellyfin started as a fork of Emby), so they share one module. The few
-differences live inside it:
+Jellyfin began as a fork of Emby and their APIs are still close, so `jellyfin.py` started as a copy of `emby.py`.
+They're kept as two modules on purpose: a fix for one server can't change what the other gets, and each can follow
+its own server as the two drift apart.
 
-- **Base path:** Emby serves the API under `/emby`; Jellyfin serves it at the root.
-- **Reading a collection's titles:** Jellyfin only lists them for a user, so CineSets asks as the administrator.
-- **Locking the sort name:** Emby can lock it; Jellyfin has no such lock.
-
-### Silo: `servers/silo.py`
-
-Silo's Jellyfin-compatible port can show collections but can't make them, so this module uses Silo's own API.
-
-| | Emby and Jellyfin | Silo |
-|---|---|---|
-| API | `/emby/...` or `/...`, key in `X-Emby-Token` | `/api/v2/...`, `Authorization: Bearer` with an administrator's key that has no scopes |
-| A collection is | a BoxSet, shown server-wide | a manual library collection, in one library |
-| Which library | all of them | the first library of its type in `config.yml`, or the one holding at least two thirds of its titles (an anime or an international library, say). Setup lists each type's biggest library first |
-| A title is | the server's item id | a Silo content id such as `movie-tmdb-105` |
-| Matching ids | every provider id comes with the title | a content id carries one; a show's others are looked up once and kept in `data/silo-ids.json` |
-| Adding titles | 40 at a time | one at a time, with a short pause between them |
-| Poster | uploaded as base64 | uploaded as a file |
-| Order inside a collection | `DisplayOrder` | a default sort: release date or title |
-| Order on the page | a locked sort name | Silo's per-library order list, which CineSets rewrites only when it changes and without moving collections it didn't make |
+Silo's Jellyfin-compatible port can show collections but can't make them, so `silo.py` uses Silo's own API.
 
 ## Adding a server
 
 Plex is next. Adding it, or any other server, goes like this:
 
-1. Write `cinesets/servers/<name>.py` with a class that answers every operation in the shell. Start from
-   `silo.py` if the server has its own way of doing things, or from `emby.py` if it speaks the Emby API.
-2. Give the class its `NAMES` (its `server.type` and display name), `KEY_PAGE` and, if it needs one, a
-   `SETUP_NOTE`, and add it to `_modules()` in `cinesets/servers/__init__.py`. Setup, `config.yml` checks and the
-   help text pick it up from there.
+1. Write `cinesets/servers/<type>.py` with a class that subclasses `Server` from `base.py` and answers every
+   question in it, and end the file with `SERVER = <your class>`. Start from `silo.py` if the server keeps
+   collections per library (Plex does), or from `emby.py` if it speaks the Emby API.
+2. Add the type and its name to `SERVERS` in `cinesets/servers/__init__.py`, and to `ASK_ORDER` so setup can
+   recognise it. Setup, the `config.yml` checks and the help text pick it up from there.
 3. Add unit tests with a fake server that answers the same paths as the real one (`tests/conftest.py` and
    `tests/test_silo.py` are both examples).
 4. Add an end-to-end job in `.github/workflows/ci.yml` that runs CineSets against a real, throwaway server.
 
-Nothing in the centre should need to change. If it does, the shell is missing an operation: add it there,
-optional if only some servers need it, so the other modules stay as they are.
+Nothing in the centre should need to change. If it does, the shell is missing a question: add it to `base.py`
+and answer it in every module, so each server still says for itself what it does.
 
 ## How each part is tested
 
-- **The centre and the Emby/Jellyfin module:** `tests/test_engine.py` and `tests/test_web.py` run against an in-memory
-  server that uses the real Emby/Jellyfin operations, so they check the exact requests a server gets.
+- **The centre, Emby and Jellyfin:** `tests/test_engine.py` and `tests/test_web.py` run against an in-memory Emby or
+  Jellyfin that uses that server's real module (`emby.py` or `jellyfin.py`), so they check the exact requests each
+  server gets.
 - **Silo:** `tests/test_silo.py` runs the real Silo module against an in-memory Silo that follows its rules.
+- **The layout:** `tests/test_layout.py`, described above.
 - **Real servers:** every pull request runs CineSets end to end against throwaway Emby, Jellyfin and Silo
   servers on GitHub Actions (`tests/e2e/`). The Silo job sets up a brand-new Silo the way a new user would,
   `cinesets setup` included.

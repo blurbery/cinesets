@@ -5,10 +5,10 @@
 """Silo: a client for the parts of Silo's own API (/api/v2) CineSets uses.
 
 Silo's Jellyfin-compatible port can show collections but not make them, so CineSets talks to Silo's main address.
-Its collections are Silo library collections: manual ones, each in one library, the one most of its titles are in
-(a Silo collection can only hold titles from its libraries, and in any other library it would show up empty). Titles are Silo content ids such as movie-tmdb-105, which carry one
-provider id; the others a TV show has are looked up once and kept in data/silo-ids.json, so lists match the same
-shows they match on Emby."""
+Its collections are manual Silo library collections, each in one library: the one most of its titles are in (a Silo
+collection can only hold titles from its libraries, and in any other library it would show up empty). Titles are
+Silo content ids such as movie-tmdb-105, which carry one provider id; a TV show's others are looked up once and kept
+in data/silo-ids.json, so lists match the same shows they match on Emby."""
 import os
 import re
 import sys
@@ -21,6 +21,7 @@ import requests
 from .. import __version__
 from ..store import load_json, save_json
 from . import ServerError, warn_plain_http
+from .base import Server
 
 PAGE = 200            # the most Silo sends in one page
 ID_LOOKUP_PAUSE = 0.05
@@ -57,9 +58,8 @@ def _own_api(url):
     return bool(info and info.get("api_major") and "contract_digest" in info)
 
 
-class SiloServer:
-    kind = "silo"
-    NAMES = {"silo": "Silo"}
+class SiloServer(Server):
+    TYPE = "silo"
     KEY_PAGE = "Admin > API keys"
     SETUP_NOTE = ("CineSets needs a Silo API key that belongs to an administrator and has no scopes. Make one under "
                   "Admin > API keys (name it CineSets).")
@@ -418,3 +418,6 @@ class SiloServer:
                 moved += 1
         if moved:
             print(f"Put the collections in order in {moved} libraries.")
+
+
+SERVER = SiloServer

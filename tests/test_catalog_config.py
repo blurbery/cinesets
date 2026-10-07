@@ -12,7 +12,7 @@ import pytest
 import yaml
 
 from cinesets import catalog, cli, config
-from cinesets.servers import emby as server
+from cinesets.servers import ServerError, emby, jellyfin
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -174,12 +174,18 @@ def test_setup_works_out_the_server_from_its_address(monkeypatch, answers, found
     assert seen["allow_redirects"] is False and "X-Emby-Token" not in (seen.get("headers") or {})   # no key sent
 
 
+def serve_libraries(monkeypatch, answer):
+    """Whichever server setup connects to (Emby or Jellyfin), its library listing gives `answer`."""
+    for cls in (emby.EmbyServer, jellyfin.JellyfinServer):
+        monkeypatch.setattr(cls, "get", answer)
+
+
 def test_setup_asks_when_it_cannot_tell(tmp_path, monkeypatch):
     monkeypatch.setattr(cli, "detect_server", lambda url: None)
     answers = iter(["192.0.2.10:8096", "jellyfin"])
     monkeypatch.setattr(builtins, "input", lambda prompt="": next(answers))
     monkeypatch.setattr(getpass, "getpass", lambda prompt="": "key")
-    monkeypatch.setattr(server.MediaServer, "get", lambda self, path: [{"Name": "Movies", "CollectionType": "movies"}])
+    serve_libraries(monkeypatch, lambda self, path: [{"Name": "Movies", "CollectionType": "movies"}])
     cli.setup(str(tmp_path / "config.yml"))
     assert config.load(str(tmp_path / "config.yml"))["server"]["type"] == "jellyfin"
 
@@ -189,7 +195,7 @@ def test_setup_writes_private_valid_config(tmp_path, monkeypatch):
     answers = iter(["192.0.2.10:8096"])
     monkeypatch.setattr(builtins, "input", lambda prompt="": next(answers))
     monkeypatch.setattr(getpass, "getpass", lambda prompt="": 'k"ey\\with: odd')
-    monkeypatch.setattr(server.MediaServer, "get", lambda self, path: [
+    serve_libraries(monkeypatch, lambda self, path: [
         {"Name": 'Kid\'s "Films"', "CollectionType": "movies"}, {"Name": "Music", "CollectionType": "music"},
         {"Name": "TV: All", "CollectionType": "tvshows"}])
     out = tmp_path / "config.yml"
@@ -206,7 +212,7 @@ def test_setup_uses_cinesets_config(tmp_path, monkeypatch):
     answers = iter([""])
     monkeypatch.setattr(builtins, "input", lambda prompt="": next(answers))
     monkeypatch.setattr(getpass, "getpass", lambda prompt="": "key")
-    monkeypatch.setattr(server.MediaServer, "get", lambda self, path: [{"Name": "Movies", "CollectionType": "movies"}])
+    serve_libraries(monkeypatch, lambda self, path: [{"Name": "Movies", "CollectionType": "movies"}])
     cli.setup(None)
     assert target.exists()
 
@@ -215,7 +221,7 @@ def test_setup_stops_without_libraries(tmp_path, monkeypatch):
     answers = iter([""])
     monkeypatch.setattr(builtins, "input", lambda prompt="": next(answers))
     monkeypatch.setattr(getpass, "getpass", lambda prompt="": "key")
-    monkeypatch.setattr(server.MediaServer, "get", lambda self, path: [{"Name": "Mixed", "CollectionType": None}])
+    serve_libraries(monkeypatch, lambda self, path: [{"Name": "Mixed", "CollectionType": None}])
     with pytest.raises(SystemExit, match="no Movies or TV"):
         cli.setup(str(tmp_path / "config.yml"))
     assert not (tmp_path / "config.yml").exists()
@@ -227,24 +233,25 @@ class _Resp:
         self.status_code, self.headers, self.text = status, headers or {}, ""
 
 
-def test_redirects_are_refused(make_cfg, monkeypatch):
-    srv = server.MediaServer(make_cfg())
+@pytest.mark.parametrize("kind", ["emby", "jellyfin"])
+def test_redirects_are_refused(make_cfg, monkeypatch, kind):
+    srv = {"emby": emby.EmbyServer, "jellyfin": jellyfin.JellyfinServer}[kind](make_cfg(kind))
     seen = {}
 
     def fake_request(method, url, **kw):
         seen.update(kw)
         return _Resp(302, {"Location": "https://sso.example.com/login"})
     monkeypatch.setattr(srv.session, "request", fake_request)
-    with pytest.raises(server.ServerError, match="redirected"):
+    with pytest.raises(ServerError, match="redirected"):
         srv.get("/Users")
     assert seen["allow_redirects"] is False
 
 
 def test_paths_and_auth_per_server(make_cfg):
-    emby = server.MediaServer(make_cfg("emby"))
-    jelly = server.MediaServer(make_cfg("jellyfin"))
-    assert emby.base.endswith("/emby") and not jelly.base.endswith("/emby")
-    assert "Authorization" not in emby.session.headers and 'Token="test-key"' in jelly.session.headers["Authorization"]
+    em = emby.EmbyServer(make_cfg("emby"))
+    jelly = jellyfin.JellyfinServer(make_cfg("jellyfin"))
+    assert em.base.endswith("/emby") and not jelly.base.endswith("/emby")
+    assert "Authorization" not in em.session.headers and 'Token="test-key"' in jelly.session.headers["Authorization"]
 
 
 @pytest.mark.parametrize("url, warns", [("http://127.0.0.1:8096", False), ("http://10.20.30.40:8096", False),
@@ -253,7 +260,7 @@ def test_paths_and_auth_per_server(make_cfg):
                                         ("https://media.example.com", False)])
 def test_plain_http_warning(make_cfg, monkeypatch, capsys, url, warns):
     monkeypatch.setenv("CINESETS_URL", url)
-    server.MediaServer(make_cfg())
+    emby.EmbyServer(make_cfg())
     assert ("plain http" in capsys.readouterr().err) == warns
 
 
@@ -271,7 +278,7 @@ def test_setup_tightens_an_existing_file(tmp_path, monkeypatch):
     answers = iter(["y", "http://192.0.2.10:8096/web/index.html#!/home"])
     monkeypatch.setattr(builtins, "input", lambda prompt="": next(answers))
     monkeypatch.setattr(getpass, "getpass", lambda prompt="": "key")
-    monkeypatch.setattr(server.MediaServer, "get", lambda self, path: [{"Name": "Movies", "CollectionType": "movies"}])
+    serve_libraries(monkeypatch, lambda self, path: [{"Name": "Movies", "CollectionType": "movies"}])
     cli.setup(str(out))
     assert oct(os.stat(out).st_mode & 0o777) == "0o600"
     assert config.load(str(out))["server"]["url"] == "http://192.0.2.10:8096"   # pasted browser address trimmed
@@ -283,8 +290,8 @@ def test_setup_reports_a_rejected_key(tmp_path, monkeypatch):
     monkeypatch.setattr(getpass, "getpass", lambda prompt="": "wrong")
 
     def rejected(self, path):
-        raise server.ServerError("GET /Library/VirtualFolders -> 401", 401)
-    monkeypatch.setattr(server.MediaServer, "get", rejected)
+        raise ServerError("GET /Library/VirtualFolders -> 401", 401)
+    serve_libraries(monkeypatch, rejected)
     with pytest.raises(SystemExit, match="rejected the API key"):
         cli.setup(str(tmp_path / "config.yml"))
 
@@ -304,7 +311,7 @@ def test_setup_trims_emby_web_address(tmp_path, monkeypatch):
     answers = iter(["http://192.0.2.10:8096/emby/web/index.html#!/home"])
     monkeypatch.setattr(builtins, "input", lambda prompt="": next(answers))
     monkeypatch.setattr(getpass, "getpass", lambda prompt="": "key")
-    monkeypatch.setattr(server.MediaServer, "get", lambda self, path: [{"Name": "Movies", "CollectionType": "movies"}])
+    serve_libraries(monkeypatch, lambda self, path: [{"Name": "Movies", "CollectionType": "movies"}])
     cli.setup(str(tmp_path / "config.yml"))
     assert config.load(str(tmp_path / "config.yml"))["server"]["url"] == "http://192.0.2.10:8096"
 
