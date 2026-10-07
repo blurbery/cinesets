@@ -6,8 +6,8 @@
 
   cinesets index                          refresh the library index
   cinesets plan    [--only KEYS] [--group GROUPS]   dry run: what each collection would contain
-  cinesets posters [--only KEYS] [--group GROUPS]   build posters and contact sheets, no server writes
-  cinesets apply   [--only KEYS] [--group GROUPS]   create or update collections
+  cinesets posters [--only KEYS] [--group GROUPS] [--reshuffle]   build posters and contact sheets, no server writes
+  cinesets apply   [--only KEYS] [--group GROUPS] [--reshuffle]   create or update collections
   cinesets logos   [--force]              download streaming service logos from Wikimedia Commons
   cinesets list                           show every collection key, group and name
   cinesets schedule                       run forever on the schedule in config.yml (for Docker)
@@ -141,6 +141,7 @@ def main():
     ap.add_argument("--config", help="path to config.yml")
     ap.add_argument("--force", action="store_true", help="logos: download again even if present")
     ap.add_argument("--all", action="store_true", help="adopt/remove: every collection in the catalogue")
+    ap.add_argument("--reshuffle", action="store_true", help="posters/apply: new random artwork (posters: artwork: random)")
     ap.add_argument("--yes", action="store_true", help="remove: do not ask for confirmation")
     args = ap.parse_args()
 
@@ -195,6 +196,9 @@ def main():
     elif args.cmd == "schedule":
         schedule(cfg, engine)
     else:
+        if args.reshuffle and cfg["posters"]["artwork"] != "random":
+            print("Note: --reshuffle only changes posters when config.yml has posters: artwork: random")
+        engine.reshuffle = args.reshuffle
         engine.run(args.cmd, select(colls, args.only, args.group), args.min if args.min is not None else cfg["defaults"]["min_items"])
 
 

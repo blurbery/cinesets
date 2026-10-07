@@ -3,6 +3,7 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Additional terms under AGPL-3.0 section 7 apply: see NOTICE.
 """Test helpers: an in-memory media server that speaks the small part of the Emby/Jellyfin API CineSets uses."""
+import hashlib
 import io
 import os
 import sys
@@ -101,7 +102,7 @@ class FakeServer:
         if method == "GET" and len(parts) == 4 and parts[0] == "Items" and parts[2] == "Images":
             if self.fail_backdrop:
                 return Resp(content=b"")  # a broken download
-            return Resp(content=jpeg_bytes())
+            return Resp(content=jpeg_bytes(tuple(sum(map(ord, parts[1])) * k % 256 for k in (37, 91, 53))))  # one per item
         if method == "POST" and u.path == "/Collections":
             if self.timeout_on_create:
                 import requests
@@ -151,7 +152,7 @@ class FakeServer:
     def item(self, user_id, item_id):
         self.calls.append(("GET", f"item {item_id}"))
         c = self.collections[item_id]
-        tags = {"Primary": "tag"} if c["image"] else {}
+        tags = {"Primary": hashlib.sha1(c["image"]).hexdigest()[:12]} if c["image"] else {}  # a new image, a new tag
         return {"Id": item_id, "Name": c["Name"], "LockedFields": [], "Path": f"/collections/{item_id}", **c["meta"],
                 "ImageTags": tags}
 

@@ -21,6 +21,8 @@ DEFAULTS = {
     "alphabetical_groups": ["universes"],
     "write_pause": 1.0,
     "slow_write_limit": 30,
+    # poster colours, text and artwork: see posters.STYLE
+    "posters": {},
 }
 
 
@@ -59,6 +61,10 @@ def load(path=None):
         if t not in LIBRARY_TYPES:
             raise SystemExit(f"library {lib.get('name')!r}: type must be movie or show, not {lib.get('type')!r}")
         lib["type"] = LIBRARY_TYPES[t]
+    from . import posters  # here, not at the top: posters reads ROOT from this module
+    if not isinstance(cfg["posters"], dict):
+        raise SystemExit("config.yml: posters must be a list of settings (see config.example.yml)")
+    cfg["posters"] = posters.check_style(cfg["posters"])
     return cfg
 
 

@@ -12,6 +12,7 @@ import contextlib
 import hashlib
 import json
 import os
+import random
 import re
 import time
 
@@ -23,6 +24,7 @@ from .server import ServerError
 from .store import load_json, save_json
 
 SAFE_ID = re.compile(r"^[A-Za-z0-9-]+$")
+RANDOM_FROM = 25  # random artwork comes from the top titles of a collection, so posters show ones people know
 
 INDEX_MAX_AGE = 20 * 3600
 PAGE = 5000
@@ -35,8 +37,11 @@ def chunks(seq, n=40):
 
 
 class Engine:
-    def __init__(self, cfg, server):
+    def __init__(self, cfg, server, rng=None):
         self.cfg, self.srv = cfg, server
+        self.style = cfg["posters"]
+        self.rng = rng or random.Random()
+        self.reshuffle = False  # pick new random artwork this run (posters.artwork: random)
         self.data = cfg.path("data_dir")
         self.index_file = os.path.join(self.data, "index.json")
         self.state_file = os.path.join(self.data, "state.json")
@@ -139,39 +144,70 @@ class Engine:
 
     # ------------------------------------------------------------ posters
     def poster_for(self, coll, ids, index, state, used):
-        """Build the poster once and keep it, so daily list churn does not re-upload artwork."""
+        """Build the poster once and keep it, so daily list churn does not re-upload artwork.
+
+        With posters.artwork set to random, each install picks its own artwork from the top titles in the collection
+        (ignoring backdrop_title, so no two servers look alike) and keeps it until --reshuffle. Streaming service
+        posters, and collections pinned to one item with backdrop_item, are left as they are."""
         os.makedirs(self.posters, exist_ok=True)
         os.makedirs(self.backdrops, exist_ok=True)
         out = os.path.join(self.posters, coll["key"] + ".jpg")
         st = state.setdefault(coll["key"], {})
+        logo = coll.get("logo")
+        random_art = self.style["artwork"] == "random" and not logo and not coll.get("backdrop_item")
         parts = [coll["label"], coll["title"], coll.get("subtitle"), coll["accent"], coll.get("backdrop_item"), coll.get("backdrop_title")]
-        if coll.get("logo"):
-            parts.append("logo:" + coll["logo"])
+        if logo:
+            parts.append("logo:" + logo)
+        # only settings changed from the defaults go in, so posters made before these settings existed are kept
+        changed = posters.style_changes(self.style, logo=bool(logo))
+        if changed:
+            parts.append("style:" + json.dumps(changed, sort_keys=True))
+        if random_art:
+            parts.append("artwork:random")
         design = json.dumps(parts)
-        if os.path.exists(out) and st.get("design") == design:
+        if os.path.exists(out) and st.get("design") == design and not (random_art and self.reshuffle):
             used.add(st.get("backdrop_item"))
             return out
         pick = coll.get("backdrop_item")
-        if not pick and coll.get("backdrop_title"):
+        if not pick and coll.get("backdrop_title") and not random_art:
             pick = next((i for i in ids if index["items"][i]["n"] == coll["backdrop_title"] and index["items"][i]["b"]), None)
             if not pick:
                 print(f"   {coll['key']}: backdrop title {coll['backdrop_title']!r} not in this collection, using the default")
         if not pick:
             candidates = [i for i in ids if index["items"].get(i, {}).get("b")]
-            pick = next((i for i in candidates if i not in used), candidates[0] if candidates else None)
+            if random_art:
+                pick = self.random_pick(candidates, st, used)
+            else:
+                pick = next((i for i in candidates if i not in used), candidates[0] if candidates else None)
         bd = None
         if pick and SAFE_ID.match(str(pick)):
             used.add(pick)
             bd = self.backdrop(pick)
-        if coll.get("logo"):
-            posters.make_logo_poster(out, coll["label"], coll["logo"], self.logos, coll.get("subtitle") or "Popular", bd, coll["title"])
+        if logo:
+            posters.make_logo_poster(out, coll["label"], logo, self.logos, coll.get("subtitle") or "Popular", bd, coll["title"],
+                                     self.style)
         else:
-            posters.make_poster(out, coll["label"], coll["title"], coll.get("subtitle"), coll["accent"], bd)
+            posters.make_poster(out, coll["label"], coll["title"], coll.get("subtitle"), coll["accent"], bd, self.style)
         if bd or not pick:
             st["design"], st["backdrop_item"] = design, pick
+            if random_art:
+                st["artwork"] = "random"
+            else:
+                st.pop("artwork", None)
         else:
             st.pop("design", None)  # the artwork could not be fetched: build the poster again next run
         return out
+
+    def random_pick(self, candidates, st, used):
+        """A random title from the top of the collection. A random pick from an earlier run is kept while it is still
+        anywhere in the collection (so list churn or a colour change keeps the picture) unless this is a reshuffle;
+        a pick made before random was switched on is not."""
+        kept = st.get("backdrop_item")
+        if st.get("artwork") == "random" and not self.reshuffle and kept in candidates and kept not in used:
+            return kept
+        top = candidates[:RANDOM_FROM]
+        pool = [i for i in top if i not in used and i != kept] or [i for i in top if i != kept] or top
+        return self.rng.choice(pool) if pool else None
 
     def backdrop(self, item_id):
         """Download an item's backdrop once. A failed or broken download is never left on disk."""

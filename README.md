@@ -73,10 +73,27 @@ as `docker compose run --rm cinesets <command>`.
 | `./run.sh apply` | Creates and updates the collections |
 | `./run.sh posters` | Makes the posters only, with preview sheets in `data/samples` |
 | `./run.sh list` | Lists every collection and its key |
+| `./run.sh apply --reshuffle` | Picks new random artwork for the posters (with `artwork: random`) |
 | `./run.sh adopt --all` | Takes your collections back after a reinstall |
 | `./run.sh remove --only KEY` | Deletes a collection CineSets made (`--all` for all of them) |
 
 Most of them take `--only key1,key2` or `--group streaming`. `./run.sh --help` shows the rest.
+
+## Poster style
+
+Colours, shading and text are settings under `posters` in `config.yml`. New installs also give every server its
+own random artwork from its library, so no two look the same (streaming posters keep their own look).
+`config.example.yml` explains every setting.
+
+```yaml
+posters:
+  artwork: random    # or fixed
+  accent: auto       # each collection's own colour, or one for all: silver, orange, "#ff3366" and more
+  shade: medium      # light, medium or dark
+  title: gradient    # gradient, solid or white
+  align: left        # left or centre
+  case: normal       # normal or upper
+```
 
 ## Your own collections
 
