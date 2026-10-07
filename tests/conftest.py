@@ -16,7 +16,8 @@ from PIL import Image
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from cinesets import config  # noqa: E402
-from cinesets.server import ServerError  # noqa: E402
+from cinesets.servers import ServerError  # noqa: E402
+from cinesets.servers.emby import EmbyCalls  # noqa: E402
 from cinesets.store import save_json  # noqa: E402
 
 
@@ -34,8 +35,9 @@ class Resp:
         return self._data
 
 
-class FakeServer:
-    """Collections, items and calls, all in memory."""
+class FakeServer(EmbyCalls):
+    """Collections, items and calls, all in memory. The collection operations are the real ones (EmbyCalls), so the
+    requests checked here are the ones Emby and Jellyfin get."""
 
     def __init__(self, kind="emby"):
         self.kind = kind

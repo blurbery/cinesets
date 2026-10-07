@@ -29,9 +29,8 @@ import traceback
 
 import requests
 
-from . import __version__, catalog, config, logos
+from . import __version__, catalog, config, logos, servers
 from .engine import Engine
-from .server import MediaServer
 
 
 def select(colls, only=None, group=None, unpicked=()):
@@ -81,7 +80,7 @@ def reload(path, cfg, engine):
     except SystemExit as e:
         print(f"!! config.yml has a problem, so this job uses the settings from before: {e}")
         return cfg, engine
-    return fresh, Engine(fresh, MediaServer(fresh))
+    return fresh, Engine(fresh, servers.connect(fresh))
 
 
 def schedule(cfg, engine, path=None):
@@ -214,21 +213,8 @@ def pick(path):
 
 
 def detect_server(url):
-    """emby or jellyfin, from the server's public information (no API key needed), or None if it can't tell."""
-    for path in ("/System/Info/Public", "/emby/System/Info/Public"):
-        try:
-            r = requests.get(url + path, timeout=10, allow_redirects=False, headers={"accept": "application/json"})
-            info = r.json() if r.status_code == 200 else None
-        except (requests.RequestException, ValueError):
-            continue
-        if not isinstance(info, dict):
-            continue
-        product = str(info.get("ProductName") or "").lower()
-        if "jellyfin" in product:
-            return "jellyfin"
-        if "emby" in product or info.get("ServerName") or info.get("Id"):  # Emby's public information has no product name
-            return "emby"
-    return None
+    """Which server answers at `url`, from its public information (no API key needed), or None if it can't tell."""
+    return servers.detect(url)
 
 
 def setup(path):
@@ -245,7 +231,7 @@ def setup(path):
             url = url[: -len(tail)]
     kind = detect_server(url)
     if kind:
-        print(f"Found {'Jellyfin' if kind == 'jellyfin' else 'Emby'} at {url}.")
+        print(f"Found {servers.NAMES[kind]} at {url}.")
     else:
         kind = input("Couldn't tell what server that is. Emby or Jellyfin? [emby]: ").strip().lower() or "emby"
         config.check_type(kind)
@@ -253,7 +239,7 @@ def setup(path):
     cfg = config.Config(config._merge(config.DEFAULTS, {"server": {"type": kind, "url": url, "api_key": key}}))
     cfg["base_dir"] = os.path.dirname(os.path.abspath(path))
     try:
-        folders = MediaServer(cfg).get("/Library/VirtualFolders")
+        libs = servers.connect(cfg).media_libraries()
     except requests.RequestException as e:
         raise SystemExit(f"Could not reach the server at {url}: {type(e).__name__}. Check the address.")
     except RuntimeError as e:
@@ -261,8 +247,6 @@ def setup(path):
         if status in (401, 403):
             raise SystemExit("The server rejected the API key. Check it under Dashboard > API Keys.")
         raise SystemExit(f"The server at {url} answered unexpectedly ({e}). Check the address and the API key.")
-    libs = [(f["Name"], {"movies": "movie", "tvshows": "show"}[f.get("CollectionType")])
-            for f in folders if f.get("CollectionType") in ("movies", "tvshows")]
     if not libs:
         raise SystemExit("Connected, but found no Movies or TV Shows libraries. Add them to config.yml by hand "
                          "(see config.example.yml).")
@@ -347,7 +331,7 @@ def main():
     if args.cmd == "list":
         show_list(cfg, colls, chosen)
         return
-    engine = Engine(cfg, MediaServer(cfg))
+    engine = Engine(cfg, servers.connect(cfg))
     if args.cmd == "adopt":
         if not (args.only or args.group or args.all):
             raise SystemExit("adopt needs --only KEYS, --group GROUPS or --all")
