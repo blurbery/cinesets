@@ -6,17 +6,17 @@ These are from `./run.sh web --demo`, which uses made-up artwork. On your own se
 your library, and streaming posters show the services' logos. [docs/dashboard.md](dashboard.md) explains how to
 use it, and [the preview](preview.md) shows the posters themselves, section by section.
 
-## Design
+## Design, each poster
 
-One collection's poster, with its label and title ready to drag or resize from the corner, and the style settings
-on the right.
+Editing one poster on its own: drag its label and title, or resize them from the corner, change its colours and
+text on the right, and choose its artwork and words further down.
 
 ![The Design tab](images/dashboard.jpg)
 
-## Designing a whole section
+## Design, whole section
 
-Every poster in Popular genres follows these settings, here with the text centred. The strip underneath shows how
-it looks across the section.
+Editing every poster in Popular genres at once: the text and the poster colour, shade and tint, here with the text
+centred. A strip underneath shows how it looks across the section.
 
 ![Designing a whole section](images/dashboard-section.jpg)
 

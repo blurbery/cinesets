@@ -207,7 +207,7 @@
 
       <!-- Design: list, poster editor and style controls -->
       <section id="panel-design" class="panel-design" role="tabpanel" aria-labelledby="tab-design">
-        <nav class="dlist" aria-label="Choose a collection to design">
+        <nav id="dlist-nav" class="dlist" aria-label="Choose a section to design">
           <div class="dlist-head">
             <div class="search search-small">
               <svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="6.5" fill="none" stroke="currentColor" stroke-width="2"/><path d="M16 16l4 4" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
@@ -215,21 +215,21 @@
             </div>
           </div>
           <div id="dlist" class="dlist-body"></div>
+          <p id="dlist-empty" class="empty dlist-empty" hidden>Nothing matches your search.</p>
         </nav>
 
         <div id="centre" class="centre">
           <div id="scopebar" class="scopebar">
             <div class="scopebar-inner">
-              <div class="seg seg-scope" role="radiogroup" aria-label="What you're editing">
-                <label class="seg-opt"><input class="vh" type="radio" name="scope" value="all" checked><span>All posters</span></label>
-                <label class="seg-opt"><input class="vh" type="radio" name="scope" value="section"><span>Whole section</span></label>
-                <label class="seg-opt"><input class="vh" type="radio" name="scope" value="collection"><span>This collection</span></label>
+              <div class="seg seg-scope" role="radiogroup" aria-label="Design mode">
+                <label class="seg-opt"><input class="vh" type="radio" name="mode" value="section" checked><span>Whole section</span></label>
+                <label class="seg-opt"><input class="vh" type="radio" name="mode" value="poster"><span>Each poster</span></label>
               </div>
-              <div class="scope-row">
+              <div id="mode-banner" class="mode-banner">
                 <p id="scope-line" class="scope-line" role="status" aria-live="polite"></p>
                 <button id="scope-reset" class="btn btn-small btn-danger-text" type="button" hidden>Reset this section</button>
               </div>
-              <p id="stream-sec-note" class="scope-sub" hidden>Streaming posters keep their artwork, logo and layout. Only the text settings change.</p>
+              <p id="stream-sec-note" class="scope-sub" hidden>Streaming posters keep their own artwork and layout, so only the text and logo settings change them.</p>
               <p id="deeper-note" class="scope-sub scope-sub-info" hidden></p>
             </div>
           </div>
@@ -243,7 +243,7 @@
                   <span id="ed-off" class="tag tag-muted" hidden>Off</span>
                 </div>
               </div>
-              <label class="switch-field">
+              <label id="ed-picked-field" class="switch-field">
                 <span>Collection on</span>
                 <input id="ed-picked" class="switch" type="checkbox" role="switch">
               </label>
@@ -272,7 +272,14 @@
               <div id="strip-row" class="strip-row"></div>
             </section>
 
-            <p id="stream-note" class="note" hidden>Streaming posters keep their own look; only the text settings apply</p>
+            <p id="stream-note" class="note" hidden>The artwork is the service's own. Choose its logo below.</p>
+
+            <section id="logo-panel" class="card logocard" aria-labelledby="logo-heading" hidden>
+              <div class="artwork-head">
+                <h2 id="logo-heading">Logo</h2>
+              </div>
+              <div id="logo-body" class="logo-body"></div>
+            </section>
 
             <div id="pos-actions" class="pos-actions">
               <button id="reset-label" class="btn btn-small" type="button">Reset label position</button>

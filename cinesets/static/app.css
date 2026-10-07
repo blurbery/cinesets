@@ -439,34 +439,42 @@ select.field { appearance: auto; }
 .dlist { display: flex; flex-direction: column; min-height: 0; background: var(--panel); border-right: 1px solid var(--line); }
 .dlist-head { flex: none; padding: 12px 12px 8px; }
 .dlist-body { flex: 1; min-height: 0; overflow-y: auto; padding: 2px 8px 24px; }
-.dl-sec { margin-bottom: 2px; }
-.dl-sec-head { display: flex; align-items: center; border-radius: var(--radius-xs); }
-.dl-sec-head:hover { background: var(--fill-3); }
-.dl-chev {
-  flex: none;
-  display: flex; align-items: center;
-  padding: 7px 2px 7px 6px;
+.dl-sec { margin-bottom: 4px; }
+.dl-sec-head { margin: 0; font: inherit; }
+/* section headings in Each poster mode are labels: the button only shows or hides the posters */
+.dl-head {
+  width: 100%;
+  display: flex; align-items: center; gap: 5px;
+  padding: 10px 6px 5px;
   border: 0; border-radius: var(--radius-xs);
   background: none;
+  text-align: left;
   color: var(--muted);
+  font-size: 11.5px; font-weight: 650; letter-spacing: 0.06em; text-transform: uppercase;
 }
-.dl-sec-btn {
-  flex: 1; min-width: 0;
-  display: flex; align-items: center; gap: 7px;
-  padding: 7px 8px 7px 4px;
+.dl-head:hover { color: var(--text-2); }
+.dl-head .chev { width: 13px; height: 13px; }
+.dl-head-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+/* Whole section mode: Every section, then each section */
+.dl-pick {
+  width: 100%;
+  display: flex; align-items: center; gap: 8px;
+  margin-bottom: 2px;
+  padding: 8px 10px;
   border: 0; border-radius: var(--radius-xs);
   background: none;
   text-align: left;
   font-size: 13px; font-weight: 600;
   color: var(--text);
 }
-.dl-sec-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.dl-sec.is-current > .dl-sec-head .dl-sec-name { color: var(--blue-hover); }
-.dl-sec.is-scope > .dl-sec-head { background: var(--blue); }
-.dl-sec.is-scope > .dl-sec-head .dl-sec-name, .dl-sec.is-scope > .dl-sec-head .dl-chev { color: #fff; }
-.dl-sec.is-scope > .dl-sec-head .dot { background: #fff; }
-.dlist-body.scope-section .dl-col.is-selected { background: var(--fill-2); color: var(--text); }
-.dlist-body.scope-section .dl-col.is-selected .dot { background: var(--blue); }
+.dl-pick:hover { background: var(--fill-3); }
+.dl-pick.is-selected { background: var(--blue); color: #fff; }
+.dl-pick.is-selected .dot { background: #fff; }
+.dl-pick.is-selected .dl-count { color: rgba(255, 255, 255, 0.8); }
+.dl-count { flex: none; color: var(--muted); font-size: 12px; font-weight: 500; font-variant-numeric: tabular-nums; }
+.dl-every { margin-top: 2px; }
+.dl-divider { height: 1px; margin: 6px 4px 8px; background: var(--line); }
+.dlist .dlist-empty { padding: 16px 12px; font-size: 12.5px; }
 .dl-list { list-style: none; margin: 0 0 6px; padding: 0 0 0 14px; }
 .dl-col {
   width: 100%;
@@ -498,9 +506,19 @@ select.field { appearance: auto; }
   backdrop-filter: saturate(160%) blur(16px);
 }
 .scopebar-inner { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; gap: 7px; }
-.scopebar .seg-scope { width: min(480px, 100%); }
+.scopebar .seg-scope { width: min(340px, 100%); }
+/* the banner saying exactly what is being edited */
+.mode-banner {
+  width: 100%;
+  display: flex; align-items: center; justify-content: center; flex-wrap: wrap; gap: 6px 14px;
+  padding: 9px 14px;
+  border: 1px solid rgba(64, 156, 255, 0.45);
+  border-radius: var(--radius-s);
+  background: var(--blue-soft);
+}
+.mode-banner .scope-line { color: #e4f0ff; font-size: 14px; }
+.mode-banner .btn-danger-text { background: rgba(255, 69, 58, 0.14); }
 .scopebar .seg-scope .seg-opt span { min-height: 32px; font-size: 13.5px; }
-.scope-row { width: 100%; display: flex; align-items: center; justify-content: center; gap: 12px; min-height: 28px; flex-wrap: wrap; }
 .scope-line { color: var(--text); font-size: 13.5px; font-weight: 550; text-align: center; }
 .scope-sub { color: var(--muted); font-size: 12.5px; text-align: center; }
 .scope-sub-info { color: #a9d2ff; }
@@ -653,6 +671,9 @@ select.field { appearance: auto; }
 .pos-actions .hint { flex-basis: 100%; text-align: center; }
 .hint { color: var(--muted); font-size: 12.5px; }
 
+.logo-body .ctl:last-child { margin-bottom: 2px; }
+.seg-wrap { flex-wrap: wrap; }
+.seg-wrap .seg-opt { flex: 1 1 auto; }
 .card { width: 100%; padding: 14px 16px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--panel); }
 .artwork-head { display: flex; align-items: baseline; flex-wrap: wrap; gap: 10px; margin-bottom: 10px; }
 .artwork-head h2 { font-size: 14px; }

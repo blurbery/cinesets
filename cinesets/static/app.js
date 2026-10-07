@@ -29,13 +29,17 @@
     case: { normal: "As written", upper: "Capitals" },
     text_shadow: { auto: "Auto", on: "On", off: "Off" },
     text: { gold: "Gold", white: "White", accent: "Accent" },
+    logo: { standard: "Standard", alt: "Alternative", icon: "Icon" },
+    logo_colour: { original: "Original", white: "White" },
   };
   const SETTING_NAMES = {
     accent: "accent colour", shade: "shade", tint: "tint", title: "title style", align: "alignment", case: "capitals",
     label: "label", label_colour: "label colour", subtitle_colour: "subtitle colour",
     label_position: "label position", title_position: "title position", title_size: "title size", label_size: "label size",
-    text_shadow: "text shadow",
+    text_shadow: "text shadow", artwork: "artwork on each run", logo: "logo", logo_colour: "logo colours",
   };
+  const LOGO_HINT = "Uses the alternative or icon where the service has one, otherwise its standard logo.";
+  const LOGO_MISSING = "Downloaded by ./run.sh logos. Until then the poster shows the service's name.";
   const SIZE_SETTING = { title: "title_size", label: "label_size" };
   const SIZE_STEP = 0.05;
   const ICON = {
@@ -123,13 +127,16 @@
     lpSearchClosed: new Set(),
     nc: { checked: null, accent: null },
     selected: null,
-    scope: "all",
+    mode: "section",
+    editSec: null,
+    posterKey: null,
+    secSearch: "",
+    listClosed: new Set(),
     tab: "design",
     colSearch: "",
     listSearch: "",
     colOpen: new Set(),
     colSearchClosed: new Set(),
-    listOpen: new Set(),
     listSearchClosed: new Set(),
     dirty: false,
     saving: false,
@@ -406,23 +413,20 @@
   const ownOf = (key) => (key && S.posters.overrides[key]) || {};
   const effective = (key) => ({ ...globals(), ...secOwn(sectionOf(key)), ...ownOf(key) });
 
-  /** The layer edits go to at the current scope, or null for all posters. */
+  /** The layer edits go to: a section in Whole section mode, one poster in Each poster mode, or null for every poster. */
   function scopeLayer() {
-    if (!S.selected) return null;
-    if (S.scope === "section") return { kind: "sections", id: sectionOf(S.selected) };
-    if (S.scope === "collection") return { kind: "overrides", id: S.selected };
-    return null;
+    if (S.mode === "poster") return S.selected ? { kind: "overrides", id: S.selected } : null;
+    return S.editSec ? { kind: "sections", id: S.editSec } : null;
   }
-  /** What the current scope inherits from the layers above it. */
+  /** What the layer being edited inherits from the layers above it. */
   function parentValues() {
-    if (S.scope === "collection" && S.selected) return { ...globals(), ...secOwn(sectionOf(S.selected)) };
+    if (S.mode === "poster" && S.selected) return { ...globals(), ...secOwn(sectionOf(S.selected)) };
     return globals();
   }
-  /** The values in effect at the current scope. */
+  /** The values in effect for what is being edited. */
   function scopeValues() {
-    if (!S.selected || S.scope === "all") return globals();
-    if (S.scope === "section") return { ...globals(), ...secOwn(sectionOf(S.selected)) };
-    return effective(S.selected);
+    if (S.mode === "poster") return S.selected ? effective(S.selected) : globals();
+    return S.editSec ? { ...globals(), ...secOwn(S.editSec) } : globals();
   }
   function ownAtScope() {
     const l = scopeLayer();
@@ -431,6 +435,12 @@
   function shown(setting) {
     return NOT_LAYERED.has(setting) ? S.posters[setting] : scopeValues()[setting];
   }
+  const defaults = () => (S.info && S.info.defaults) || {};
+  /** Every section: the settings for every poster that differ from the defaults. */
+  function changedGlobals() {
+    const d = defaults();
+    return Object.keys(d).filter((k) => !LAYER_KEYS.has(k) && has(S.posters, k) && !same(normValue(k, S.posters[k]), normValue(k, d[k])));
+  }
 
   function applySetting(name, value) {
     value = normValue(name, value);
@@ -438,7 +448,7 @@
     if (l && !NOT_LAYERED.has(name)) {
       const store = S.posters[l.kind];
       const own = { ...(store[l.id] || {}) };
-      // a value that matches what this scope inherits is not kept as its own
+      // a value that matches what this layer inherits is not kept as its own
       if (same(value, parentValues()[name])) delete own[name];
       else own[name] = value;
       if (Object.keys(own).length) store[l.id] = own;
@@ -453,33 +463,47 @@
     settingsChanged(opts);
   }
 
-  /** Go back to inheriting one setting at the current scope. */
+  /** Reset one setting: back to inheriting it for a section or poster, or back to the default for every poster. */
   function inherit(name) {
     const l = scopeLayer();
-    if (!l) return;
+    const label = cap(SETTING_NAMES[name] || name);
+    if (!l || NOT_LAYERED.has(name)) {
+      const d = defaults();
+      if (!has(d, name)) return;
+      S.posters[name] = clone(d[name]);
+      settingsChanged({ delay: 0 });
+      announce(`${label} is back to the default.`);
+      return;
+    }
     const store = S.posters[l.kind];
     const own = { ...(store[l.id] || {}) };
     delete own[name];
     if (Object.keys(own).length) store[l.id] = own;
     else delete store[l.id];
     settingsChanged({ delay: 0 });
-    announce(`${cap(SETTING_NAMES[name] || name)} now comes from ${l.kind === "sections" ? "All posters" : "the section"}.`);
+    announce(`${label} now comes from ${l.kind === "sections" ? "Every section" : "the section"}.`);
   }
 
   function resetScope() {
     const l = scopeLayer();
-    if (!l) return;
+    if (!l) {
+      const d = defaults();
+      for (const k of Object.keys(d)) if (!LAYER_KEYS.has(k)) S.posters[k] = clone(d[k]);
+      settingsChanged({ delay: 0 });
+      announce("Every poster is back to the defaults. Sections and posters with their own settings keep them.");
+      return;
+    }
     delete S.posters[l.kind][l.id];
     settingsChanged({ delay: 0 });
-    announce(l.kind === "sections" ? "This section's own design settings were cleared." : "This collection's own design settings were cleared.");
+    announce(l.kind === "sections" ? "This section's own design settings were cleared." : "This poster's own design settings were cleared.");
   }
 
-  /** A narrower layer than the current scope that sets this setting for the selected poster, if any. */
+  /** A narrower layer than the one being edited that sets this setting for the poster on show, if any. */
   function deeperSetter(setting) {
     const key = S.selected;
-    if (!key) return null;
-    if (S.scope !== "collection" && has(ownOf(key), setting)) return "collection";
-    if (S.scope === "all" && has(secOwn(sectionOf(key)), setting)) return "section";
+    if (!key || S.mode === "poster") return null;
+    if (has(ownOf(key), setting)) return "collection";
+    if (!S.editSec && has(secOwn(sectionOf(key)), setting)) return "section";
     return null;
   }
 
@@ -728,7 +752,7 @@
       sw.addEventListener("change", () => setPicked(sec.collections.map((c) => c.key), sw.checked));
       const design = el("button", { class: "btn btn-small sec-card-design", type: "button", "aria-label": `Design this section: ${sec.name}` }, "Design this section");
       design.addEventListener("click", () => {
-        selectSection(sec.key);
+        openSection(sec.key);
         showTab("design");
       });
       const ul = el("ul", { class: "sec-card-list", id: listId });
@@ -739,7 +763,7 @@
           el("span", { class: "cc-go", "aria-hidden": "true", text: "Design" }),
         ]);
         name.addEventListener("click", () => {
-          selectCollection(c.key);
+          openPoster(c.key);
           showTab("design");
         });
         const csw = el("input", { class: "switch", type: "checkbox", role: "switch", "aria-label": c.name });
@@ -775,62 +799,123 @@
     }
   }
 
-  // ------------------------------------------------------------------ Design tab: list of what to edit
+  // ------------------------------------------------------------------ Design tab: the sidebar (sections, or every poster)
+  const ownDot = (title) => el("span", { class: "dot", title, hidden: true }, [el("span", { class: "vh", text: ` (${title.toLowerCase()})` })]);
+
+  /** Whole section mode lists Every section and the sections; Each poster mode lists every collection under its section. */
   function renderDesignList() {
     const box = $("dlist");
     box.textContent = "";
     S.ui.dsecs = new Map();
     S.ui.drows = new Map();
+    S.ui.dpicks = new Map();
+    S.ui.dlistMode = S.mode;
+    const search = $("list-search");
+    const sectionMode = S.mode === "section";
+    search.value = sectionMode ? S.secSearch : S.listSearch;
+    search.placeholder = sectionMode ? "Find a section" : "Find a collection";
+    search.setAttribute("aria-label", sectionMode ? "Find a section to design" : "Find a collection to design");
+    $("dlist-nav").setAttribute("aria-label", sectionMode ? "Choose a section to design" : "Choose a poster to design");
+    if (sectionMode) {
+      const pick = (secKey, name, count, extraClass) => {
+        const dot = ownDot(secKey ? "Has its own design settings" : "Changed from the defaults");
+        const b = el("button", { class: "dl-pick" + (extraClass ? " " + extraClass : ""), type: "button" }, [
+          el("span", { class: "dl-name", text: name }), dot, el("span", { class: "dl-count", text: String(count) }),
+        ]);
+        b.addEventListener("click", () => openSection(secKey));
+        S.ui.dpicks.set(secKey || "", { btn: b, dot, name: name.toLowerCase() });
+        return b;
+      };
+      box.append(pick(null, "Every section", S.order.length, "dl-every"), el("div", { class: "dl-divider", role: "presentation" }));
+      for (const sec of S.sections) {
+        if (!sec.collections.length) continue;
+        box.append(pick(sec.key, sec.name, sec.collections.length));
+      }
+      return;
+    }
     for (const sec of S.sections) {
       const listId = "dl-list-" + sec.key;
-      const dot = el("span", { class: "dot", title: "This section has its own design settings", hidden: true },
-        [el("span", { class: "vh", text: " (has its own design settings)" })]);
-      // the chevron shows or hides the collections; the name selects the whole section for editing
-      const btn = el("button", { class: "dl-chev", type: "button", "aria-expanded": "false", "aria-controls": listId, "aria-label": `Show the collections in ${sec.name}` }, [svg(ICON.chevron)]);
-      btn.addEventListener("click", () => {
-        toggleOpen(!!S.listSearch.trim(), S.listOpen, S.listSearchClosed, sec.key, btn.getAttribute("aria-expanded") === "true");
+      // a plain heading: the chevron only shows or hides the section's posters
+      const head = el("button", { class: "dl-head", type: "button", "aria-expanded": "true", "aria-controls": listId }, [
+        svg(ICON.chevron), el("span", { class: "dl-head-name", text: sec.name }),
+      ]);
+      head.addEventListener("click", () => {
+        const closed = S.listSearch.trim() ? S.listSearchClosed : S.listClosed;
+        if (head.getAttribute("aria-expanded") === "true") closed.add(sec.key);
+        else closed.delete(sec.key);
         syncLists();
       });
-      const nameBtn = el("button", { class: "dl-sec-btn", type: "button", title: `Design the whole ${sec.name} section` }, [
-        el("span", { class: "dl-sec-name", text: sec.name }), dot,
-      ]);
-      nameBtn.addEventListener("click", () => selectSection(sec.key));
-      if (!sec.collections.length) nameBtn.disabled = true;
       const ul = el("ul", { class: "dl-list", id: listId });
       for (const c of sec.collections) {
-        const cdot = el("span", { class: "dot", title: "Has its own design settings", hidden: true },
-          [el("span", { class: "vh", text: " (has its own design settings)" })]);
+        const cdot = ownDot("Has its own design settings");
         const off = el("span", { class: "vh", text: " (off)" });
         const b = el("button", { class: "dl-col", type: "button", title: c.key }, [el("span", { class: "dl-name", text: c.name }), off, cdot]);
-        b.addEventListener("click", () => {
-          // picking one poster from the list while editing a whole section means editing that poster
-          if (S.scope === "section") S.scope = "collection";
-          selectCollection(c.key);
-        });
+        b.addEventListener("click", () => openPoster(c.key));
         const li = el("li", {}, [b]);
         ul.append(li);
         S.ui.drows.set(c.key, { li, btn: b, dot: cdot, off });
       }
-      const wrap = el("div", { class: "dl-sec" }, [el("div", { class: "dl-sec-head" }, [btn, nameBtn]), ul]);
+      const wrap = el("div", { class: "dl-sec" }, [el("h3", { class: "dl-sec-head" }, [head]), ul]);
       box.append(wrap);
-      S.ui.dsecs.set(sec.key, { wrap, btn, nameBtn, ul, dot });
+      S.ui.dsecs.set(sec.key, { wrap, head, ul });
     }
+  }
+
+  function syncDesignList() {
+    if (S.ui.dlistMode !== S.mode) renderDesignList();
+    if (S.mode === "section") {
+      const q = S.secSearch.trim().toLowerCase();
+      for (const [k, p] of S.ui.dpicks) {
+        const sel = (k || null) === S.editSec;
+        p.btn.classList.toggle("is-selected", sel);
+        if (sel) p.btn.setAttribute("aria-current", "true");
+        else p.btn.removeAttribute("aria-current");
+        p.btn.hidden = !!q && !!k && !p.name.includes(q);
+        p.dot.hidden = k ? !Object.keys(secOwn(k)).length : !changedGlobals().length;
+      }
+      $("dlist-empty").hidden = !q || [...S.ui.dpicks].some(([k, p]) => k && !p.btn.hidden);
+      return;
+    }
+    const q = S.listSearch.trim().toLowerCase();
+    let any = false;
+    for (const sec of S.sections) {
+      const ds = S.ui.dsecs.get(sec.key);
+      if (!ds) continue;
+      let vis = 0;
+      for (const c of sec.collections) {
+        const d = S.ui.drows.get(c.key);
+        if (!d) continue;
+        const m = matches(c, q);
+        d.li.hidden = !m;
+        if (m) vis++;
+        const on = S.picks.has(c.key);
+        const sel = c.key === S.selected;
+        d.btn.classList.toggle("is-selected", sel);
+        d.btn.classList.toggle("is-off", !on);
+        d.off.hidden = on;
+        if (sel) d.btn.setAttribute("aria-current", "true");
+        else d.btn.removeAttribute("aria-current");
+        d.dot.hidden = !Object.keys(ownOf(c.key)).length;
+      }
+      if (vis) any = true;
+      ds.wrap.hidden = q ? vis === 0 : !sec.collections.length;
+      const open = q ? !S.listSearchClosed.has(sec.key) : !S.listClosed.has(sec.key);
+      ds.ul.hidden = !open;
+      ds.head.setAttribute("aria-expanded", String(open));
+    }
+    $("dlist-empty").hidden = !q || any;
   }
 
   function syncLists() {
     if (!S.posters) return;
     const cq = S.colSearch.trim().toLowerCase();
-    const lq = S.listSearch.trim().toLowerCase();
     let total = 0;
     let pickedTotal = 0;
     let colMatches = 0;
-    const selSec = sectionOf(S.selected);
     for (const sec of S.sections) {
       const card = S.ui.cards.get(sec.key);
-      const ds = S.ui.dsecs.get(sec.key);
       let picked = 0;
       let cVisible = 0;
-      let lVisible = 0;
       for (const c of sec.collections) {
         const on = S.picks.has(c.key);
         if (on) picked++;
@@ -840,19 +925,6 @@
           const m = matches(c, cq);
           row.li.hidden = !m;
           if (m) cVisible++;
-        }
-        const d = S.ui.drows.get(c.key);
-        if (d) {
-          const m = matches(c, lq);
-          d.li.hidden = !m;
-          if (m) lVisible++;
-          const sel = c.key === S.selected;
-          d.btn.classList.toggle("is-selected", sel);
-          d.btn.classList.toggle("is-off", !on);
-          d.off.hidden = on;
-          if (sel) d.btn.setAttribute("aria-current", "true");
-          else d.btn.removeAttribute("aria-current");
-          d.dot.hidden = !Object.keys(ownOf(c.key)).length;
         }
       }
       const n = sec.collections.length;
@@ -868,20 +940,8 @@
         card.ul.hidden = !open;
         card.toggle.setAttribute("aria-expanded", String(open));
       }
-      if (ds) {
-        ds.wrap.hidden = lq ? lVisible === 0 : false;
-        const open = lq ? !S.listSearchClosed.has(sec.key) : S.listOpen.has(sec.key);
-        ds.ul.hidden = !open;
-        ds.btn.setAttribute("aria-expanded", String(open));
-        ds.dot.hidden = !Object.keys(secOwn(sec.key)).length;
-        ds.wrap.classList.toggle("is-current", sec.key === selSec);
-        const scoped = S.scope === "section" && sec.key === selSec;
-        ds.wrap.classList.toggle("is-scope", scoped);
-        if (scoped) ds.nameBtn.setAttribute("aria-current", "true");
-        else ds.nameBtn.removeAttribute("aria-current");
-      }
     }
-    $("dlist").classList.toggle("scope-section", S.scope === "section");
+    syncDesignList();
     syncListsPanel();
     $("col-count").textContent = `${pickedTotal} of ${total} on`;
     $("all-on").textContent = cq ? "Turn matches on" : "Turn all on";
@@ -945,7 +1005,7 @@
       el("span", { class: "cc-go", "aria-hidden": "true", text: "Design" }),
     ]);
     name.addEventListener("click", () => {
-      selectCollection(c.key);
+      openPoster(c.key);
       showTab("design");
     });
     const main = el("div", { class: "lr-main" }, [name]);
@@ -1264,7 +1324,7 @@
     const design = el("button", { class: "btn btn-small btn-primary", type: "button" }, "Design it");
     design.addEventListener("click", () => {
       if (!S.byKey.has(key)) return;
-      selectCollection(key);
+      openPoster(key);
       showTab("design");
     });
     const done = $("nc-done");
@@ -1413,10 +1473,11 @@
     renderDesignList();
     renderListsPanel();
     fillNcSections();
+    if (S.editSec && !S.secByKey.has(S.editSec)) S.editSec = null;
+    if (S.posterKey && !S.byKey.has(S.posterKey)) S.posterKey = null;
     if (!S.selected || !S.byKey.has(S.selected)) {
       S.selected = null;
-      const k = defaultKey();
-      if (k) selectCollection(k);
+      restoreMode();
     } else {
       renderEditorHead();
       refreshTextCard();
@@ -1434,7 +1495,7 @@
   function controlRow(setting, label, hint) {
     const labelId = "lbl-" + setting;
     const mark = el("span", { class: "ctl-set", hidden: true }, "Set here");
-    const reset = el("button", { class: "link-btn", type: "button", hidden: true, "aria-label": `Reset ${SETTING_NAMES[setting] || setting}: go back to inheriting it` }, "reset");
+    const reset = el("button", { class: "link-btn", type: "button", hidden: true, "aria-label": `Reset the ${SETTING_NAMES[setting] || setting}` }, "reset");
     reset.addEventListener("click", () => inherit(setting));
     const head = el("div", { class: "ctl-head" }, [el("span", { class: "ctl-label", id: labelId, text: label }), mark, reset]);
     const body = el("div", { class: "ctl-body" });
@@ -1631,7 +1692,7 @@
     ]);
     if (ch.artwork) {
       group("Artwork", [segControl("artwork", "Artwork on each run", ch.artwork,
-        "Fixed keeps the same artwork every run. Random picks again from the top titles each run. This always applies to all posters.")]);
+        "Fixed keeps the same artwork every run. Random picks again from the top titles each run. This applies to every poster.")]);
     }
   }
 
@@ -1639,17 +1700,96 @@
     if (!S.posters || !S.ui.controls) return;
     const vals = scopeValues();
     const own = ownAtScope();
-    const layered = S.scope !== "all" && !!S.selected;
+    const changed = own ? null : new Set(changedGlobals());
+    const everySection = S.mode === "section" && !S.editSec;
     for (const [setting, c] of Object.entries(S.ui.controls)) {
       c.set(shown(setting), vals);
       const isSet = !!own && has(own, setting);
       c.mark.hidden = !isSet;
-      c.reset.hidden = !isSet;
-      const dis = (setting === "artwork" && layered)
-        || ((setting === "label_colour" || setting === "label_size") && !shown("label"));
+      c.reset.hidden = own ? !isSet : !changed.has(setting);
+      // artwork on each run is for every poster, so it shows only at Every section
+      if (setting === "artwork") c.row.hidden = !everySection;
+      const dis = (setting === "label_colour" || setting === "label_size") && !shown("label");
       c.disable(dis);
       c.row.classList.toggle("is-disabled", dis);
     }
+    for (const g of $("controls-body").querySelectorAll(".ctl-group")) {
+      g.hidden = ![...g.querySelectorAll(".ctl")].some((r) => !r.hidden);
+    }
+  }
+
+  // ---- logo card: the version of a streaming service's logo and its colours
+  /** What the logo card shows: generic choices for a section or every poster, one service's versions for one poster. */
+  function logoContext() {
+    const c = S.byKey.get(S.selected);
+    if (S.mode === "poster") return c && c.streaming ? { kind: "service", service: c.service || "", id: "svc:" + (c.service || "") } : null;
+    if (!S.editSec) return { kind: "every", id: "every" };
+    const sec = S.secByKey.get(S.editSec);
+    return sec && sec.collections.some((x) => x.streaming) ? { kind: "section", id: "section" } : null;
+  }
+
+  function logoVersions(service) {
+    const v = S.info && S.info.logo_versions && S.info.logo_versions[service];
+    return Array.isArray(v) && v.length ? v : [{ key: "standard", label: "Standard", downloaded: false }];
+  }
+
+  function refreshLogoCard() {
+    const ctx = logoContext();
+    const panel = $("logo-panel");
+    panel.hidden = !ctx;
+    if (!ctx) {
+      delete S.ui.controls.logo;
+      delete S.ui.controls.logo_colour;
+      S.ui.logoCtx = null;
+      return;
+    }
+    $("logo-heading").textContent = ctx.kind === "every" ? "Streaming posters" : "Logo";
+    if (S.ui.logoCtx === ctx.id && S.ui.controls.logo) return;
+    S.ui.logoCtx = ctx.id;
+    const body = $("logo-body");
+    body.textContent = "";
+    const ch = (S.info && S.info.choices) || {};
+    let versions;
+    if (ctx.kind === "service") versions = logoVersions(ctx.service);
+    else versions = (ch.logo || ["standard", "alt", "icon"]).map((k) => ({ key: k, label: LABELS.logo[k] || cap(k), downloaded: true }));
+    const r = controlRow("logo", "Logo", ctx.kind === "service" ? LOGO_MISSING : LOGO_HINT);
+    const hint = r.row.querySelector(".ctl-hint");
+    const seg = el("div", { class: "seg seg-wrap", role: "radiogroup", "aria-labelledby": r.labelId });
+    const inputs = versions.map((v) => {
+      const input = el("input", { class: "vh", type: "radio", name: "ctl-logo", value: v.key });
+      input.addEventListener("change", () => { if (input.checked) setSetting("logo", v.key); });
+      seg.append(el("label", { class: "seg-opt", title: v.downloaded ? null : "Not downloaded yet" }, [input, el("span", { text: v.label })]));
+      return input;
+    });
+    r.body.append(seg);
+    register("logo", r, (val) => {
+      // a version this service doesn't have falls back to its standard logo, as the poster does
+      const pick = versions.some((v) => v.key === val) ? val : "standard";
+      for (const i of inputs) i.checked = i.value === pick;
+      if (ctx.kind === "service") {
+        const ver = versions.find((v) => v.key === pick);
+        hint.hidden = !!ver && ver.downloaded;
+      }
+    }, (dis) => { for (const i of inputs) i.disabled = dis; });
+    body.append(r.row, segControl("logo_colour", "Logo colours", ch.logo_colour || ["original", "white"]));
+    refreshControls();
+  }
+
+  const allStreaming = (sec) => !!sec && sec.collections.length > 0 && sec.collections.every((x) => x.streaming);
+
+  /** One line saying exactly what is being edited. */
+  function bannerText() {
+    if (S.mode === "poster") {
+      const c = S.byKey.get(S.selected);
+      return c ? `You're editing only ${c.name}.` : "";
+    }
+    if (!S.editSec) return "You're editing every poster. Sections and posters with their own settings keep them.";
+    const sec = S.secByKey.get(S.editSec);
+    if (!sec) return "";
+    const n = sec.collections.length;
+    const what = allStreaming(sec) ? "the text and logo" : "the text and the poster colour, shade and tint";
+    return n === 1 ? `You're editing the whole ${sec.name} section: ${what} of its only poster.`
+      : `You're editing the whole ${sec.name} section: ${what} of all ${n} posters.`;
   }
 
   function refreshScopeUI() {
@@ -1657,81 +1797,111 @@
     const key = S.selected;
     const c = key && S.byKey.get(key);
     const sec = c && S.secByKey.get(c.section);
-    for (const r of document.querySelectorAll('input[name="scope"]')) {
-      r.checked = r.value === S.scope;
-      r.disabled = r.value !== "all" && !c;
-    }
-    // one line saying what is being edited, in the editor and at the top of the style panel
-    let line = "Editing every poster";
-    let short = "All posters";
-    if (S.scope === "section" && sec) {
-      const n = sec.collections.length;
-      line = n === 1 ? `Editing the only poster in ${sec.name}` : `Editing all ${n} posters in ${sec.name}`;
-      short = `Whole section: ${sec.name}`;
-    } else if (S.scope === "collection" && c) {
-      line = `Editing ${c.name} only`;
-      short = `This collection: ${c.name}`;
-    }
-    $("scope-line").textContent = line;
+    for (const r of document.querySelectorAll('input[name="mode"]')) r.checked = r.value === S.mode;
+    const line = bannerText();
+    const sl = $("scope-line");
+    if (sl.textContent !== line) sl.textContent = line;
+    $("mode-banner").classList.toggle("is-poster", S.mode === "poster");
+    let short = "Every section";
+    if (S.mode === "poster" && c) short = `Only ${c.name}`;
+    else if (S.editSec) short = `Whole section: ${(S.secByKey.get(S.editSec) || {}).name || ""}`;
     const cs = $("controls-scope");
     cs.textContent = short;
     cs.title = short;
-    $("stream-sec-note").hidden = !streamingSectionScope();
-    // say when narrower settings win over edits at this scope, for the poster on show
+    $("stream-sec-note").hidden = !(S.mode === "section" && allStreaming(S.secByKey.get(S.editSec)));
+    // say when narrower settings win over edits here, for the poster on show
     const deeper = [];
     let count = 0;
     const names = (obj) => {
       count += Object.keys(obj).length;
       return listText(Object.keys(obj).map((k) => SETTING_NAMES[k] || k.replace(/_/g, " ")));
     };
-    if (c && S.scope === "all" && Object.keys(secOwn(c.section)).length) deeper.push(`${sec.name} has its own ${names(secOwn(c.section))}.`);
-    if (c && S.scope !== "collection" && Object.keys(ownOf(key)).length) deeper.push(`${c.name} has its own ${names(ownOf(key))}.`);
+    if (c && S.mode === "section") {
+      if (!S.editSec && Object.keys(secOwn(c.section)).length) deeper.push(`${sec.name} has its own ${names(secOwn(c.section))}.`);
+      if (Object.keys(ownOf(key)).length) deeper.push(`${c.name} has its own ${names(ownOf(key))}.`);
+    }
     const dn = $("deeper-note");
     dn.hidden = !deeper.length;
     dn.textContent = deeper.length ? `${deeper.join(" ")} ${count > 1 ? "Those win" : "That wins"} over changes here.` : "";
     const own = ownAtScope();
     const btn = $("scope-reset");
-    btn.hidden = !own || !Object.keys(own).length;
-    btn.textContent = S.scope === "section" ? "Reset this section" : "Reset this collection";
+    btn.hidden = own ? !Object.keys(own).length : !changedGlobals().length;
+    btn.textContent = S.mode === "poster" ? "Reset this poster" : S.editSec ? "Reset this section" : "Reset to the defaults";
+    refreshLogoCard();
     refreshStreamUI();
     refreshStrip();
   }
 
-  /** At Whole section scope for a section made only of streaming service posters. */
-  function streamingSectionScope() {
-    if (S.scope !== "section" || !S.selected) return false;
-    const sec = S.secByKey.get(sectionOf(S.selected));
-    return !!sec && sec.collections.length > 0 && sec.collections.every((x) => x.streaming);
-  }
-
-  /** Select a whole section: Whole section scope, showing its first collection that is on. */
-  function selectSection(secKey) {
-    const sec = S.secByKey.get(secKey);
-    if (!sec || !sec.collections.length) return;
-    S.scope = "section";
-    // editing the whole section: highlight its row, don't drop down every poster
-    S.listOpen.delete(secKey);
-    if (S.selected && sectionOf(S.selected) === secKey) {
-      refreshControls();
-      refreshScopeUI();
-      refreshPositionButtons();
-      syncLists();
-    } else {
-      const first = sec.collections.find((x) => S.picks.has(x.key)) || sec.collections[0];
-      selectCollection(first.key);
+  /** The poster to show for a section: its first collection that is on. For every poster, the first one on that isn't a streaming poster. */
+  function stageKeyFor(secKey) {
+    if (secKey) {
+      const sec = S.secByKey.get(secKey);
+      if (!sec || !sec.collections.length) return null;
+      return (sec.collections.find((x) => S.picks.has(x.key)) || sec.collections[0]).key;
     }
-    announce(`Editing all ${sec.collections.length} posters in ${sec.name}.`);
+    const isStream = (k) => !!S.byKey.get(k).streaming;
+    return S.order.find((k) => S.picks.has(k) && !isStream(k)) || S.order.find((k) => !isStream(k)) || S.order[0] || null;
   }
 
-  // ---- section strip: up to six small posters from the section, at Whole section scope
+  /** Whole section mode on a section, or on every poster when secKey is null. */
+  function openSection(secKey) {
+    secKey = secKey || null;
+    if (secKey && !(S.secByKey.get(secKey) || { collections: [] }).collections.length) return;
+    const stay = S.mode === "section" && S.editSec === secKey && !!S.selected && (!secKey || sectionOf(S.selected) === secKey);
+    S.mode = "section";
+    S.editSec = secKey;
+    closeChooser();
+    const key = stay ? S.selected : stageKeyFor(secKey);
+    syncDesignList();
+    if (key) selectCollection(key);
+    else refreshScopeUI();
+    announce(bannerText());
+  }
+
+  /** Each poster mode on one collection. */
+  function openPoster(key) {
+    if (!S.byKey.has(key)) return;
+    S.mode = "poster";
+    S.posterKey = key;
+    S.listClosed.delete(sectionOf(key));
+    S.listSearchClosed.delete(sectionOf(key));
+    syncDesignList();
+    selectCollection(key);
+  }
+
+  /** The mode switch: each mode comes back to what it was editing last. */
+  function setMode(mode) {
+    if (mode === S.mode) return;
+    if (mode === "poster") openPoster(S.posterKey && S.byKey.has(S.posterKey) ? S.posterKey : S.selected);
+    else openSection(S.editSec);
+    announce(bannerText());
+  }
+
+  /** Put the current mode back after a reload of the collections or settings. */
+  function restoreMode() {
+    if (S.mode === "poster") {
+      const k = S.posterKey && S.byKey.has(S.posterKey) ? S.posterKey : stageKeyFor(null);
+      if (k) openPoster(k);
+    } else {
+      openSection(S.editSec && S.secByKey.has(S.editSec) ? S.editSec : null);
+    }
+  }
+
+  // ---- section strip: up to four small posters, in Whole section mode
   const STRIP_MAX = 4;
-  const stripActive = () => S.tab === "design" && S.scope === "section" && !!S.selected && !S.gated;
+  const stripActive = () => S.tab === "design" && S.mode === "section" && !!S.selected && !S.gated;
 
   function stripKeys(secKey) {
-    const sec = S.secByKey.get(secKey);
-    if (!sec) return [];
-    const all = sec.collections.map((x) => x.key);
-    let keys = all.filter((k) => S.picks.has(k)).concat(all.filter((k) => !S.picks.has(k))).slice(0, STRIP_MAX);
+    let keys;
+    if (secKey) {
+      const sec = S.secByKey.get(secKey);
+      if (!sec) return [];
+      const all = sec.collections.map((x) => x.key);
+      keys = all.filter((k) => S.picks.has(k)).concat(all.filter((k) => !S.picks.has(k))).slice(0, STRIP_MAX);
+    } else {
+      // every poster: the first poster of each of the first sections
+      keys = S.sections.map((sec) => stageKeyFor(sec.key)).filter(Boolean).slice(0, STRIP_MAX);
+    }
     if (S.selected && !keys.includes(S.selected)) keys = [S.selected].concat(keys.slice(0, STRIP_MAX - 1));
     return keys;
   }
@@ -1744,7 +1914,7 @@
       S.strip.keys = [];
       return;
     }
-    const secKey = sectionOf(S.selected);
+    const secKey = S.editSec || "";
     const keys = stripKeys(secKey);
     if (secKey !== S.strip.sec || keys.join("|") !== S.strip.keys.join("|")) {
       buildStrip(secKey, keys);
@@ -1755,12 +1925,12 @@
   }
 
   function buildStrip(secKey, keys) {
-    const sec = S.secByKey.get(secKey);
+    const sec = secKey && S.secByKey.get(secKey);
     S.strip.sec = secKey;
     S.strip.keys = keys;
     S.strip.cards = new Map();
-    $("strip-heading").textContent = "How it looks across the section";
-    $("strip-heading").title = `${keys.length} of ${sec.collections.length} posters in ${sec.name}`;
+    $("strip-heading").textContent = sec ? "How it looks across the section" : "How it looks across your sections";
+    $("strip-heading").title = sec ? `${keys.length} of ${sec.collections.length} posters in ${sec.name}` : "The first poster from each of your first sections";
     const row = $("strip-row");
     row.textContent = "";
     for (const k of keys) {
@@ -1847,9 +2017,12 @@
       $("candidate-tag").hidden = true;
     }
     S.selected = key;
-    writeHash(key);
-    const c = S.byKey.get(key);
-    if (changed && !S.listSearch.trim() && S.scope !== "section") S.listOpen.add(c.section);
+    if (S.mode === "poster") {
+      S.posterKey = key;
+      writeHash(key);
+    } else {
+      clearHash();
+    }
     renderEditorHead();
     syncLists();
     refreshControls();
@@ -1860,10 +2033,9 @@
       S.preview.boxes = { label: null, title: null };
       placeBoxes();
       $("stage").classList.add("is-stale");
-      refreshStreamUI();
       refreshArtworkPanel();
       queueEditorJob();
-      const row = S.ui.drows.get(key);
+      const row = S.mode === "poster" && S.ui.drows.get(key);
       if (row && !row.li.hidden && row.li.offsetParent) row.li.scrollIntoView({ block: "nearest" });
     }
   }
@@ -1871,24 +2043,34 @@
   function renderEditorHead() {
     const c = S.byKey.get(S.selected);
     if (!c) return;
-    $("ed-name").textContent = c.name;
-    $("ed-kind").textContent = c.label || (c.kind === "show" ? "TV Shows" : "Movies");
-    $("ed-section").textContent = c.sectionName || "";
+    if (S.mode === "section") {
+      const sec = S.editSec && S.secByKey.get(S.editSec);
+      const n = sec ? sec.collections.length : S.order.length;
+      $("ed-name").textContent = sec ? sec.name : "Every section";
+      $("ed-kind").textContent = `${n} ${n === 1 ? "poster" : "posters"}`;
+      $("ed-section").textContent = `Showing ${c.name}`;
+    } else {
+      $("ed-name").textContent = c.name;
+      $("ed-kind").textContent = c.label || (c.kind === "show" ? "TV Shows" : "Movies");
+      $("ed-section").textContent = c.sectionName || "";
+    }
     syncEditorPick();
   }
 
   function syncEditorPick() {
     const on = !!S.selected && S.picks.has(S.selected);
     const sw = $("ed-picked");
+    const poster = S.mode === "poster";
     sw.checked = on;
     sw.disabled = !S.selected;
-    $("ed-off").hidden = on || !S.selected;
+    $("ed-picked-field").hidden = !poster;
+    $("ed-off").hidden = !poster || on || !S.selected;
   }
 
   function refreshPositionButtons() {
     if (!S.posters) return;
     const own = ownAtScope();
-    const from = S.scope === "collection" ? "the section or All posters" : "All posters";
+    const from = S.mode === "poster" ? "the section or every poster" : "every poster";
     for (const which of ["label", "title"]) {
       const setting = which + "_position";
       const btn = $("reset-" + which);
@@ -1912,15 +2094,18 @@
     announce(`${cap(which)} is back in its default spot.`);
   }
 
+  /** Which cards show: the Text and Artwork cards only for one poster, and never the artwork for a streaming poster. */
   function refreshStreamUI() {
     const c = S.byKey.get(S.selected);
     const known = S.preview.key === S.selected;
     const streaming = !!(c && c.streaming) || (known && S.preview.streaming);
     const draggable = !streaming && (!known || S.preview.draggable);
-    $("stream-note").hidden = !streaming || streamingSectionScope();
+    const poster = S.mode === "poster";
+    $("stream-note").hidden = !poster || !streaming;
     $("pos-actions").hidden = !draggable;
-    $("artwork-panel").hidden = streaming;
-    if (streaming && S.chooser) closeChooser();
+    $("artwork-panel").hidden = !poster || streaming;
+    $("text-panel").hidden = !poster || !c;
+    if ((streaming || !poster) && S.chooser) closeChooser();
   }
 
   function setStageBusy(on) {
@@ -2020,7 +2205,7 @@
 
   function refreshTextCard(force) {
     const c = S.byKey.get(S.selected);
-    $("text-panel").hidden = !c;
+    $("text-panel").hidden = !c || S.mode !== "poster";
     if (!c) return;
     const streaming = !!c.streaming;
     $("tx-title-label").textContent = streaming ? "Name" : "Title";
@@ -2177,9 +2362,14 @@
     setting = setting || which + "_position";
     const level = deeperSetter(setting);
     if (level) {
-      const where = level === "section" ? S.secByKey.get(sectionOf(S.selected)).name : "This collection";
       const verb = setting.endsWith("_size") ? "resize" : "move";
-      toast(`This ${level} has its own ${SETTING_NAMES[setting]}. Switch to "${where}" to ${verb} it, or reset it there.`);
+      const what = SETTING_NAMES[setting];
+      if (level === "section") {
+        const sec = S.secByKey.get(sectionOf(S.selected));
+        toast(`${sec.name} has its own ${what}. Choose ${sec.name} in the list to ${verb} it there, or reset it there.`);
+      } else {
+        toast(`${S.byKey.get(S.selected).name} has its own ${what}. Switch to Each poster to ${verb} it there, or reset it there.`);
+      }
       return false;
     }
     return true;
@@ -2580,7 +2770,7 @@
     const art = el("span", { class: "gcard-art" }, [img, ph, el("span", { class: "spinner", "aria-hidden": "true" })]);
     const btn = el("button", { class: "gcard", type: "button", title: `Design ${c.name}` }, [art, el("span", { class: "gcard-name", text: c.name })]);
     btn.addEventListener("click", () => {
-      selectCollection(key);
+      openPoster(key);
       showTab("design");
     });
     return { key, el: btn, img, art, visible: false, shownHash: null, failedHash: null, fail: null };
@@ -3003,14 +3193,12 @@
     history.replaceState(null, "", window.location.pathname + window.location.search + "#" + key);
   }
 
-  function defaultKey() {
-    const isStream = (k) => !!S.byKey.get(k).streaming;
-    return keyFromHash()
-      || S.order.find((k) => S.picks.has(k) && !isStream(k))
-      || S.order.find((k) => !isStream(k))
-      || S.order[0]
-      || null;
+  /** Whole section mode has no poster in the address, so a reload doesn't jump to Each poster. */
+  function clearHash() {
+    if (!window.location.hash || hashValue().startsWith("key=")) return;
+    history.replaceState(null, "", window.location.pathname + window.location.search);
   }
+
 
   /** Put freshly loaded settings and collections in place (first load, or Reload settings after a conflict). */
   function applyLoaded(settings, cols) {
@@ -3035,9 +3223,17 @@
     fillNcSections();
     syncSizes();
     S.selected = null;
-    const key = keep && S.byKey.has(keep) ? keep : defaultKey();
-    if (key) {
-      selectCollection(key);
+    // a #key in the address opens that poster; otherwise carry on in the current mode (Every section at first)
+    const fromHash = keyFromHash();
+    if (fromHash) {
+      S.mode = "poster";
+      S.posterKey = fromHash;
+    } else if (!keep) {
+      S.posterKey = null;
+    }
+    if (S.editSec && !S.secByKey.has(S.editSec)) S.editSec = null;
+    if (S.order.length) {
+      restoreMode();
     } else {
       $("ed-name").textContent = "No collections found";
       $("stage-empty").textContent = "Nothing to preview";
@@ -3107,8 +3303,12 @@
       syncLists();
     });
     $("list-search").addEventListener("input", (e) => {
-      S.listSearch = e.target.value;
-      S.listSearchClosed.clear();
+      if (S.mode === "section") {
+        S.secSearch = e.target.value;
+      } else {
+        S.listSearch = e.target.value;
+        S.listSearchClosed.clear();
+      }
       syncLists();
     });
     $("lists-search").addEventListener("input", (e) => {
@@ -3165,17 +3365,8 @@
     $("all-off").addEventListener("click", () => setPicked(matchKeys(S.colSearch), false));
     $("ed-picked").addEventListener("change", (e) => { if (S.selected) setPicked([S.selected], e.target.checked); });
 
-    for (const r of document.querySelectorAll('input[name="scope"]')) {
-      r.addEventListener("change", () => {
-        if (!r.checked) return;
-        S.scope = r.value;
-        if (r.value === "section" && S.selected) S.listOpen.delete(sectionOf(S.selected));
-        refreshControls();
-        refreshScopeUI();
-        refreshPositionButtons();
-        syncLists();
-        announce($("scope-line").textContent + ".");
-      });
+    for (const r of document.querySelectorAll('input[name="mode"]')) {
+      r.addEventListener("change", () => { if (r.checked) setMode(r.value); });
     }
     $("scope-reset").addEventListener("click", resetScope);
 
@@ -3223,8 +3414,8 @@
     });
     window.addEventListener("hashchange", () => {
       const key = keyFromHash();
-      if (key && key !== S.selected && S.loaded) {
-        selectCollection(key);
+      if (key && S.loaded && !(S.mode === "poster" && key === S.selected)) {
+        openPoster(key);
         showTab("design");
       }
     });
