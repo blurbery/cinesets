@@ -158,8 +158,15 @@ class SiloServer:
         return self.pages("/libraries")
 
     def media_libraries(self):
+        """Movie then TV libraries for setup, the biggest of each type first. The first one of a type is where
+        collections live unless they're clearly anime, international or the like (see narrow), so it should be the
+        main library, whatever order the libraries were added to Silo in."""
         kinds = {"movies": "movie", "series": "show"}
-        return [(lib["name"], kinds[lib.get("type")]) for lib in self.libraries() if lib.get("type") in kinds]
+        libs = [(lib, kinds[lib["type"]]) for lib in self.libraries() if lib.get("type") in kinds]
+        size = {str(lib["id"]): self.get(f"/catalog?library_id={quote(str(lib['id']))}&type={'movie' if kind == 'movie' else 'series'}"
+                                         f"&limit=1", headers=self.profile()).get("total") or 0 for lib, kind in libs}
+        libs.sort(key=lambda x: (x[1] != "movie", -size[str(x[0]["id"])]))  # stable: equal sizes keep Silo's order
+        return [(lib["name"], kind) for lib, kind in libs]
 
     def library_folders(self):
         if self._folders is None:

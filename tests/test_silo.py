@@ -115,7 +115,8 @@ class FakeSilo:
     def page(rows, q, size=2):
         start = int(q.get("cursor", 0))
         more = start + size < len(rows)
-        return {"items": rows[start:start + size], "page": {"has_more": more, **({"next_cursor": str(start + size)} if more else {})}}
+        return {"items": rows[start:start + size], "total": len(rows),
+                "page": {"has_more": more, **({"next_cursor": str(start + size)} if more else {})}}
 
     def request(self, method, url, timeout=None, allow_redirects=True, headers=None, json=None, files=None, **kw):
         u = urlparse(url)
@@ -421,18 +422,26 @@ def test_setup_takes_a_pasted_silo_page_address(monkeypatch):
     assert cli.find_server("http://192.0.2.10:8080/collections/server") == ("http://192.0.2.10:8080", "silo")
 
 
-def test_setup_writes_a_silo_config(tmp_path, monkeypatch):
+def test_setup_writes_a_silo_config_with_the_biggest_library_of_each_type_first(tmp_path, monkeypatch, silo_run):
+    fake = silo_run.fake
+    fake.libraries.insert(0, fake.libraries.pop(3))      # Movies Anime was added to Silo first; Movies has more films
     monkeypatch.setattr(cli, "detect_server", lambda url: "silo")
     answers = iter(["192.0.2.10:8080"])
     monkeypatch.setattr(builtins, "input", lambda prompt="": next(answers))
     monkeypatch.setattr(getpass, "getpass", lambda prompt="": KEY)
-    monkeypatch.setattr(silo.SiloServer, "libraries", lambda self: FakeSilo().libraries)
+    real_init = silo.SiloServer.__init__
+
+    def init(self, cfg):
+        real_init(self, cfg)
+        fake.headers = dict(self.session.headers)
+        self.session = fake
+    monkeypatch.setattr(silo.SiloServer, "__init__", init)
     out = tmp_path / "config.yml"
     cli.setup(str(out))
     cfg = config.load(str(out))
     assert cfg["server"] == {"type": "silo", "url": "http://192.0.2.10:8080", "api_key": KEY}
-    assert cfg["libraries"] == [{"name": "Movies", "type": "movie"}, {"name": "TV Shows", "type": "show"},
-                                {"name": "Movies Anime", "type": "movie"}]           # the mixed library is left out
+    assert cfg["libraries"] == [{"name": "Movies", "type": "movie"}, {"name": "Movies Anime", "type": "movie"},
+                                {"name": "TV Shows", "type": "show"}]                # the mixed library is left out
 
 
 # ---------------------------------------------------------------- one library per collection
