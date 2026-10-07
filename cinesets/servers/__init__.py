@@ -10,6 +10,7 @@ is its own module here (emby.py covers Emby and Jellyfin, silo.py covers Silo), 
                 upload_poster, set_details, delete_collection, admin_user
   setup         detect(url): which server answers at an address (a static method, no API key)
   optional      arrange(owned): put the collections in page order, for a server without sort names (Silo)
+                narrow(coll, ids) and prepare(cid, coll): for a server whose collections live in one library (Silo)
 
 A server's quirks stay in its own module, so a change for one server can't change what another one gets."""
 import ipaddress

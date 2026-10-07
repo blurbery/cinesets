@@ -5,14 +5,15 @@
 """Silo: a client for the parts of Silo's own API (/api/v2) CineSets uses.
 
 Silo's Jellyfin-compatible port can show collections but not make them, so CineSets talks to Silo's main address.
-Its collections are Silo library collections: manual ones, in every library config.yml lists for their type, so
-everyone who can see those libraries gets them. Titles are Silo content ids such as movie-tmdb-105, which carry one
+Its collections are Silo library collections: manual ones, each in one library, the one most of its titles are in
+(a Silo collection can only hold titles from its libraries, and in any other library it would show up empty). Titles are Silo content ids such as movie-tmdb-105, which carry one
 provider id; the others a TV show has are looked up once and kept in data/silo-ids.json, so lists match the same
 shows they match on Emby."""
 import os
 import re
 import sys
 import time
+from collections import Counter
 from urllib.parse import quote, urljoin, urlparse
 
 import requests
@@ -75,9 +76,13 @@ class SiloServer:
         self.session.headers.update({"accept": "application/json", "Authorization": f"Bearer {srv['api_key']}",
                                      "User-Agent": f"CineSets/{__version__} (+https://github.com/blurbery/cinesets)"})
         self.ids_file = os.path.join(cfg.path("data_dir"), "silo-ids.json")
+        self.where_file = os.path.join(cfg.path("data_dir"), "silo-libraries.json")
         self._profile = None
         self._folders = None
-        self._next = {}  # collection id -> the position the next added title gets
+        self._where = None      # content id -> the libraries it is in, kept with the index
+        self._home = {}         # collection key -> the library it lives in
+        self._attached = {}     # collection id -> its libraries, as Silo has them
+        self._next = {}         # collection id -> the position the next added title gets
 
     # ------------------------------------------------------------ requests
     def call(self, method, path, timeout=120, **kw):
@@ -174,9 +179,44 @@ class SiloServer:
             out.append({"id": cid, "name": c.get("title"), "year": c.get("year"), "ids": content_ids(cid),
                         "backdrop": bool(c.get("backdrop_url") or c.get("backdrop_thumbhash")),
                         "genres": c.get("genres") or []})
+        if self._where is None or name == self.cfg["libraries"][0]["name"]:  # a new index starts the record afresh
+            self._where = {}
+        for it in out:
+            self._where.setdefault(it["id"], []).append(folder)
+        save_json(self.where_file, self._where)
         if kind == "show":
             self.add_show_ids(out, name)
         return out
+
+    def where(self):
+        """content id -> the libraries it is in. Written with the index; made here if an older install has none."""
+        if self._where is None:
+            self._where = load_json(self.where_file, None)
+        if self._where is None:
+            self._where = {}
+            for lib in self.cfg["libraries"]:
+                folder = self.library_folders().get(lib["name"])
+                typ = "movie" if lib["type"] == "movie" else "series"
+                if folder:
+                    for c in self.pages(f"/catalog?library_id={quote(folder)}&type={typ}&sort=title&skip_total=true"
+                                        f"&image_size=small&limit={PAGE}", headers=self.profile()):
+                        self._where.setdefault(c["content_id"], []).append(folder)
+            save_json(self.where_file, self._where)
+        return self._where
+
+    def narrow(self, coll, ids):
+        """A collection lives in one library: the one of its type in config.yml that holds most of its titles (a
+        title in several counts for the first). Only titles in that library go in it."""
+        folders = self.library_folders()
+        libs = [folders[x["name"]] for x in self.cfg["libraries"] if x["type"] == coll["kind"] and x["name"] in folders]
+        where = self.where()
+        votes = Counter(next((lib for lib in libs if lib in where.get(i, ())), None) for i in ids)
+        votes.pop(None, None)
+        if not votes:
+            return ids
+        home = max(libs, key=lambda lib: (votes[lib], -libs.index(lib)))
+        self._home[coll["key"]] = home
+        return [i for i in ids if home in where.get(i, ())]
 
     def add_show_ids(self, items, name):
         """A show's content id carries one provider id (TVDB when it has one); lists also match by IMDb and TMDB, so
@@ -240,7 +280,9 @@ class SiloServer:
 
     # ------------------------------------------------------------ collections
     def list_collections(self):
-        return {str(c["id"]): c.get("title") for c in self.pages("/admin/collections")}
+        found = self.pages("/admin/collections")
+        self._attached = {str(c["id"]): [str(x) for x in c.get("library_ids") or []] for c in found}
+        return {str(c["id"]): c.get("title") for c in found}
 
     def library_ids(self, kind):
         folders = self.library_folders()
@@ -250,15 +292,24 @@ class SiloServer:
         return ids
 
     def create_collection(self, name, coll, ids):
-        body = {"title": name, "slug": f"cinesets-{coll['key']}", "library_ids": self.library_ids(coll["kind"]),
+        home = self._home.get(coll["key"])
+        libs = [home] if home else self.library_ids(coll["kind"])
+        body = {"title": name, "slug": f"cinesets-{coll['key']}", "library_ids": libs,
                 "description": coll.get("overview", ""), "collection_type": "manual", "visibility": "visible"}
         r, took = self.timed("POST", "/admin/collections", json=body)
         cid = str(r.json()["id"])
-        self._next[cid] = 0
+        self._next[cid], self._attached[cid] = 0, libs
         return cid, max(took, self.add_items(cid, ids))
 
     def wait_until_ready(self, cid, user_id):
         pass  # usable as soon as it is made
+
+    def prepare(self, cid, coll):
+        """Move a collection to its library (see narrow) when that changed, before its titles are brought up to date."""
+        home = self._home.get(coll["key"])
+        if home and self._attached.get(cid) != [home]:
+            self.timed("PATCH", f"/admin/collections/{cid}", json={"library_ids": [home]}, headers={"If-Match": "*"})
+            self._attached[cid] = [home]
 
     def members(self, cid, user_id):
         rows = self.pages(f"/admin/collections/{cid}/items?limit={PAGE}")

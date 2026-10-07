@@ -58,8 +58,10 @@ Give setup the address Silo's web app opens on (port 8080 unless you changed it)
 Jellyfin-compatible port, it finds Silo's own address for you. CineSets talks to Silo's own API, because the
 Jellyfin-compatible one can't make collections.
 
-- Collections are Silo library collections. Each one goes in every library in `config.yml` of its type, so
-  everyone who can see those libraries gets it.
+- Collections are Silo library collections. Each one lives in one library: the one in `config.yml` that most of
+  its titles are in, usually your main Movies or TV Shows library. A Silo collection only shows titles from its
+  own library, so titles that are only in another library are left out, and the next ones on the list take their
+  place.
 - They're kept in Collections page order in each library. Collections CineSets didn't make keep their places.
 - Silo's server-wide Collections page shows up to 20 per library. Each library's Collections tab shows them all.
 - Silo adds titles to a collection one at a time, so the first `apply` takes a while on a big library.

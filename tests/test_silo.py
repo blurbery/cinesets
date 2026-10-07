@@ -40,6 +40,8 @@ YML = """collections:
 """
 MOVIES = [("movie-tmdb-105", "Back to the Future", 1985), ("movie-tmdb-165", "Back to the Future Part II", 1989),
           ("movie-tmdb-196", "Back to the Future Part III", 1990), ("movie-imdb-tt0133093", "The Matrix", 1999)]
+ANIME = [("movie-tmdb-129", "Spirited Away", 2001), ("movie-tmdb-128", "Princess Mononoke", 1997),
+         ("movie-tmdb-4935", "Howl's Moving Castle", 2004)]
 SHOWS = [  # content id, title, year, genres, the other ids Silo knows
     ("series-tvdb-305288", "Stranger Things", 2016, ["Drama"], {"imdb_id": "tt4574334", "tmdb_id": "66732"}),
     ("series-tvdb-289574", "The Late Show", 2015, ["Talk"], {"imdb_id": "tt3697842", "tmdb_id": "63770"}),
@@ -81,14 +83,16 @@ class FakeSilo:
 
     def __init__(self):
         self.libraries = [{"id": "1", "name": "Movies", "type": "movies"}, {"id": "2", "name": "TV Shows", "type": "series"},
-                          {"id": "3", "name": "Concerts", "type": "mixed"}]
+                          {"id": "3", "name": "Concerts", "type": "mixed"}, {"id": "4", "name": "Movies Anime", "type": "movies"}]
         self.items = {}
         for cid, title, year in MOVIES:
             self.items[cid] = {"title": title, "year": year, "lib": "1", "genres": ["Adventure"], "ids": {}}
+        for cid, title, year in ANIME:
+            self.items[cid] = {"title": title, "year": year, "lib": "4", "genres": ["Animation"], "ids": {}}
         for cid, title, year, genres, ids in SHOWS:
             self.items[cid] = {"title": title, "year": year, "lib": "2", "genres": genres, "ids": ids}
         self.collections = {}
-        self.order = {"1": [], "2": [], "3": []}
+        self.order = {"1": [], "2": [], "3": [], "4": []}
         self.revision = 1
         self.calls = []
         self.next_id = 500
@@ -185,6 +189,13 @@ class FakeSilo:
                 return problem(428, "If-Match required")
             if method == "PATCH":
                 c.update({k: v for k, v in json.items() if k in ("title", "description", "sort_config")})
+                if "library_ids" in json:
+                    for lib, ids in self.order.items():
+                        if lib in json["library_ids"] and c["id"] not in ids:
+                            ids.append(c["id"])
+                        elif lib not in json["library_ids"] and c["id"] in ids:
+                            ids.remove(c["id"])
+                    c["library_ids"] = list(json["library_ids"])
                 return Resp(data=self.view(c))
             if method == "DELETE":
                 del self.collections[rest[0]]
@@ -240,8 +251,8 @@ def silo_run(make_cfg, monkeypatch):
         return Resp(content=jpeg())
     monkeypatch.setattr(silo.requests, "get", storage_get)
 
-    def make(yml=YML):
-        cfg = make_cfg("silo", yml)
+    def make(yml=YML, extra=""):
+        cfg = make_cfg("silo", yml, extra)
         cfg["server"]["api_key"] = KEY
         srv = silo.SiloServer(cfg)
         fake.headers = dict(srv.session.headers)
@@ -420,4 +431,75 @@ def test_setup_writes_a_silo_config(tmp_path, monkeypatch):
     cli.setup(str(out))
     cfg = config.load(str(out))
     assert cfg["server"] == {"type": "silo", "url": "http://192.0.2.10:8080", "api_key": KEY}
-    assert cfg["libraries"] == [{"name": "Movies", "type": "movie"}, {"name": "TV Shows", "type": "show"}]
+    assert cfg["libraries"] == [{"name": "Movies", "type": "movie"}, {"name": "TV Shows", "type": "show"},
+                                {"name": "Movies Anime", "type": "movie"}]           # the mixed library is left out
+
+
+# ---------------------------------------------------------------- one library per collection
+THREE_LIBRARIES = "libraries: [{name: Movies, type: movie}, {name: Movies Anime, type: movie}, {name: TV Shows, type: show}]\n"
+MIXED = YML + """  - key: m-picks
+    group: charts
+    type: movie
+    title: Picks
+    min: 2
+    limit: 3
+    lists: [someone/picks]
+  - key: m-ghibli
+    group: universes
+    type: movie
+    title: Studio Ghibli
+    min: 2
+    titles:
+      - ["Spirited Away", 2001]
+      - ["Princess Mononoke", 1997]
+      - ["Howl's Moving Castle", 2004]
+"""
+PICKS = [{"mediatype": "movie", "rank": 1, "id": 105}, {"mediatype": "movie", "rank": 2, "id": 129},
+         {"mediatype": "movie", "rank": 3, "imdb_id": "tt0133093"}, {"mediatype": "movie", "rank": 4, "id": 165}]
+
+
+def lists_by_slug(monkeypatch, rows):
+    monkeypatch.setattr("cinesets.engine.fetch_list", lambda slug, data: PICKS if slug == "someone/picks" else rows)
+
+
+def test_each_collection_lives_in_the_library_most_of_its_titles_are_in(silo_run, monkeypatch):
+    lists_by_slug(monkeypatch, silo_run.rows)
+    cfg, srv, eng = silo_run(MIXED, THREE_LIBRARIES)
+    eng.run("apply", catalog.load(cfg), 2)
+    fake = silo_run.fake
+    picks, ghibli = by_slug(fake, "cinesets-m-picks"), by_slug(fake, "cinesets-m-ghibli")
+    # mostly Movies, so it lives there; Spirited Away (Movies Anime) is left out and the next title fills its place
+    assert picks["library_ids"] == ["1"] and set(picks["items"]) == {"movie-tmdb-105", "movie-imdb-tt0133093", "movie-tmdb-165"}
+    assert ghibli["library_ids"] == ["4"] and len(ghibli["items"]) == 3
+    assert ghibli["id"] in fake.order["4"] and ghibli["id"] not in fake.order["1"]
+    assert all(c["library_ids"] in (["1"], ["2"], ["4"]) for c in fake.collections.values())
+
+
+def test_a_collection_in_several_libraries_moves_to_its_own(silo_run, monkeypatch):
+    lists_by_slug(monkeypatch, silo_run.rows)
+    cfg, srv, eng = silo_run(MIXED, THREE_LIBRARIES)
+    eng.run("apply", catalog.load(cfg), 2)
+    fake = silo_run.fake
+    picks = by_slug(fake, "cinesets-m-picks")
+    picks["library_ids"] = ["1", "4"]               # as an earlier version left it: in every movie library
+    fake.order["4"].append(picks["id"])
+    picks["items"]["movie-tmdb-129"] = 9           # with a title from Movies Anime
+    cfg, srv, eng = silo_run(MIXED, THREE_LIBRARIES)
+    eng.run("apply", catalog.load(cfg), 2)
+    assert picks["library_ids"] == ["1"] and "movie-tmdb-129" not in picks["items"]
+    assert picks["id"] not in fake.order["4"]
+    fake.calls.clear()
+    eng.run("apply", catalog.load(cfg), 2)
+    assert fake.writes() == []
+
+
+def test_an_install_without_the_library_record_makes_it(silo_run, monkeypatch):
+    lists_by_slug(monkeypatch, silo_run.rows)
+    cfg, srv, eng = silo_run(MIXED, THREE_LIBRARIES)
+    eng.get_index()
+    import os
+    os.remove(srv.where_file)                      # an index built by a version that kept no record
+    cfg, srv, eng = silo_run(MIXED, THREE_LIBRARIES)
+    eng.run("apply", catalog.load(cfg), 2)
+    assert by_slug(silo_run.fake, "cinesets-m-ghibli")["library_ids"] == ["4"]
+    assert load_json(srv.where_file, {})["movie-tmdb-129"] == ["4"]
