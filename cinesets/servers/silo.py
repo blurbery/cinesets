@@ -144,8 +144,9 @@ class SiloServer(Server):
         return r, took
 
     def pages(self, path, **kw):
-        """Every item of a paged list."""
-        out, cursor = [], None
+        """Every item of a paged list. If Silo ever hands back a cursor it gave before, reading stops there rather than
+        going round forever."""
+        out, cursor, used = [], None, set()
         while True:
             sep = "&" if "?" in path else "?"
             page = self.get(path + (f"{sep}cursor={quote(cursor, safe='')}" if cursor else ""), **kw)
@@ -153,6 +154,10 @@ class SiloServer(Server):
             cursor = (page.get("page") or {}).get("next_cursor")
             if not (page.get("page") or {}).get("has_more") or not cursor:
                 return out
+            if cursor in used:
+                print(f"   Silo sent the same page of {path.split('?')[0]} twice; anything after it was not read")
+                return out
+            used.add(cursor)
 
     def profile(self):
         """The profile header the catalogue needs: the household's main profile."""

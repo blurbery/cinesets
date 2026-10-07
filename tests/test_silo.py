@@ -542,3 +542,15 @@ def test_a_collection_moves_out_of_the_first_library_only_when_it_is_clearly_the
     themed, mixed = by_slug(silo_run.fake, "cinesets-m-themed"), by_slug(silo_run.fake, "cinesets-m-mixed")
     assert themed["library_ids"] == ["4"] and set(themed["items"]) == {"movie-tmdb-129", "movie-tmdb-128"}
     assert mixed["library_ids"] == ["1"] and set(mixed["items"]) == {"movie-tmdb-105"}   # half and half: the first library
+
+
+def test_a_page_silo_sends_twice_is_read_once(silo_run, capsys):
+    cfg, srv, eng = silo_run()
+    pages = []
+
+    def get(path, **kw):
+        pages.append(path)
+        return {"items": [{"id": len(pages)}], "page": {"has_more": True, "next_cursor": "same"}}
+    srv.get = get
+    assert srv.pages("/admin/collections") == [{"id": 1}, {"id": 2}]   # the first page, then the repeat, then stop
+    assert len(pages) == 2 and "same page" in capsys.readouterr().out

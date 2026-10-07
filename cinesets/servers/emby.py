@@ -22,9 +22,10 @@ class EmbyCalls(Server):
     """What CineSets reads and writes on Emby, on top of get, call, timed and item. The tests' fake Emby shares
     these, so it answers exactly the requests a real Emby server gets."""
 
-    def all_items(self, query, what, pause=0.0):
+    def all_items(self, query, what, pause=0.0, keep=None):
         """Every item an /Items query returns, a page at a time. A short page is not taken as the end, since a server
-        or a proxy in front of it may send fewer items than asked for: reading stops at an empty page."""
+        or a proxy in front of it may send fewer items than asked for: reading stops at an empty page. With `keep`,
+        each item is cut down to keep(item) as its page arrives, so a big library is never held in memory whole."""
         out, seen, start = [], set(), 0
         while True:
             page = self.get(f"/Items?{query}&StartIndex={start}&Limit={PAGE}&EnableTotalRecordCount=false")["Items"]
@@ -34,7 +35,7 @@ class EmbyCalls(Server):
                     print(f"   the server sent the same page of {what} twice; anything after it was not read")
                 return out
             seen.update(i["Id"] for i in new)
-            out += new
+            out += [keep(i) for i in new] if keep else new
             start += len(page)
             time.sleep(pause)
 
@@ -51,11 +52,12 @@ class EmbyCalls(Server):
         """Every movie or show in a library: id, name, year, provider ids and whether it has a backdrop."""
         item_type = "Movie" if kind == "movie" else "Series"
         # CollapseBoxSetItems=false: titles that are in a collection are listed as themselves
-        items = self.all_items(f"Recursive=true&IncludeItemTypes={item_type}&Fields=ProviderIds,ProductionYear"
-                               f"&CollapseBoxSetItems=false&ParentId={folder}", f"library {name!r}", pause=0.5)
-        return [{"id": it["Id"], "name": it.get("Name"), "year": it.get("ProductionYear"),
-                 "ids": {k.lower(): str(v) for k, v in (it.get("ProviderIds") or {}).items() if v},
-                 "backdrop": bool(it.get("BackdropImageTags"))} for it in items]
+        def title(it):
+            ids = {k.lower(): str(v) for k, v in (it.get("ProviderIds") or {}).items() if v}
+            return {"id": it["Id"], "name": it.get("Name"), "year": it.get("ProductionYear"), "ids": ids,
+                    "backdrop": bool(it.get("BackdropImageTags"))}
+        return self.all_items(f"Recursive=true&IncludeItemTypes={item_type}&Fields=ProviderIds,ProductionYear"
+                              f"&CollapseBoxSetItems=false&ParentId={folder}", f"library {name!r}", pause=0.5, keep=title)
 
     def genres(self, ids):
         return {i["Id"]: {g.lower() for g in (i.get("Genres") or [])}
