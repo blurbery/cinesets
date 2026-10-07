@@ -53,6 +53,7 @@ checks wait until I approve them.
 - Each media server has its own module in `cinesets/servers/` (`emby.py` covers Emby and Jellyfin). The
   collections, matching, posters and dashboard only use the operations listed in `cinesets/servers/__init__.py`,
   so anything server-specific goes in that server's module, where it can't change what the others get.
+  [docs/architecture.md](docs/architecture.md) shows how it fits together and how to add a server.
 - New source files get the same header as the others.
 - New collections go in `collections.yml` (the top of the file explains every field). Lists have to be public
   mdblist lists, and franchises use fixed `[title, year]` lists so remakes don't sneak in.
