@@ -5,5 +5,5 @@
 # Additional terms under AGPL-3.0 section 7 apply: see NOTICE.
 """CineSets builds and maintains media server collections with generated posters."""
 
-__version__ = "1.1.0"
+__version__ = "1.2.0"
 __author__ = "blurbery"

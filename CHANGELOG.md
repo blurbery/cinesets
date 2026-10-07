@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.0](https://github.com/blurbery/cinesets/compare/v1.1.0...v1.2.0) (2026-10-07)
+
+
+### Features
+
+* **setup:** a simpler setup that finishes the job ([#14](https://github.com/blurbery/cinesets/issues/14)) ([d9b9efe](https://github.com/blurbery/cinesets/commit/d9b9efe93362fa05bfef0ae73f695cd338799f94))
+
 ## [1.1.0](https://github.com/blurbery/cinesets/compare/v1.0.1...v1.1.0) (2026-10-07)
 
 
