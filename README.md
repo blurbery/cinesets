@@ -97,7 +97,7 @@ collection's artwork, set how many titles each collection holds, add MDBList lis
 them, preview every poster, then save and apply. It prints a sign-in link; `./run.sh web --demo` tries it with
 made-up artwork and no server.
 
-<p align="center"><img src="docs/images/dashboard.jpg" alt="The CineSets dashboard" width="800"></p>
+<p align="center"><img src="docs/images/dashboard.jpg" alt="The CineSets dashboard" width="820"></p>
 
 It listens on this machine only, needs you signed in, and never shows your API key to the browser. Sign-in can be
 turned off for use on this machine alone, or the dashboard can go on the internet behind its sign-in page and

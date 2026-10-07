@@ -4,7 +4,33 @@
 one collection), moving and resizing their text, choosing their artwork, setting how many titles each collection
 holds, and making new collections from MDBList lists. Back to the [README](../README.md).
 
-![The CineSets dashboard in demo mode](images/dashboard.jpg)
+![The Design tab: one collection's poster with its text boxes, and the style settings](images/dashboard.jpg)
+
+<details>
+<summary><b>More screenshots</b> (all from <code>./run.sh web --demo</code>, with made-up artwork)</summary>
+
+**Designing a whole section:** every poster in Popular genres follows these settings, with a strip showing how
+it looks across the section.
+
+![Whole section scope, centred text](images/dashboard-section.jpg)
+
+**Collections:** turn sections and collections on or off, and set how many titles they hold.
+
+![The Collections tab](images/dashboard-collections.jpg)
+
+**Lists:** check an MDBList list, then make a new collection from it or add it to an existing one.
+
+![The Lists tab checking a list](images/dashboard-lists.jpg)
+
+**Preview all:** every collection that's on, in your unsaved style.
+
+![The Preview all tab](images/dashboard-preview-all.jpg)
+
+**Signing in:**
+
+![The sign-in page](images/dashboard-sign-in.jpg)
+
+</details>
 
 ## Signing in
 

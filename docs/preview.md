@@ -17,6 +17,9 @@ drag the text into place and choose each collection's artwork, then saves to `co
 
 ![The CineSets dashboard in demo mode](images/dashboard.jpg)
 
+[docs/dashboard.md](dashboard.md) has more screenshots: designing a whole section, the Collections, Lists and
+Preview all tabs, and signing in.
+
 ## Your Collections page
 
 ![An illustration of a Collections page made by CineSets](images/collections-page.jpg)
@@ -428,4 +431,4 @@ venv/bin/python docs/make_preview.py
 ```
 
 It draws every picture on this page and rewrites the section tables, without talking to any server. The
-dashboard picture is a screenshot of `./run.sh web --demo` at 1440x900.
+dashboard pictures are screenshots of `./run.sh web --demo` at 1440x900.
