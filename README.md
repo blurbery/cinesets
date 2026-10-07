@@ -11,6 +11,17 @@
   <a href="https://github.com/blurbery/cinesets/actions/workflows/ci.yml"><img src="https://github.com/blurbery/cinesets/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/blurbery/cinesets/releases/latest"><img src="https://img.shields.io/github/v/release/blurbery/cinesets?label=release" alt="Latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-AGPL--3.0--or--later-blue" alt="Licence: AGPL-3.0-or-later"></a>
+  <a href="https://github.com/sponsors/blurbery"><img src="https://img.shields.io/badge/sponsor-%E2%9D%A4-ea4aaa?logo=githubsponsors&logoColor=white" alt="Sponsor blurbery"></a>
+</p>
+
+<p align="center">
+  <a href="docs/setup.md"><b>Setup</b></a> ·
+  <a href="docs/preview.md"><b>Preview</b></a> ·
+  <a href="docs/screenshots.md"><b>Screenshots</b></a> ·
+  <a href="docs/dashboard.md"><b>Dashboard</b></a> ·
+  <a href="docs/architecture.md"><b>How it fits together</b></a> ·
+  <a href="https://github.com/blurbery/cinesets/releases"><b>Releases</b></a> ·
+  <a href="https://github.com/sponsors/blurbery"><b>♥ Sponsor</b></a>
 </p>
 
 I made CineSets because I wanted my server's Collections page to look good without having to look after it.
@@ -21,9 +32,6 @@ schedule.
 It only ever touches collections it made itself. Your films, shows, libraries, users and settings are left
 alone. It talks to your server, public [mdblist](https://mdblist.com) lists and Wikimedia Commons (for the
 streaming logos), and that's it. No account, no tracking.
-
-<p align="center"><b><a href="docs/preview.md">See every section and poster style in the preview</a> ·
-<a href="docs/screenshots.md">See the dashboard</a></b></p>
 
 > [!NOTE]
 > Emby is fully supported. Jellyfin and Silo work and are tested on every change, but they're beta until more
@@ -155,6 +163,8 @@ A franchise from a fixed list of films. It needs `min` because there are only th
 - [Dashboard](docs/dashboard.md) and its [screenshots](docs/screenshots.md): signing in, Tailscale, proxies, keeping
   it running
 - [How CineSets fits together](docs/architecture.md): the shared centre and the module each server gets
+
+If CineSets is useful to you, you can [sponsor me on GitHub](https://github.com/sponsors/blurbery). Thank you.
 
 ## Contributing
 
