@@ -214,42 +214,39 @@ def pick(path):
 
 
 def detect_server(url):
-    """Which server answers at `url`, from its public information (no API key needed), or None if it can't tell."""
+    """(server type, address, note) for the server at `url`, from its public information (no API key needed), or None
+    if no server module recognises it."""
     return servers.detect(url)
 
 
 def find_server(url):
-    """(address, kind) for the address typed at setup. A browser address with a page on the end works too, and Silo's
-    Jellyfin-compatible port leads to Silo's own address (its web app's), which is the one CineSets needs."""
-    kind = detect_server(url)
+    """(address, server type or None) for the address typed at setup. A browser address with a page on the end works
+    too, and a server module can point setup to the server's own address (Silo does, from its Jellyfin-compatible
+    port) or ask for it."""
+    found = detect_server(url)
     origin = "{0.scheme}://{0.netloc}".format(urlparse(url))
-    if not kind and origin != url:
-        kind = detect_server(origin)
-        url = origin if kind else url
-    if kind == "silo-compat":
-        print("That is Silo's Jellyfin-compatible port. CineSets needs Silo's own address, the one its web app opens on.")
-        guess = urlparse(url)._replace(netloc=f"{urlparse(url).hostname}:8080", path="").geturl()
-        if detect_server(guess) == "silo":
-            return guess, "silo"
-        url = clean_address(input("Silo's address, as you open it in a browser: "))
-        kind = detect_server(url)
-        if kind != "silo":
-            raise SystemExit(f"Silo's own API did not answer at {url}. Check the address Silo's web app opens on.")
-    return url, kind
+    if not found and origin != url:
+        found = detect_server(origin)
+    if not found:
+        return url, None
+    kind, where, note = found
+    if note:
+        print(note)
+    if not where:
+        name = servers.names()[kind]
+        typed = clean_address(input(f"{name}'s address, as you open it in a browser: "))
+        again = detect_server(typed)
+        if not again or again[0] != kind or not again[1]:
+            raise SystemExit(f"{name} did not answer at {typed}. Check the address its web app opens on.")
+        where = again[1]
+    return where, kind
 
 
 def clean_address(url):
     url = url.strip()
     if not url.startswith(("http://", "https://")):
         url = "http://" + url
-    url = url.split("/web/")[0].split("/web#")[0].rstrip("/")  # a pasted browser address works too
-    for tail in ("/web", "/emby"):
-        if url.endswith(tail):
-            url = url[: -len(tail)]
-    return url
-
-
-KEY_PAGES = {"emby": "Dashboard > API Keys", "jellyfin": "Dashboard > API Keys", "silo": "Admin > API keys"}
+    return servers.trim(url.rstrip("/"))
 
 
 def setup(path):
@@ -260,15 +257,17 @@ def setup(path):
     url = clean_address(input("Server address, as you open it in a browser [http://127.0.0.1:8096]: ").strip()
                         or "http://127.0.0.1:8096")
     url, kind = find_server(url)
+    names = servers.names()
     if kind:
-        print(f"Found {servers.NAMES[kind]} at {url}.")
+        print(f"Found {names[kind]} at {url}.")
     else:
-        kind = input("Couldn't tell what server that is. Emby, Jellyfin or Silo? [emby]: ").strip().lower() or "emby"
+        choices = list(names.values())
+        kind = input(f"Couldn't tell what server that is. {', '.join(choices[:-1])} or {choices[-1]}? [emby]: ").strip().lower() or "emby"
         config.check_type(kind)
-    where = KEY_PAGES.get(kind, KEY_PAGES["emby"])
-    if kind == "silo":
-        print("CineSets needs a Silo API key that belongs to an administrator and has no scopes. Make one under "
-              f"{where} (name it CineSets).")
+    module = servers.server_class(kind)
+    where = module.KEY_PAGE
+    if getattr(module, "SETUP_NOTE", None):
+        print(module.SETUP_NOTE)
     key = getpass.getpass(f"API key ({where} on your server; typing is hidden): ").strip()
     cfg = config.Config(config._merge(config.DEFAULTS, {"server": {"type": kind, "url": url, "api_key": key}}))
     cfg["base_dir"] = os.path.dirname(os.path.abspath(path))
@@ -308,7 +307,9 @@ def setup(path):
 
 
 def main():
-    ap = argparse.ArgumentParser(prog="cinesets", description="Automatic, beautiful collections for Emby, Jellyfin and Silo. By blurbery.")
+    supported = list(servers.names().values())
+    ap = argparse.ArgumentParser(prog="cinesets", description=f"Automatic, beautiful collections for "
+                                 f"{', '.join(supported[:-1])} and {supported[-1]}. By blurbery.")
     ap.add_argument("cmd", choices=["index", "plan", "posters", "apply", "logos", "list", "pick", "web", "schedule", "setup",
                                     "adopt", "remove", "version"])
     ap.add_argument("--only", help="comma-separated collection keys")

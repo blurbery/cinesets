@@ -401,14 +401,25 @@ def test_a_wrong_key_says_so(silo_run):
 
 
 # ---------------------------------------------------------------- setup on a Silo-only server
-def test_setup_finds_silo_from_its_jellyfin_port(monkeypatch):
-    answers = {"http://192.0.2.10:8096": "silo-compat", "http://192.0.2.10:8080": "silo"}
-    monkeypatch.setattr(cli, "detect_server", lambda url: answers.get(url))
+def test_silo_finds_its_own_address_from_its_jellyfin_port(monkeypatch, capsys):
+    pages = {"http://192.0.2.10:8096/Branding/Configuration": {"LoginDisclaimer": "Silo provides Jellyfin-compatible app support."},
+             "http://192.0.2.10:8096/System/Info/Public": {"ProductName": "Jellyfin Server"},
+             "http://192.0.2.10:8080/api/v2/system/info": {"api_major": 2, "contract_digest": "d"}}
+
+    def get(url, **kw):
+        assert "Authorization" not in (kw.get("headers") or {})   # no key goes out while finding the server
+        return Resp(200, pages[url]) if url in pages else Resp(404, {})
+    monkeypatch.setattr(silo.requests, "get", get)
+    assert silo.SiloServer.detect("http://192.0.2.10:8096") == ("silo", "http://192.0.2.10:8080", silo.COMPAT_NOTE)
     assert cli.find_server("http://192.0.2.10:8096") == ("http://192.0.2.10:8080", "silo")
+    assert "Jellyfin-compatible port" in capsys.readouterr().out
+    del pages["http://192.0.2.10:8080/api/v2/system/info"]          # Silo isn't on 8080: setup has to ask
+    assert silo.SiloServer.detect("http://192.0.2.10:8096") == ("silo", None, silo.COMPAT_NOTE)
 
 
 def test_setup_asks_for_silos_address_when_it_is_not_on_8080(monkeypatch):
-    answers = {"https://media.example.com:8096": "silo-compat", "https://silo.example.com": "silo"}
+    answers = {"https://media.example.com:8096": ("silo", None, silo.COMPAT_NOTE),
+               "https://silo.example.com": ("silo", "https://silo.example.com", None)}
     monkeypatch.setattr(cli, "detect_server", lambda url: answers.get(url))
     monkeypatch.setattr(builtins, "input", lambda prompt="": "silo.example.com/")
     with pytest.raises(SystemExit, match="did not answer"):
@@ -418,14 +429,14 @@ def test_setup_asks_for_silos_address_when_it_is_not_on_8080(monkeypatch):
 
 
 def test_setup_takes_a_pasted_silo_page_address(monkeypatch):
-    monkeypatch.setattr(cli, "detect_server", lambda url: "silo" if url == "http://192.0.2.10:8080" else None)
+    monkeypatch.setattr(cli, "detect_server", lambda url: ("silo", url, None) if url == "http://192.0.2.10:8080" else None)
     assert cli.find_server("http://192.0.2.10:8080/collections/server") == ("http://192.0.2.10:8080", "silo")
 
 
 def test_setup_writes_a_silo_config_with_the_biggest_library_of_each_type_first(tmp_path, monkeypatch, silo_run):
     fake = silo_run.fake
     fake.libraries.insert(0, fake.libraries.pop(3))      # Movies Anime was added to Silo first; Movies has more films
-    monkeypatch.setattr(cli, "detect_server", lambda url: "silo")
+    monkeypatch.setattr(cli, "detect_server", lambda url: ("silo", url, None))
     answers = iter(["192.0.2.10:8080"])
     monkeypatch.setattr(builtins, "input", lambda prompt="": next(answers))
     monkeypatch.setattr(getpass, "getpass", lambda prompt="": KEY)

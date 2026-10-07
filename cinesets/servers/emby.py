@@ -143,9 +143,21 @@ class EmbyCalls:
 
 
 class MediaServer(EmbyCalls):
+    NAMES = {"emby": "Emby", "jellyfin": "Jellyfin"}
+    KEY_PAGE = "Dashboard > API Keys"
+
+    @staticmethod
+    def trim(url):
+        """A pasted web app address works too: drop /web/index.html#... and a trailing /web or /emby."""
+        url = url.split("/web/")[0].split("/web#")[0].rstrip("/")
+        for tail in ("/web", "/emby"):
+            if url.endswith(tail):
+                url = url[: -len(tail)]
+        return url
+
     @staticmethod
     def detect(url):
-        """emby or jellyfin, from the server's public information (no API key needed), or None if it can't tell."""
+        """(emby or jellyfin, url, None) from the server's public information (no API key needed), or None."""
         for path in ("/System/Info/Public", "/emby/System/Info/Public"):
             try:
                 r = requests.get(url + path, timeout=10, allow_redirects=False, headers={"accept": "application/json"})
@@ -156,9 +168,9 @@ class MediaServer(EmbyCalls):
                 continue
             product = str(info.get("ProductName") or "").lower()
             if "jellyfin" in product:
-                return "jellyfin"
+                return "jellyfin", url, None
             if "emby" in product or info.get("ServerName") or info.get("Id"):  # Emby's public information has no product name
-                return "emby"
+                return "emby", url, None
         return None
 
     def __init__(self, cfg):

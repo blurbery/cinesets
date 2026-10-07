@@ -155,8 +155,10 @@ LIBRARY_TYPES = {"movies": "movie", "movie": "movie", "shows": "show", "show": "
 
 
 def check_type(kind):
-    if kind not in ("emby", "jellyfin", "silo"):
-        raise SystemExit(f"server.type must be emby, jellyfin or silo, not {kind!r}")
+    from .servers import names  # each server module says which types it handles
+    known = list(names())
+    if kind not in known:
+        raise SystemExit(f"server.type must be {', '.join(known[:-1])} or {known[-1]}, not {kind!r}")
 
 
 def config_path(path=None):
