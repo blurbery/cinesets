@@ -4,7 +4,7 @@
 FROM python:3.12-slim
 
 LABEL org.opencontainers.image.title="CineSets" \
-      org.opencontainers.image.description="Automatic, beautiful collections for Emby and Jellyfin" \
+      org.opencontainers.image.description="Automatic, beautiful collections for Emby, Jellyfin and Silo" \
       org.opencontainers.image.authors="blurbery" \
       org.opencontainers.image.source="https://github.com/blurbery/cinesets" \
       org.opencontainers.image.licenses="AGPL-3.0-or-later"

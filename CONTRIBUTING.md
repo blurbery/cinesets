@@ -35,12 +35,12 @@ python3 -m venv venv && venv/bin/pip install -r requirements-dev.txt
 venv/bin/python -m pytest tests --ignore=tests/e2e
 ```
 
-The unit tests use a fake server (`tests/conftest.py`), so you don't need Emby or Jellyfin to run them. To work
-on the dashboard, `venv/bin/python -m cinesets web --demo` runs it with made-up artwork and no server; its page
-is plain HTML, CSS and JavaScript in `cinesets/static`, with no build step. `docs/make_preview.py` redraws the
-pictures in `docs/` after poster changes. Every
-PR also gets tested against real throwaway Emby and Jellyfin servers on GitHub Actions. On your first PR those
-checks wait until I approve them.
+The unit tests use fake servers (`tests/conftest.py` for Emby and Jellyfin, `tests/test_silo.py` for Silo), so
+you don't need a real server to run them. To work on the dashboard, `venv/bin/python -m cinesets web --demo` runs
+it with made-up artwork and no server; its page is plain HTML, CSS and JavaScript in `cinesets/static`, with no
+build step. `docs/make_preview.py` redraws the pictures in `docs/` after poster changes. Every PR also gets tested
+against real throwaway Emby, Jellyfin and Silo servers on GitHub Actions. On your first PR those checks wait until
+I approve them.
 
 ## Ground rules
 
@@ -49,8 +49,9 @@ checks wait until I approve them.
 > struggling. Anything that weakens that won't get merged.
 
 - Add tests for what you change.
-- Keep it working on Python 3.9 and on both Emby and Jellyfin. Ask before adding a dependency.
-- Each media server has its own module in `cinesets/servers/` (`emby.py` covers Emby and Jellyfin). The
+- Keep it working on Python 3.9 and on Emby, Jellyfin and Silo. Ask before adding a dependency.
+- Each media server has its own module in `cinesets/servers/` (`emby.py` covers Emby and Jellyfin, `silo.py`
+  covers Silo). The
   collections, matching, posters and dashboard only use the operations listed in `cinesets/servers/__init__.py`,
   so anything server-specific goes in that server's module, where it can't change what the others get.
   [docs/architecture.md](docs/architecture.md) shows how it fits together and how to add a server.

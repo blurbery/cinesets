@@ -1,5 +1,5 @@
 # CineSets by blurbery (https://github.com/blurbery/cinesets)
-# Automatic, beautiful collections for Emby and Jellyfin.
+# Automatic, beautiful collections for Emby, Jellyfin and Silo.
 # Copyright (C) 2026 blurbery
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Additional terms under AGPL-3.0 section 7 apply: see NOTICE.

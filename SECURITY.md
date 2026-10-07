@@ -33,4 +33,4 @@ For example:
 - getting into the dashboard without signing in, or another web site using someone's dashboard session
 
 > [!NOTE]
-> Problems in Emby, Jellyfin or mdblist themselves should go to those projects.
+> Problems in Emby, Jellyfin, Silo or mdblist themselves should go to those projects.

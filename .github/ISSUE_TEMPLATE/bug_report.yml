@@ -31,6 +31,7 @@ body:
       options:
         - Emby
         - Jellyfin
+        - Silo
     validations:
       required: true
   - type: input

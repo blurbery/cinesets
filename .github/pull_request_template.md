@@ -4,7 +4,7 @@
 
 ## How I tested it
 
-<!-- Unit tests, a plan or apply on your own server (Emby or Jellyfin, which version), poster previews. Leave out server addresses, API keys, user names and anything else private. -->
+<!-- Unit tests, a plan or apply on your own server (Emby, Jellyfin or Silo, which version), poster previews. Leave out server addresses, API keys, user names and anything else private. -->
 
 ## AI disclosure (required)
 

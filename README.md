@@ -27,12 +27,11 @@ streaming logos), and that's it. No account, no tracking.
 
 > [!NOTE]
 > Emby is fully supported. Jellyfin and Silo work and are tested on every change, but they're beta until more
-> people have run them.
+> people have run them. Plex is next.
 
-## Install
+## Quick start
 
-You need Python 3.9 or newer, git and an API key from your server (Dashboard > API Keys; on Silo, Admin > API
-keys, made by an administrator with no scopes).
+You need Python 3.9 or newer, git and an API key from your server, made by an administrator.
 
 ```bash
 sudo git clone https://github.com/blurbery/cinesets.git /opt/cinesets
@@ -40,55 +39,9 @@ sudo chown -R "$(id -un)" /opt/cinesets
 cd /opt/cinesets && ./install.sh
 ```
 
-The installer does the rest:
-
-1. It asks for your server's address and API key, and works out whether it's Emby, Jellyfin or Silo.
-2. It finds your movie and TV libraries, and asks whether you want every collection or just some.
-3. It downloads the streaming logos and does a dry run, which changes nothing.
-4. It offers to create the collections, and to keep them updated: trending every 6 hours, charts and seasonal
-   daily, and everything on Sundays.
-
-That's it. To change collections and posters later, open the dashboard with `./run.sh web`. Every setting is
-also explained in `config.example.yml`.
-
-<details>
-<summary><b>Silo</b></summary>
-
-Give setup the address Silo's web app opens on (port 8080 unless you changed it). If you give it Silo's
-Jellyfin-compatible port, it finds Silo's own address for you. CineSets talks to Silo's own API, because the
-Jellyfin-compatible one can't make collections.
-
-- Collections are Silo library collections, and each one lives in one library, picked from where its titles are.
-  That's usually your first Movies or TV Shows library in `config.yml`. A collection with at least two thirds of
-  its titles in another library, like an anime library or an international one, goes there instead. A Silo
-  collection only shows titles from its own library, so titles that are only in another library are left out,
-  and the next ones on the list take their place.
-- They're kept in Collections page order in each library. Collections CineSets didn't make keep their places.
-- Silo's server-wide Collections page shows up to 20 per library. Each library's Collections tab shows them all.
-- Silo adds titles to a collection one at a time, so the first `apply` takes a while on a big library.
-- The first run also looks up each TV show's IMDb and TMDB ids once, so lists match the same shows they do on
-  Emby. It keeps them in `data/silo-ids.json`.
-
-</details>
-
-<details>
-<summary><b>Docker</b></summary>
-
-```bash
-git clone https://github.com/blurbery/cinesets.git && cd cinesets
-cp docker-compose.example.yml docker-compose.yml    # set PUID and PGID to your user
-docker compose build
-docker compose run --rm cinesets setup     # your server's address and API key, and which collections
-docker compose run --rm cinesets logos
-docker compose up -d                       # creates the collections, then keeps them updated
-```
-
-Inside the container `127.0.0.1` is the container itself, so give setup your server's LAN address. `up -d` runs
-the schedule from `config.yml`, starting with everything straight away. Changes to `config.yml` (from the dashboard or by hand) apply from the next job;
-restart the container only after changing the `schedule` itself. Any command below works as
-`docker compose run --rm cinesets <command>`.
-
-</details>
+The installer works out whether your server is Emby, Jellyfin or Silo, finds your libraries, asks which
+collections you want, does a dry run and offers to make them and keep them updated. The
+[setup guide](docs/setup.md) has each server's details, Docker, updating and uninstalling.
 
 ## Commands
 
@@ -114,12 +67,9 @@ collection's artwork, set how many titles each collection holds, add MDBList lis
 them, preview every poster, then save and apply. It prints a sign-in link; `./run.sh web --demo` tries it with
 made-up artwork and no server.
 
-[Screenshots](docs/screenshots.md) show each part of it. It listens on this machine only, needs you signed in,
-and never shows your API key to the browser. Sign-in can be
-turned off for use on this machine alone, or the dashboard can go on the internet behind its sign-in page and
-your HTTPS proxy. To use it from another computer, put Tailscale or a reverse proxy with HTTPS in front of it.
-[docs/dashboard.md](docs/dashboard.md) covers signing in, how your settings are kept, Tailscale, Caddy, nginx, and
-keeping it running on Docker or systemd.
+It listens on this machine only, needs you signed in and never shows your API key to the browser.
+[Screenshots](docs/screenshots.md) show each part of it, and [docs/dashboard.md](docs/dashboard.md) covers signing
+in, reaching it from another computer (Tailscale, Caddy, nginx) and keeping it running.
 
 ## Picking collections
 
@@ -198,34 +148,19 @@ A franchise from a fixed list of films. It needs `min` because there are only th
 
 </details>
 
-## Updating
+## Docs
 
-```bash
-git pull && ./install.sh
-```
-
-The installer keeps your settings, skips the questions you've already answered and won't add a second schedule.
-On Docker it's `git pull && docker compose build && docker compose up -d`. What changed is on the
-[Releases](https://github.com/blurbery/cinesets/releases) page.
-
-> [!IMPORTANT]
-> Keep the `data/` folder (Docker: `./config/data`). It's how CineSets knows which collections are its own. If
-> you lose it, run `./run.sh adopt --all` so it takes them back instead of making new ones.
-
-<details>
-<summary><b>Uninstalling</b></summary>
-
-Remove the schedule: `crontab -l | grep -v cinesets | crontab -` if the installer added it, `sudo rm
-/etc/cron.d/cinesets` if you set it up there, or `docker compose down`. Then run `./run.sh remove --all` to delete
-the collections CineSets made, and delete the folder.
-
-</details>
+- [Setup guide](docs/setup.md): installing, each server's address and API key, Docker, updating and uninstalling
+- [Preview](docs/preview.md): every section and poster style
+- [Dashboard](docs/dashboard.md) and its [screenshots](docs/screenshots.md): signing in, Tailscale, proxies, keeping
+  it running
+- [How CineSets fits together](docs/architecture.md): the shared centre and the module each server gets
 
 ## Contributing
 
 Found a bug or got an idea? [Open an issue](https://github.com/blurbery/cinesets/issues/new/choose). PRs are
 welcome too, just have a read of [CONTRIBUTING.md](CONTRIBUTING.md) first. Using AI is fine, but say so in the
-PR. [How CineSets fits together](docs/architecture.md) shows the shared centre and the module each server gets.
+PR.
 
 > [!CAUTION]
 > Security problems go through [SECURITY.md](SECURITY.md), not public issues.

@@ -52,7 +52,7 @@ ask() {  # ask a yes or no question when someone is at the keyboard; the answer 
 made=no
 verb=Create; [ -s data/state.json ] && verb=Update
 echo
-if ask "$verb your collections on the server now? (the first time takes about 10 minutes on a big library)"; then
+if ask "$verb your collections on the server now? (the first time can take a while on a big library)"; then
   ./run.sh apply && made=yes
 fi
 
