@@ -31,6 +31,16 @@ defaults:
   limit: 150        # most titles in a list-based collection
   min_items: 8      # skip a collection with fewer matches than this
 
+# Which collections to make. `sections` takes whole sections: all, or a list like [charts, genres, kids].
+# `include` adds single collections from sections you haven't picked, and `exclude` leaves single ones out.
+# `./run.sh list` shows every section and collection key and what's picked; `./run.sh pick` asks you and fills
+# this in. The sections are charts (trending, most watched, new), genres, streaming, bestof, kids, seasonal,
+# regional and universes (franchises and studios).
+collections:
+  sections: all
+  include: []
+  exclude: []
+
 # Collections page, top to bottom. A nested list shares one block (charts then genres).
 # Collections with `pin` in collections.yml always sit above all of these.
 order:

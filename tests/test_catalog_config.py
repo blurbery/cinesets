@@ -42,7 +42,7 @@ def test_shipped_catalogue_counts_match_readme(make_cfg):
 
 def test_readme_settings_examples_load(make_cfg):
     readme = open(os.path.join(ROOT, "README.md")).read()
-    for name in ("Poster style",):
+    for name in ("Picking collections", "Poster style"):
         block = re.search(r"```yaml\n(.*?)```", readme.split(f"## {name}", 1)[1], re.S).group(1)
         make_cfg(extra=block)                                         # loads without complaint
 
@@ -243,6 +243,7 @@ def test_example_config_loads_with_the_documented_defaults():
     cfg = config.load(os.path.join(ROOT, "config.example.yml"))
     assert cfg["order"] == config.DEFAULTS["order"] and cfg["alphabetical_groups"] == ["universes"]
     assert cfg["posters"] == {**posters.STYLE, "artwork": "random"}          # new installs get random artwork
+    assert cfg["collections"] == {"sections": "all", "include": [], "exclude": []}
 
 
 @pytest.mark.parametrize("bad, message", [
@@ -305,3 +306,135 @@ def test_streaming_posters_only_take_text_settings():
     assert posters.style_changes(style) == {"accent": "red", "shade": "dark", "case": "upper"}
     assert posters.style_changes(posters.check_style({})) == {}
 
+
+# ---------------------------------------------------------------- picking collections
+PICK_YML = """collections:
+  - {key: m-trending, group: charts, type: movie, title: Trending, pin: 1}
+  - {key: s-trending, group: charts, type: show, title: Trending, pin: 1}
+  - {key: m-new, group: charts, type: movie, title: New}
+  - {key: m-action, group: genres, type: movie, title: Action}
+  - {key: m-comedy, group: genres, type: movie, title: Comedy}
+  - {key: m-bttf, group: universes, type: movie, title: Back to the Future}
+  - {key: m-mine, group: my-picks, type: movie, title: Mine}
+"""
+
+
+def keys_of(colls):
+    return [c["key"] for c in colls]
+
+
+@pytest.mark.parametrize("pick, expected", [
+    ("", ["m-trending", "s-trending", "m-new", "m-action", "m-comedy", "m-bttf", "m-mine"]),
+    ("collections: all\n", ["m-trending", "s-trending", "m-new", "m-action", "m-comedy", "m-bttf", "m-mine"]),
+    ("collections: {sections: [genres]}\n", ["m-action", "m-comedy"]),
+    ("collections: {sections: [charts, genres], exclude: [m-new, m-comedy]}\n", ["m-trending", "s-trending", "m-action"]),
+    ("collections: {sections: [], include: [m-bttf, m-new]}\n", ["m-new", "m-bttf"]),
+    ("collections: {sections: genres, include: m-bttf, exclude: m-bttf}\n", ["m-action", "m-comedy"]),  # exclude wins
+])
+def test_pick_sections_include_and_exclude(make_cfg, pick, expected):
+    cfg = make_cfg(collections_yml=PICK_YML, extra=pick)
+    assert keys_of(catalog.picked(cfg, catalog.load(cfg))) == expected
+
+
+def test_pick_notes_names_that_are_gone(make_cfg, capsys):
+    cfg = make_cfg(collections_yml=PICK_YML, extra="collections: {sections: [genres, gone], include: [m-halloween]}\n")
+    assert keys_of(catalog.picked(cfg, catalog.load(cfg))) == ["m-action", "m-comedy"]
+    out = capsys.readouterr().out
+    assert "gone" in out and "m-halloween" in out
+
+
+def test_pick_must_be_all_or_settings(make_cfg):
+    with pytest.raises(SystemExit, match="collections must be"):
+        make_cfg(extra="collections: some\n")
+    with pytest.raises(SystemExit, match="include must be a list"):
+        make_cfg(extra="collections: {include: {a: 1}}\n")
+
+
+def test_sections_have_names_in_page_order(make_cfg):
+    cfg = make_cfg(collections_yml=PICK_YML)
+    colls = catalog.load(cfg)
+    names = [(g, members[0]["section"]) for g, members in catalog.sections(cfg, colls)]
+    assert names == [("charts", "Trending and charts"), ("genres", "Popular genres"),
+                     ("universes", "Franchises and studios"), ("my-picks", "My picks")]
+    cfg = make_cfg(collections_yml=PICK_YML + "sections: {my-picks: Hand picked}\n")
+    assert catalog.load(cfg)[-1]["section"] == "Hand picked"
+
+
+def test_list_shows_every_collection_by_section(make_cfg, capsys):
+    cfg = make_cfg(collections_yml=PICK_YML, extra="collections: {sections: [genres], include: [m-new]}\n")
+    colls = catalog.load(cfg)
+    cli.show_list(cfg, colls, catalog.picked(cfg, colls))
+    lines = capsys.readouterr().out.splitlines()
+    assert "Trending and charts (section: charts), 1 of 3 picked" in lines
+    assert any(line.startswith("  [x] m-new ") for line in lines) and any(line.startswith("  [ ] m-trending ") for line in lines)
+    assert sum(line.startswith("  [") for line in lines) == len(colls)        # one line per collection
+
+
+@pytest.mark.parametrize("seed", range(8))
+def test_pick_block_round_trips_and_keeps_the_rest_of_the_file(make_cfg, seed):
+    import random
+    cfg = make_cfg(collections_yml=PICK_YML)
+    colls = catalog.load(cfg)
+    want = set(random.Random(seed).sample(keys_of(colls), seed % len(colls)))
+    path = cfg["base_dir"] + "/config.yml"
+    with open(path, "a") as f:
+        f.write("# my note\ncollections: {sections: [charts]}\n\n# after\ndefaults: {min_items: 3}\n")
+    os.chmod(path, 0o644)
+    cli.write_pick(path, cli.pick_block(cfg, colls, want))
+    text = open(path).read()
+    assert "# my note\ncollections:" in text and "\n\n# after\ndefaults: {min_items: 3}\n" in text
+    assert oct(os.stat(path).st_mode & 0o777) == "0o600"                      # it holds the API key
+    again = config.load(path)
+    assert set(keys_of(catalog.picked(again, catalog.load(again)))) == want and again["defaults"]["min_items"] == 3
+
+
+def test_pick_block_is_short(make_cfg):
+    cfg = make_cfg(collections_yml=PICK_YML)
+    colls = catalog.load(cfg)
+    every = set(keys_of(colls))
+    assert "sections: all\n  include: []\n  exclude: []" in cli.pick_block(cfg, colls, every)
+    assert "sections: all\n  include: []\n  exclude:\n    - m-new\n" in cli.pick_block(cfg, colls, every - {"m-new"})
+    block = cli.pick_block(cfg, colls, {"m-action", "m-comedy", "m-bttf"})
+    assert "sections: [genres, universes]\n  include: []\n  exclude: []" in block
+
+
+def test_pick_asks_section_by_section(make_cfg, monkeypatch, capsys):
+    cfg = make_cfg(collections_yml=PICK_YML)
+    path = cfg["base_dir"] + "/config.yml"
+    # charts: choose 1 and 3; genres: none; universes: all; my-picks: Enter keeps it (all picked now)
+    answers = iter(["c", "9", "1,3", "n", "a", ""])
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr(builtins, "input", lambda prompt="": next(answers))
+    cli.pick(path)
+    again = config.load(path)
+    assert keys_of(catalog.picked(again, catalog.load(again))) == ["m-trending", "m-new", "m-bttf", "m-mine"]
+    out = capsys.readouterr().out
+    assert "Use numbers from 1 to 3" in out and "Picked 4 of 7" in out and "test-key" not in out
+
+
+def test_pick_needs_a_terminal(make_cfg, monkeypatch):
+    cfg = make_cfg(collections_yml=PICK_YML)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+    with pytest.raises(SystemExit, match="run it in a terminal"):
+        cli.pick(cfg["base_dir"] + "/config.yml")
+
+
+def test_numbers():
+    assert cli._numbers("1, 3,5-7", 9) == {1, 3, 5, 6, 7}
+    assert cli._numbers("", 3) == set()
+    for bad in ("0", "4", "2-1", "a", "1-x"):
+        assert cli._numbers(bad, 3) is None
+
+
+def test_asking_for_an_unpicked_collection_says_so(make_cfg, capsys):
+    cfg = make_cfg(collections_yml=PICK_YML, extra="collections: {sections: [genres]}\n")
+    colls = catalog.load(cfg)
+    chosen = catalog.picked(cfg, colls)
+    unpicked = [c for c in colls if c not in chosen]
+    assert keys_of(cli.select(chosen, only="m-action,m-trending", unpicked=unpicked)) == ["m-action"]
+    assert "not picked in config.yml (collections), skipped: m-trending" in capsys.readouterr().out
+    # the default schedule's trending job must not bring back trending for someone who left it out
+    with pytest.raises(SystemExit, match="none of those are picked"):
+        cli.select(chosen, only="m-trending,s-trending", unpicked=unpicked)
+    with pytest.raises(SystemExit, match="none of those are picked"):
+        cli.select(chosen, group="charts", unpicked=unpicked)
