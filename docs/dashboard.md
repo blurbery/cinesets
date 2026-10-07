@@ -1,4 +1,4 @@
-# The dashboard
+# Dashboard guide
 
 `./run.sh web` starts a web page for picking collections, styling the posters (for every poster, a whole section or
 one collection), moving and resizing their text, choosing their artwork, setting how many titles each collection
@@ -6,7 +6,7 @@ holds, and making new collections from MDBList lists. Back to the [README](../RE
 
 ![The Design tab: one collection's poster with its text boxes, and the style settings](images/dashboard.jpg)
 
-[More screenshots](screenshots.md) show each tab and the sign-in page.
+The [dashboard tour](screenshots.md) shows each tab and the sign-in page.
 
 ## Signing in
 
