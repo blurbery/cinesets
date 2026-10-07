@@ -107,3 +107,52 @@ jobs:
       - name: Server log on failure
         if: failure() && steps.gate.outputs.skip != 'true'
         run: docker logs media 2>&1 | tail -n 150
+
+  end-to-end-silo:
+    name: End to end (Silo ${{ matrix.silo.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    continue-on-error: ${{ matrix.silo.newest }}
+    strategy:
+      fail-fast: false
+      matrix:
+        silo:
+          - {name: "build 1144", image: "ghcr.io/silo-server/silo-server:build-1144", newest: false}
+          - {name: "latest", image: "ghcr.io/silo-server/silo-server:latest", newest: true}
+    steps:
+      - name: Newest releases are checked weekly and on request
+        id: gate
+        run: |
+          if [ "${{ matrix.silo.newest }}" = "true" ] && [ "${{ github.event_name }}" != "schedule" ] && [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v4
+        if: steps.gate.outputs.skip != 'true'
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        if: steps.gate.outputs.skip != 'true'
+        with:
+          python-version: "3.12"
+      - if: steps.gate.outputs.skip != 'true'
+        run: pip install -r requirements.txt
+      - name: Make tiny test films and shows
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg > /dev/null
+          python tests/e2e/run_silo_e2e.py --make-media media
+      - name: Start a throwaway Silo (${{ matrix.silo.name }}) and its database
+        if: steps.gate.outputs.skip != 'true'
+        run: |
+          docker network create silo
+          docker run -d --name silo-db --network silo -e POSTGRES_USER=silo -e POSTGRES_PASSWORD=silo -e POSTGRES_DB=silo pgvector/pgvector:pg18
+          for i in $(seq 60); do docker exec silo-db pg_isready -U silo -d silo > /dev/null 2>&1 && break; sleep 2; done
+          docker run -d --name silo --network silo --restart on-failure -p 127.0.0.1:8080:8080 -p 127.0.0.1:8096:8096 \
+            -e DATABASE_URL="postgres://silo:silo@silo-db:5432/silo?sslmode=disable" -e SECRET_KEY="$(openssl rand -base64 48)" \
+            -v "$PWD/media:/mnt/media:ro" ${{ matrix.silo.image }}
+      - name: CineSets against the real server
+        if: steps.gate.outputs.skip != 'true'
+        run: python tests/e2e/run_silo_e2e.py --url http://127.0.0.1:8080 --media /mnt/media
+      - name: Server log on failure
+        if: failure() && steps.gate.outputs.skip != 'true'
+        run: docker logs silo 2>&1 | tail -n 200
