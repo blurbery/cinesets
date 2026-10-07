@@ -13,10 +13,12 @@ import tempfile
 
 import yaml
 
+from .servers import SERVERS
+
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 DEFAULTS = {
-    "server": {"type": "emby", "url": "http://127.0.0.1:8096", "api_key": ""},
+    "server": {"type": next(iter(SERVERS)), "url": "http://127.0.0.1:8096", "api_key": ""},  # the first server listed
     "libraries": [],
     "collections_file": "collections.yml",
     # collections added in the dashboard, and lists added to existing ones; read as well as collections_file
@@ -155,8 +157,7 @@ LIBRARY_TYPES = {"movies": "movie", "movie": "movie", "shows": "show", "show": "
 
 
 def check_type(kind):
-    from .servers import names  # each server module says which types it handles
-    known = list(names())
+    known = list(SERVERS)
     if kind not in known:
         raise SystemExit(f"server.type must be {', '.join(known[:-1])} or {known[-1]}, not {kind!r}")
 

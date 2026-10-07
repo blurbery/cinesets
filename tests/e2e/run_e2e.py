@@ -211,7 +211,9 @@ def cinesets(cfg, *args, page=None):
     """Run CineSets. `page` sets how many items it asks for per page, so a small library still spans many pages."""
     cmd = [sys.executable, "-m", "cinesets", *args, "--config", cfg]
     if page:
-        cmd[1:3] = ["-c", f"import sys, cinesets.cli, cinesets.engine; cinesets.engine.PAGE = {int(page)}; "
+        # each server module has its own page size; set both so whichever server this is reads one item at a time
+        cmd[1:3] = ["-c", f"import sys, cinesets.cli, cinesets.servers.emby as e, cinesets.servers.jellyfin as j; "
+                          f"e.PAGE = j.PAGE = {int(page)}; "
                           "sys.argv[0] = 'cinesets'; cinesets.cli.main()"]
     out = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=600)
     text = out.stdout + out.stderr

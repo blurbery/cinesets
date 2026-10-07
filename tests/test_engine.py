@@ -13,7 +13,7 @@ import requests
 from cinesets import catalog, config
 from cinesets.engine import Engine
 from cinesets.store import load_json
-from conftest import FakeServer, Resp, seed_index
+from conftest import FakeJellyfin, FakeServer, Resp, seed_index
 
 FRANCHISE = """collections:
   - key: m-bttf
@@ -258,7 +258,7 @@ def test_existing_name_is_refused_before_creating(make_cfg):
 
 
 # ------------------------------------------------------------ Jellyfin 12
-class GroupingServer(FakeServer):
+class GroupingServer(FakeJellyfin):
     """Jellyfin 12 without a user: a library listing shows a collection in place of the titles in it, unless asked
     not to with CollapseBoxSetItems=false."""
 

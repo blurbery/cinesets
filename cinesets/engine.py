@@ -44,6 +44,7 @@ class Engine:
         self.backdrops = os.path.join(self.data, "backdrops")
         self.logos = os.path.join(self.data, "logos")
         self.posters = os.path.join(self.data, "posters")
+        self._titles = None  # (index, {kind: titles_in table}) for the index a run or the dashboard is using
 
     # ------------------------------------------------------------ library index
     def build_index(self):
@@ -80,17 +81,9 @@ class Engine:
         """Matched item ids in list order, plus (titles wanted, titles matched)."""
         kind = coll["kind"]
         if coll.get("titles"):
-            # fixed franchise list: exact title and year; prefer the copy the index treats as canonical
-            canon = set(index[kind]["imdb"].values()) | set(index[kind]["tmdb"].values())
-            want = {(t.lower(), y) for t, y in coll["titles"]}
-            found = {}
-            for iid, it in index["items"].items():
-                if it.get("k", kind) != kind:
-                    continue
-                k = ((it.get("n") or "").lower(), it.get("y"))
-                if k in want and (k not in found or (iid in canon and found[k] not in canon)):
-                    found[k] = iid
-            ids = self.narrow(coll, [found[(t.lower(), y)] for t, y in coll["titles"] if (t.lower(), y) in found])
+            # fixed franchise list: exact title and year
+            found = self.titles_in(index, kind)
+            ids = self.srv.narrow(coll, [found[(t.lower(), y)] for t, y in coll["titles"] if (t.lower(), y) in found])
             return ids, len(coll["titles"]), len(ids)
         ids, seen, wanted = [], set(), 0
         for slug in coll["lists"]:
@@ -103,7 +96,7 @@ class Engine:
                 if eid and eid not in seen:
                     seen.add(eid)
                     ids.append(eid)
-        ids = self.narrow(coll, ids)
+        ids = self.srv.narrow(coll, ids)  # the titles this collection can hold on this server
         limit = coll.get("limit", self.cfg["defaults"]["limit"])
         skip = {g.lower() for g in coll.get("exclude_genres", [])}
         if skip:
@@ -116,10 +109,24 @@ class Engine:
             ids = kept
         return ids[:limit], wanted, len(ids)
 
-    def narrow(self, coll, ids):
-        """The titles a collection can hold on this server. On Silo a collection lives in one library, so only titles
-        in that library; Emby and Jellyfin take them all."""
-        return self.srv.narrow(coll, ids) if hasattr(self.srv, "narrow") else ids
+    def titles_in(self, index, kind):
+        """(lower-case title, year) -> item id for every title of one kind, worked out once per index rather than once
+        per franchise, so a big library is read through once. A title in the library more than once is the copy the
+        index treats as canonical (it holds the title's IMDb or TMDB id), or else the first one."""
+        if self._titles is None or self._titles[0] is not index:
+            self._titles = (index, {})
+        tables = self._titles[1]
+        if kind not in tables:
+            canon = set(index[kind]["imdb"].values()) | set(index[kind]["tmdb"].values())
+            found = {}
+            for iid, it in index["items"].items():
+                if it.get("k", kind) != kind:  # an index from before "k" counts every title as either kind
+                    continue
+                k = ((it.get("n") or "").lower(), it.get("y"))
+                if k not in found or (iid in canon and found[k] not in canon):
+                    found[k] = iid
+            tables[kind] = found  # only once it is whole: the dashboard answers several requests at a time
+        return tables[kind]
 
     @staticmethod
     def match_row(row, kind, index):
@@ -316,8 +323,7 @@ class Engine:
             save_json(self.state_file, state)
             self.srv.wait_until_ready(cid, user_id)
         # read back what the collection holds, even a new one: Jellyfin 12 can drop the titles it was created with
-        if hasattr(self.srv, "prepare"):  # Silo: move a collection to the library its titles are in, if that changed
-            self.srv.prepare(cid, coll)
+        self.srv.prepare(cid, coll)
         current = self.srv.members(cid, user_id)
         add = self.existing_ids([i for i in ids if i not in current])
         remove = current - set(ids)
@@ -379,7 +385,10 @@ class Engine:
     # ------------------------------------------------------------ one run
     def run(self, cmd, colls, min_items):
         with self.lock():
-            return self._run(cmd, colls, min_items)
+            try:
+                return self._run(cmd, colls, min_items)
+            finally:
+                self._titles = None  # let this run's index go once the run is over (the scheduler sleeps for hours)
 
     # ------------------------------------------------------------ ownership tools
     def adopt(self, colls):
@@ -442,13 +451,16 @@ class Engine:
             except Exception as e:  # a dead list must not take the whole run down
                 print(f"!! {coll['key']}: {e}")
                 continue
-            top = ", ".join(index["items"][i]["n"] for i in ids[:4])
+            top = ", ".join(index["items"][i]["n"] or "?" for i in ids[:4])  # a title can come without a name
             print(f"{coll['key']:<28} list {wanted:>4}  in library {matched:>4}  using {len(ids):>4}  | {top}")
             need = coll.get("min", min_items)
             if not coll.get("titles"):
                 need = min(need, coll["limit"])  # a collection capped at 5 titles is not skipped for having fewer than 8
             if len(ids) < need:
                 print(f"   skipped {coll['key']}: fewer than {need} matches")
+                continue
+            if not ids:  # even with --min 0: an empty collection is never made, and one CineSets made is never emptied
+                print(f"   skipped {coll['key']}: no matches")
                 continue
             ready.append((coll, ids))
         if cmd == "plan":
@@ -487,9 +499,8 @@ class Engine:
             if slowest > self.cfg["slow_write_limit"]:
                 print("Server is taking writes very slowly; stopping this run.")
                 break
-        else:
-            if hasattr(self.srv, "arrange"):  # a server that places collections by order, not sort name (Silo)
-                try:
-                    self.srv.arrange({k: v["id"] for k, v in state.items() if v.get("id")})
-                except (requests.RequestException, ServerError) as e:
-                    print(f"!! could not put the collections in order: {e}")
+        else:  # every collection was dealt with: put them in page order, if the server needs telling
+            try:
+                self.srv.arrange({k: v["id"] for k, v in state.items() if v.get("id")})
+            except (requests.RequestException, ServerError) as e:
+                print(f"!! could not put the collections in order: {e}")

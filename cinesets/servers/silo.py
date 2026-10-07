@@ -5,10 +5,10 @@
 """Silo: a client for the parts of Silo's own API (/api/v2) CineSets uses.
 
 Silo's Jellyfin-compatible port can show collections but not make them, so CineSets talks to Silo's main address.
-Its collections are Silo library collections: manual ones, each in one library, the one most of its titles are in
-(a Silo collection can only hold titles from its libraries, and in any other library it would show up empty). Titles are Silo content ids such as movie-tmdb-105, which carry one
-provider id; the others a TV show has are looked up once and kept in data/silo-ids.json, so lists match the same
-shows they match on Emby."""
+Its collections are manual Silo library collections, each in one library: the one most of its titles are in (a Silo
+collection can only hold titles from its libraries, and in any other library it would show up empty). Titles are
+Silo content ids such as movie-tmdb-105, which carry one provider id; a TV show's others are looked up once and kept
+in data/silo-ids.json, so lists match the same shows they match on Emby."""
 import os
 import re
 import sys
@@ -20,7 +20,8 @@ import requests
 
 from .. import __version__
 from ..store import load_json, save_json
-from . import ServerError, warn_plain_http
+from . import ServerError, public_info, warn_plain_http
+from .base import Server
 
 PAGE = 200            # the most Silo sends in one page
 ID_LOOKUP_PAUSE = 0.05
@@ -43,23 +44,13 @@ def provider_id(value):
 COMPAT_NOTE = "That is Silo's Jellyfin-compatible port. CineSets needs Silo's own address, the one its web app opens on."
 
 
-def _answers(url, path):
-    try:
-        r = requests.get(url + path, timeout=10, allow_redirects=False, headers={"accept": "application/json"})
-        info = r.json() if r.status_code == 200 else None
-    except (requests.RequestException, ValueError):
-        return None
-    return info if isinstance(info, dict) else None
-
-
 def _own_api(url):
-    info = _answers(url, "/api/v2/system/info")
+    info = public_info(url, "/api/v2/system/info")
     return bool(info and info.get("api_major") and "contract_digest" in info)
 
 
-class SiloServer:
-    kind = "silo"
-    NAMES = {"silo": "Silo"}
+class SiloServer(Server):
+    TYPE = "silo"
     KEY_PAGE = "Admin > API keys"
     SETUP_NOTE = ("CineSets needs a Silo API key that belongs to an administrator and has no scopes. Make one under "
                   "Admin > API keys (name it CineSets).")
@@ -75,7 +66,7 @@ class SiloServer:
         isn't there, so setup asks for it."""
         if _own_api(url):
             return "silo", url, None
-        info = _answers(url, "/Branding/Configuration")
+        info = public_info(url, "/Branding/Configuration")
         if info and "Silo" in str(info.get("LoginDisclaimer") or ""):
             guess = urlparse(url)._replace(netloc=f"{urlparse(url).hostname}:8080", path="").geturl()
             return "silo", (guess if _own_api(guess) else None), COMPAT_NOTE
@@ -144,8 +135,9 @@ class SiloServer:
         return r, took
 
     def pages(self, path, **kw):
-        """Every item of a paged list."""
-        out, cursor = [], None
+        """Every item of a paged list. If Silo ever hands back a cursor it gave before, reading stops there rather than
+        going round forever."""
+        out, cursor, used = [], None, set()
         while True:
             sep = "&" if "?" in path else "?"
             page = self.get(path + (f"{sep}cursor={quote(cursor, safe='')}" if cursor else ""), **kw)
@@ -153,6 +145,10 @@ class SiloServer:
             cursor = (page.get("page") or {}).get("next_cursor")
             if not (page.get("page") or {}).get("has_more") or not cursor:
                 return out
+            if cursor in used:
+                print(f"   Silo sent the same page of {path.split('?')[0]} twice; anything after it was not read")
+                return out
+            used.add(cursor)
 
     def profile(self):
         """The profile header the catalogue needs: the household's main profile."""
@@ -418,3 +414,6 @@ class SiloServer:
                 moved += 1
         if moved:
             print(f"Put the collections in order in {moved} libraries.")
+
+
+SERVER = SiloServer

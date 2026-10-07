@@ -2,22 +2,17 @@
 # Copyright (C) 2026 blurbery
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Additional terms under AGPL-3.0 section 7 apply: see NOTICE.
-"""Media servers. The collections, list matching, posters and dashboard are the same for every server; each server
-is its own module here (emby.py covers Emby and Jellyfin, silo.py covers Silo), and the rest of CineSets only uses these operations:
+"""Media servers. The collections, list matching, posters and dashboard are the same for every server. Each server is
+its own module here, cinesets/servers/<type>.py (emby.py, jellyfin.py, silo.py), whose SERVER class answers the
+questions in base.py, the shell, and nothing else is shared between servers.
 
-  reads         media_libraries, library_folders, library_items, genres, alive, backdrop_image
-  collections   list_collections, create_collection, wait_until_ready, members, add_items, remove_items,
-                upload_poster, set_details, delete_collection, admin_user
-  setup         NAMES, KEY_PAGE, SETUP_NOTE (optional) and trim(url): what setup says and how it tidies an address;
-                detect(url): (type, address, note) if this server answers at an address, or None (no API key needed)
-  optional      arrange(owned): put the collections in page order, for a server without sort names (Silo)
-                narrow(coll, ids) and prepare(cid, coll): for a server whose collections live in one library (Silo)
-
-A server's quirks stay in its own module, so a change for one server can't change what another one gets."""
+An install uses one server: connect() loads only that server's module, so no other server's code runs. Setup is the
+one time CineSets asks every module, to work out which server answers at an address."""
 import ipaddress
 import sys
 from urllib.parse import urlparse
 
+import requests
 
 
 class ServerError(RuntimeError):
@@ -49,43 +44,68 @@ def warn_plain_http(url):
               "Use https:// if the server supports it.", file=sys.stderr)
 
 
-def _modules():
-    """Every server module's class, in the order setup asks them who answers at an address. Silo goes first: its
-    Jellyfin-compatible port also answers the Jellyfin question."""
-    from .emby import MediaServer
-    from .silo import SiloServer
-    return [SiloServer, MediaServer]
+# server.type -> the server's name; its module is cinesets/servers/<type>.py
+SERVERS = {"emby": "Emby", "jellyfin": "Jellyfin", "silo": "Silo"}
+# the order setup asks them who answers at an address: Silo's Jellyfin-compatible port also answers the Jellyfin
+# question, and Jellyfin's public information would also pass Emby's looser check
+ASK_ORDER = ("silo", "jellyfin", "emby")
+
+
+def load(kind):
+    """The class for one server type, importing that server's module and no other."""
+    import importlib
+    return importlib.import_module(f"{__name__}.{kind}").SERVER
 
 
 def names():
     """server.type -> the server's name, for every server CineSets supports."""
-    out = {}
-    for cls in reversed(_modules()):
-        out.update(cls.NAMES)
-    return out
+    return dict(SERVERS)
 
 
 def server_class(kind):
-    return next(cls for cls in _modules() if kind in cls.NAMES)
+    return load(kind)
 
 
 def connect(cfg):
     """The client for the server in config.yml."""
-    return server_class(cfg["server"]["type"])(cfg)
+    return load(cfg["server"]["type"])(cfg)
+
+
+_read = None  # public pages already read during one detect(), so modules asking for the same one share a request
+
+
+def public_info(url, path):
+    """The JSON a server shows anyone at url + path (no API key goes with it), or None."""
+    if _read is not None and url + path in _read:
+        return _read[url + path]
+    try:
+        r = requests.get(url + path, timeout=10, allow_redirects=False, headers={"accept": "application/json"})
+        info = r.json() if r.status_code == 200 else None
+    except (requests.RequestException, ValueError):
+        info = None
+    info = info if isinstance(info, dict) else None
+    if _read is not None:
+        _read[url + path] = info
+    return info
 
 
 def detect(url):
     """(server type, its address, a note for setup to show) for the server that answers at `url`, from its public
     information, or None. The address is None when a module knows the server but needs its own address typed in."""
-    for cls in _modules():
-        found = cls.detect(url)
-        if found:
-            return found
-    return None
+    global _read
+    _read = {}
+    try:
+        for kind in ASK_ORDER:
+            found = load(kind).detect(url)
+            if found:
+                return found
+        return None
+    finally:
+        _read = None
 
 
 def trim(url):
     """A pasted browser address, tidied by every module (Emby's /web/index.html, say)."""
-    for cls in _modules():
-        url = cls.trim(url)
+    for kind in SERVERS:
+        url = load(kind).trim(url)
     return url

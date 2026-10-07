@@ -261,12 +261,13 @@ def setup(path):
     if kind:
         print(f"Found {names[kind]} at {url}.")
     else:
-        choices = list(names.values())
-        kind = input(f"Couldn't tell what server that is. {', '.join(choices[:-1])} or {choices[-1]}? [emby]: ").strip().lower() or "emby"
+        choices, default = list(names.values()), next(iter(names))
+        kind = input(f"Couldn't tell what server that is. {', '.join(choices[:-1])} or {choices[-1]}? "
+                     f"[{default}]: ").strip().lower() or default
         config.check_type(kind)
     module = servers.server_class(kind)
     where = module.KEY_PAGE
-    if getattr(module, "SETUP_NOTE", None):
+    if module.SETUP_NOTE:
         print(module.SETUP_NOTE)
     key = getpass.getpass(f"API key ({where} on your server; typing is hidden): ").strip()
     cfg = config.Config(config._merge(config.DEFAULTS, {"server": {"type": kind, "url": url, "api_key": key}}))
@@ -288,7 +289,8 @@ def setup(path):
         print(f"  {name} ({t})")
     with open(os.path.join(config.ROOT, "config.example.yml")) as f:
         text = f.read()
-    text = text.replace("type: emby ", f"type: {kind} ", 1).replace("url: http://127.0.0.1:8096", f"url: {json.dumps(url)}", 1)
+    text = re.sub(r"(?m)^(  type: )\S+", lambda m: m.group(1) + kind, text, count=1)  # the example's server type
+    text = text.replace("url: http://127.0.0.1:8096", f"url: {json.dumps(url)}", 1)
     text = text.replace('api_key: ""', f"api_key: {json.dumps(key)}", 1)
     lib_lines = "\n".join(f"  - {{name: {json.dumps(n)}, type: {t}}}" for n, t in libs)
     text = text.replace("  - {name: Movies, type: movie}\n  - {name: TV Shows, type: show}", lib_lines, 1)

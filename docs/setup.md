@@ -14,6 +14,9 @@ Back to the [README](../README.md).
 | Jellyfin | the address you open it on, like `http://192.0.2.10:8096` | Dashboard > API Keys |
 | Silo | the address its web app opens on, like `http://192.0.2.10:8080` | Admin > API keys: a key for an administrator, with no scopes |
 
+Running more than one server? Give each its own install: its own folder, `config.yml`, `data/` and schedule. They
+share nothing, so one can't affect another, and each install only loads the code for its own server.
+
 Every change is tested against real Emby 4.9 and 4.10, Jellyfin 10.10, 10.11 and 12.2, and a pinned Silo build,
 and each week against the newest release of each. Emby is fully supported; Jellyfin and Silo are beta until more
 people have run them. Plex is next.
