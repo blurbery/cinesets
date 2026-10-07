@@ -155,10 +155,8 @@ LIBRARY_TYPES = {"movies": "movie", "movie": "movie", "shows": "show", "show": "
 
 
 def check_type(kind):
-    if kind == "silo":
-        raise SystemExit("Silo support is coming soon. For now server.type must be emby or jellyfin.")
-    if kind not in ("emby", "jellyfin"):
-        raise SystemExit(f"server.type must be emby or jellyfin, not {kind!r}")
+    if kind not in ("emby", "jellyfin", "silo"):
+        raise SystemExit(f"server.type must be emby, jellyfin or silo, not {kind!r}")
 
 
 def config_path(path=None):

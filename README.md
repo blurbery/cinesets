@@ -26,12 +26,13 @@ streaming logos), and that's it. No account, no tracking.
 <a href="docs/screenshots.md">See the dashboard</a></b></p>
 
 > [!NOTE]
-> Emby is fully supported. Jellyfin works and is tested on every change, but it's beta until more people have
-> run it. Silo support is coming.
+> Emby is fully supported. Jellyfin and Silo work and are tested on every change, but they're beta until more
+> people have run them.
 
 ## Install
 
-You need Python 3.9 or newer, git and an API key from your server (Dashboard > API Keys).
+You need Python 3.9 or newer, git and an API key from your server (Dashboard > API Keys; on Silo, Admin > API
+keys, made by an administrator with no scopes).
 
 ```bash
 sudo git clone https://github.com/blurbery/cinesets.git /opt/cinesets
@@ -41,7 +42,7 @@ cd /opt/cinesets && ./install.sh
 
 The installer does the rest:
 
-1. It asks for your server's address and API key, and works out whether it's Emby or Jellyfin.
+1. It asks for your server's address and API key, and works out whether it's Emby, Jellyfin or Silo.
 2. It finds your movie and TV libraries, and asks whether you want every collection or just some.
 3. It downloads the streaming logos and does a dry run, which changes nothing.
 4. It offers to create the collections, and to keep them updated: trending every 6 hours, charts and seasonal
@@ -49,6 +50,26 @@ The installer does the rest:
 
 That's it. To change collections and posters later, open the dashboard with `./run.sh web`. Every setting is
 also explained in `config.example.yml`.
+
+<details>
+<summary><b>Silo</b></summary>
+
+Give setup the address Silo's web app opens on (port 8080 unless you changed it). If you give it Silo's
+Jellyfin-compatible port, it finds Silo's own address for you. CineSets talks to Silo's own API, because the
+Jellyfin-compatible one can't make collections.
+
+- Collections are Silo library collections, and each one lives in one library, picked from where its titles are.
+  That's usually your first Movies or TV Shows library in `config.yml`. A collection with at least two thirds of
+  its titles in another library, like an anime library or an international one, goes there instead. A Silo
+  collection only shows titles from its own library, so titles that are only in another library are left out,
+  and the next ones on the list take their place.
+- They're kept in Collections page order in each library. Collections CineSets didn't make keep their places.
+- Silo's server-wide Collections page shows up to 20 per library. Each library's Collections tab shows them all.
+- Silo adds titles to a collection one at a time, so the first `apply` takes a while on a big library.
+- The first run also looks up each TV show's IMDb and TMDB ids once, so lists match the same shows they do on
+  Emby. It keeps them in `data/silo-ids.json`.
+
+</details>
 
 <details>
 <summary><b>Docker</b></summary>

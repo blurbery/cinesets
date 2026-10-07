@@ -3,19 +3,21 @@
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Additional terms under AGPL-3.0 section 7 apply: see NOTICE.
 """Media servers. The collections, list matching, posters and dashboard are the same for every server; each server
-is its own module here (emby.py covers Emby and Jellyfin), and the rest of CineSets only uses these operations:
+is its own module here (emby.py covers Emby and Jellyfin, silo.py covers Silo), and the rest of CineSets only uses these operations:
 
   reads         media_libraries, library_folders, library_items, genres, alive, backdrop_image
   collections   list_collections, create_collection, wait_until_ready, members, add_items, remove_items,
                 upload_poster, set_details, delete_collection, admin_user
   setup         detect(url): which server answers at an address (a static method, no API key)
+  optional      arrange(owned): put the collections in page order, for a server without sort names (Silo)
+                narrow(coll, ids) and prepare(cid, coll): for a server whose collections live in one library (Silo)
 
 A server's quirks stay in its own module, so a change for one server can't change what another one gets."""
 import ipaddress
 import sys
 from urllib.parse import urlparse
 
-NAMES = {"emby": "Emby", "jellyfin": "Jellyfin"}
+NAMES = {"emby": "Emby", "jellyfin": "Jellyfin", "silo": "Silo"}
 
 
 class ServerError(RuntimeError):
@@ -49,7 +51,9 @@ def warn_plain_http(url):
 
 def _classes():
     from .emby import MediaServer
-    return {"emby": MediaServer, "jellyfin": MediaServer}
+    from .silo import SiloServer
+    # Silo is asked first: its Jellyfin-compatible port also answers the Jellyfin question
+    return {"silo": SiloServer, "emby": MediaServer, "jellyfin": MediaServer}
 
 
 def connect(cfg):
@@ -58,7 +62,8 @@ def connect(cfg):
 
 
 def detect(url):
-    """Which server answers at `url` (emby, jellyfin, ...), from its public information, or None."""
+    """Which server answers at `url` (emby, jellyfin, silo, or silo-compat for Silo's Jellyfin-compatible port), from
+    its public information, or None."""
     for cls in dict.fromkeys(_classes().values()):
         kind = cls.detect(url)
         if kind:

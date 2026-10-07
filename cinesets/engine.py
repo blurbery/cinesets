@@ -62,6 +62,8 @@ class Engine:
                     if it["ids"].get(key):
                         index[kind][key].setdefault(it["ids"][key], it["id"])
                 index["items"][it["id"]] = {"n": it["name"], "y": it["year"], "b": it["backdrop"], "k": kind}
+                if "genres" in it:  # a server that lists genres with the titles (Silo) needs no more requests for them
+                    index["items"][it["id"]]["g"] = [g.lower() for g in it["genres"]]
             print(f"  indexed {name}: {len(items)}")
         save_json(self.index_file, index)
         return index
@@ -88,7 +90,7 @@ class Engine:
                 k = ((it.get("n") or "").lower(), it.get("y"))
                 if k in want and (k not in found or (iid in canon and found[k] not in canon)):
                     found[k] = iid
-            ids = [found[(t.lower(), y)] for t, y in coll["titles"] if (t.lower(), y) in found]
+            ids = self.narrow(coll, [found[(t.lower(), y)] for t, y in coll["titles"] if (t.lower(), y) in found])
             return ids, len(coll["titles"]), len(ids)
         ids, seen, wanted = [], set(), 0
         for slug in coll["lists"]:
@@ -101,16 +103,23 @@ class Engine:
                 if eid and eid not in seen:
                     seen.add(eid)
                     ids.append(eid)
+        ids = self.narrow(coll, ids)
         limit = coll.get("limit", self.cfg["defaults"]["limit"])
         skip = {g.lower() for g in coll.get("exclude_genres", [])}
         if skip:
             # drop titles carrying an excluded genre (for example talk shows), keeping list order
             kept, cand = [], ids[:limit * 4]
             for batch in chunks(cand, 100):
-                genres = self.srv.genres(batch)
+                known = {i: set(index["items"][i]["g"]) for i in batch if "g" in index["items"].get(i, {})}
+                genres = known if len(known) == len(batch) else self.srv.genres(batch)
                 kept += [i for i in batch if not genres.get(i, set()) & skip]
             ids = kept
         return ids[:limit], wanted, len(ids)
+
+    def narrow(self, coll, ids):
+        """The titles a collection can hold on this server. On Silo a collection lives in one library, so only titles
+        in that library; Emby and Jellyfin take them all."""
+        return self.srv.narrow(coll, ids) if hasattr(self.srv, "narrow") else ids
 
     @staticmethod
     def match_row(row, kind, index):
@@ -307,6 +316,8 @@ class Engine:
             save_json(self.state_file, state)
             self.srv.wait_until_ready(cid, user_id)
         # read back what the collection holds, even a new one: Jellyfin 12 can drop the titles it was created with
+        if hasattr(self.srv, "prepare"):  # Silo: move a collection to the library its titles are in, if that changed
+            self.srv.prepare(cid, coll)
         current = self.srv.members(cid, user_id)
         add = self.existing_ids([i for i in ids if i not in current])
         remove = current - set(ids)
@@ -476,3 +487,9 @@ class Engine:
             if slowest > self.cfg["slow_write_limit"]:
                 print("Server is taking writes very slowly; stopping this run.")
                 break
+        else:
+            if hasattr(self.srv, "arrange"):  # a server that places collections by order, not sort name (Silo)
+                try:
+                    self.srv.arrange({k: v["id"] for k, v in state.items() if v.get("id")})
+                except (requests.RequestException, ServerError) as e:
+                    print(f"!! could not put the collections in order: {e}")

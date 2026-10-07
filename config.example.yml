@@ -3,10 +3,13 @@
 # Additional terms under AGPL-3.0 section 7 apply: see NOTICE.
 
 server:
-  type: emby                     # emby or jellyfin
+  type: emby                     # emby, jellyfin or silo
   url: http://127.0.0.1:8096     # your server address as seen from where CineSets runs
-                                 # (in Docker, use the server's LAN address, not 127.0.0.1)
-  api_key: ""                    # Dashboard > API Keys on Emby or Jellyfin. Or leave empty and set
+                                 # (in Docker, use the server's LAN address, not 127.0.0.1). For Silo, the
+                                 # address its web app opens on (port 8080 unless you changed it), not its
+                                 # Jellyfin-compatible port.
+  api_key: ""                    # Dashboard > API Keys on Emby or Jellyfin. On Silo, Admin > API keys: a key
+                                 # that belongs to an administrator, with no scopes. Or leave empty and set
                                  # CINESETS_API_KEY in the environment.
 
 # Libraries CineSets matches titles in. Names must match your server's library names exactly
