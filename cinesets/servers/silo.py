@@ -40,27 +40,45 @@ def provider_id(value):
     return m.group(0) if m else ""
 
 
+COMPAT_NOTE = "That is Silo's Jellyfin-compatible port. CineSets needs Silo's own address, the one its web app opens on."
+
+
+def _answers(url, path):
+    try:
+        r = requests.get(url + path, timeout=10, allow_redirects=False, headers={"accept": "application/json"})
+        info = r.json() if r.status_code == 200 else None
+    except (requests.RequestException, ValueError):
+        return None
+    return info if isinstance(info, dict) else None
+
+
+def _own_api(url):
+    info = _answers(url, "/api/v2/system/info")
+    return bool(info and info.get("api_major") and "contract_digest" in info)
+
+
 class SiloServer:
     kind = "silo"
+    NAMES = {"silo": "Silo"}
+    KEY_PAGE = "Admin > API keys"
+    SETUP_NOTE = ("CineSets needs a Silo API key that belongs to an administrator and has no scopes. Make one under "
+                  "Admin > API keys (name it CineSets).")
+
+    @staticmethod
+    def trim(url):
+        return url
 
     @staticmethod
     def detect(url):
-        """silo if Silo's own API answers at `url`, "silo-compat" if this is its Jellyfin-compatible port, or None."""
-        get = lambda path: requests.get(url + path, timeout=10, allow_redirects=False, headers={"accept": "application/json"})
-        try:
-            r = get("/api/v2/system/info")
-            info = r.json() if r.status_code == 200 else None
-            if isinstance(info, dict) and info.get("api_major") and "contract_digest" in info:
-                return "silo"
-        except (requests.RequestException, ValueError):
-            pass
-        try:  # the Jellyfin-compatible port says who it is on the sign-in page
-            r = get("/Branding/Configuration")
-            info = r.json() if r.status_code == 200 else None
-            if isinstance(info, dict) and "Silo" in str(info.get("LoginDisclaimer") or ""):
-                return "silo-compat"
-        except (requests.RequestException, ValueError):
-            pass
+        """("silo", url, None) if Silo's own API answers at `url`. Given Silo's Jellyfin-compatible port (it says who it
+        is on its sign-in page), Silo's own address on port 8080 with a note, or None for the address if Silo's
+        isn't there, so setup asks for it."""
+        if _own_api(url):
+            return "silo", url, None
+        info = _answers(url, "/Branding/Configuration")
+        if info and "Silo" in str(info.get("LoginDisclaimer") or ""):
+            guess = urlparse(url)._replace(netloc=f"{urlparse(url).hostname}:8080", path="").geturl()
+            return "silo", (guess if _own_api(guess) else None), COMPAT_NOTE
         return None
 
     def __init__(self, cfg):

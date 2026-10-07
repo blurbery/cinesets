@@ -133,7 +133,7 @@ def test_library_types(tmp_path):
 @pytest.fixture(autouse=True)
 def emby_found(monkeypatch):
     """Setup asks the server what it is; these tests talk to no server, so it is Emby unless a test says otherwise."""
-    monkeypatch.setattr(cli, "detect_server", lambda url: "emby")
+    monkeypatch.setattr(cli, "detect_server", lambda url: ("emby", url, None))
 
 
 class _Info:
@@ -154,7 +154,7 @@ class _Info:
     ({"/api/v2/system/info": (200, {"server_version": "abc", "api_major": 2, "contract_digest": "d"}),
       "/System/Info/Public": (200, {"ProductName": "Jellyfin Server"})}, "silo"),
     ({"/Branding/Configuration": (200, {"LoginDisclaimer": "Silo provides Jellyfin-compatible app support."}),
-      "/System/Info/Public": (200, {"ProductName": "Jellyfin Server"})}, "silo-compat"),
+      "/System/Info/Public": (200, {"ProductName": "Jellyfin Server"})}, "silo"),   # its Jellyfin port: setup asks for Silo's own
     ({"/api/v2/system/info": (200, None), "/Branding/Configuration": (200, {"LoginDisclaimer": ""}),
       "/System/Info/Public": (200, {"ProductName": "Jellyfin Server"})}, "jellyfin"),
 ])
@@ -164,13 +164,13 @@ def test_setup_works_out_the_server_from_its_address(monkeypatch, answers, found
 
     def fake_get(url, **kw):
         seen.update(kw)
-        path = url.split("8096", 1)[1]
+        path = url.split("8096", 1)[1] if "8096" in url else None
         if path not in answers:
             raise req.ConnectionError("nothing there")
         return _Info(*answers[path])
     monkeypatch.undo()
     monkeypatch.setattr(req, "get", fake_get)
-    assert cli.detect_server("http://192.0.2.10:8096") == found
+    assert (cli.detect_server("http://192.0.2.10:8096") or [None])[0] == found
     assert seen["allow_redirects"] is False and "X-Emby-Token" not in (seen.get("headers") or {})   # no key sent
 
 
@@ -185,7 +185,7 @@ def test_setup_asks_when_it_cannot_tell(tmp_path, monkeypatch):
 
 
 def test_setup_writes_private_valid_config(tmp_path, monkeypatch):
-    monkeypatch.setattr(cli, "detect_server", lambda url: "jellyfin")
+    monkeypatch.setattr(cli, "detect_server", lambda url: ("jellyfin", url, None))
     answers = iter(["192.0.2.10:8096"])
     monkeypatch.setattr(builtins, "input", lambda prompt="": next(answers))
     monkeypatch.setattr(getpass, "getpass", lambda prompt="": 'k"ey\\with: odd')
