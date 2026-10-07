@@ -103,8 +103,8 @@ posters:
 # The dashboard (`./run.sh web`). docs/dashboard.md explains each way to reach it.
 #   host     127.0.0.1: this machine only (Tailscale serve and a proxy on this machine work with it).
 #            0.0.0.0: other computers too. Put HTTPS in front either way.
-#   sign_in  false: no sign-in. Only allowed with host 127.0.0.1, and then it answers only a browser on this same
-#            machine, never through a proxy, tunnel or Tailscale.
+#   sign_in  false: no sign-in. Only allowed with host 127.0.0.1, and then it answers only this machine: a browser
+#            here, or an SSH tunnel from your own computer. Never a proxy or Tailscale.
 #   public   true when it can be reached from the internet through your HTTPS proxy: sign-ins only over HTTPS.
 web:
   host: 127.0.0.1

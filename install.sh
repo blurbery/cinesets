@@ -1,5 +1,6 @@
 #!/bin/sh
-# CineSets installer: Python environment, settings, logos and a first dry run.
+# CineSets installer: Python environment, settings, logos, a dry run, then (if you say yes) the collections
+# and their schedule.
 # CineSets by blurbery (https://github.com/blurbery/cinesets). SPDX-License-Identifier: AGPL-3.0-or-later
 # Additional terms under AGPL-3.0 section 7 apply: see NOTICE.
 set -e
@@ -40,17 +41,41 @@ echo "Collections that would be made: $((total - skipped)) ($skipped skipped bec
 grep -E '^!!' logs/first-plan.txt | head -n 20 || true
 echo "Full dry run: $(pwd)/logs/first-plan.txt"
 
-cat <<EOF
+here=$(pwd)
+ask() {  # ask a yes or no question when someone is at the keyboard; the answer is yes unless they say no
+  [ -t 0 ] && [ -t 1 ] || return 1
+  printf "%s [Y/n] " "$1"
+  read -r answer
+  case "$answer" in [Nn]*) return 1 ;; *) return 0 ;; esac
+}
 
-CineSets is installed. Check the dry run, then create your collections:
+made=no
+verb=Create; [ -s data/state.json ] && verb=Update
+echo
+if ask "$verb your collections on the server now? (the first time takes about 10 minutes on a big library)"; then
+  ./run.sh apply && made=yes
+fi
 
-  ./run.sh apply
+# the schedule: skipped if one already runs this copy of CineSets (from crontab or /etc/cron.d)
+scheduled=no
+if crontab -l 2>/dev/null | grep -qF "$here/run.sh" || grep -qsF "$here/run.sh" /etc/cron.d/*; then
+  scheduled=already
+elif command -v crontab >/dev/null 2>&1 && ask "Keep them up to date automatically? (trending every 6 hours, charts daily, everything on Sundays)"; then
+  { crontab -l 2>/dev/null
+    echo "# CineSets schedule, added by install.sh (remove these four lines to stop it)"
+    echo "0 */6 * * * \"$here/run.sh\" apply --only m-trending,s-trending > \"$here/logs/trending.log\" 2>&1"
+    echo "30 4 * * * \"$here/run.sh\" apply --group seasonal,charts > \"$here/logs/daily.log\" 2>&1"
+    echo "0 5 * * 0 \"$here/run.sh\" apply > \"$here/logs/weekly.log\" 2>&1"
+  } | crontab - && scheduled=yes
+fi
 
-To pick collections, style the posters and preview them in your browser, run ./run.sh web (or ./run.sh pick
-to choose collections in the terminal).
-
-To keep them updated, install the schedule (trending every 6 hours, charts daily at 04:30, everything on
-Sundays at 05:00, in this machine's time zone):
-
-  sed -e "s#/opt/cinesets#$(pwd)#g" -e "s# root # $(id -un) #" deploy/cron.example | sudo tee /etc/cron.d/cinesets >/dev/null
-EOF
+echo
+echo "CineSets is installed."
+[ "$made" = yes ] || echo "  $verb your collections:     ./run.sh apply"
+case "$scheduled" in
+  yes) echo "  Schedule: added to your crontab (crontab -l shows it)." ;;
+  already) echo "  Schedule: already set up." ;;
+  *) echo "  Keep them updated:           run ./install.sh again and answer yes, or see deploy/cron.example" ;;
+esac
+echo "  Change collections and posters in your browser:  ./run.sh web"
+echo "  Every command:               ./run.sh --help    Help: README.md and docs/dashboard.md"

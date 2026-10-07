@@ -39,16 +39,16 @@ sudo chown -R "$(id -un)" /opt/cinesets
 cd /opt/cinesets && ./install.sh
 ```
 
-The installer asks for your server address and API key, finds your libraries, asks whether you want every
-collection or just some, and does a dry run that doesn't change anything. Check `config.yml` (every setting is
-explained in `config.example.yml`), then:
+The installer does the rest:
 
-```bash
-./run.sh apply
-```
+1. It asks for your server's address and API key, and works out whether it's Emby or Jellyfin.
+2. It finds your movie and TV libraries, and asks whether you want every collection or just some.
+3. It downloads the streaming logos and does a dry run, which changes nothing.
+4. It offers to create the collections, and to keep them updated: trending every 6 hours, charts and seasonal
+   daily, and everything on Sundays.
 
-Last step is the schedule the installer prints: trending every 6 hours, charts and seasonal daily, and
-everything on Sundays.
+That's it. To change collections and posters later, open the dashboard with `./run.sh web`. Every setting is
+also explained in `config.example.yml`.
 
 <details>
 <summary><b>Docker</b></summary>
@@ -57,14 +57,13 @@ everything on Sundays.
 git clone https://github.com/blurbery/cinesets.git && cd cinesets
 cp docker-compose.example.yml docker-compose.yml    # set PUID and PGID to your user
 docker compose build
-docker compose run --rm cinesets setup
+docker compose run --rm cinesets setup     # your server's address and API key, and which collections
 docker compose run --rm cinesets logos
-docker compose run --rm cinesets plan
-docker compose up -d
+docker compose up -d                       # creates the collections, then keeps them updated
 ```
 
-Inside the container `127.0.0.1` is the container itself, so give it your server's LAN address. `up -d` runs
-the schedule from `config.yml`. Changes to `config.yml` (from the dashboard or by hand) apply from the next job;
+Inside the container `127.0.0.1` is the container itself, so give setup your server's LAN address. `up -d` runs
+the schedule from `config.yml`, starting with everything straight away. Changes to `config.yml` (from the dashboard or by hand) apply from the next job;
 restart the container only after changing the `schedule` itself. Any command below works as
 `docker compose run --rm cinesets <command>`.
 
@@ -137,10 +136,14 @@ posters:
 
 ## Your own collections
 
-Copy `collections.yml` to `my-collections.yml` (on Docker, put it in `./config`), set
-`collections_file: my-collections.yml` in `config.yml` and change whatever you like. The top of the file
-explains every field. A collection needs at least 8 matches in
-your library before it's made, so regional ones like Stan only show up if you have the shows.
+The easiest way is the dashboard's Lists tab: paste an [MDBList](https://mdblist.com) list's address and CineSets
+makes a collection from it, or adds it to one you have. Those go in `custom-collections.yml`, which updates never
+touch.
+
+To change the built-in catalogue itself, copy `collections.yml` to `my-collections.yml` (on Docker, put it in
+`./config`), set `collections_file: my-collections.yml` in `config.yml` and change whatever you like. The top of
+the file explains every field. A collection needs at least 8 matches in your library before it's made, so
+regional ones like Stan only show up if you have the shows.
 
 <details>
 <summary><b>Examples</b></summary>
@@ -180,6 +183,7 @@ A franchise from a fixed list of films. It needs `min` because there are only th
 git pull && ./install.sh
 ```
 
+The installer keeps your settings, skips the questions you've already answered and won't add a second schedule.
 On Docker it's `git pull && docker compose build && docker compose up -d`. What changed is on the
 [Releases](https://github.com/blurbery/cinesets/releases) page.
 
@@ -190,8 +194,9 @@ On Docker it's `git pull && docker compose build && docker compose up -d`. What 
 <details>
 <summary><b>Uninstalling</b></summary>
 
-Remove the schedule (`sudo rm /etc/cron.d/cinesets`, or `docker compose down`), run `./run.sh remove --all` to
-delete the collections CineSets made, then delete the folder.
+Remove the schedule: `crontab -l | grep -v cinesets | crontab -` if the installer added it, `sudo rm
+/etc/cron.d/cinesets` if you set it up there, or `docker compose down`. Then run `./run.sh remove --all` to delete
+the collections CineSets made, and delete the folder.
 
 </details>
 

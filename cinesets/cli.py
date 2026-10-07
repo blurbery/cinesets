@@ -213,21 +213,43 @@ def pick(path):
               "deletes them.")
 
 
+def detect_server(url):
+    """emby or jellyfin, from the server's public information (no API key needed), or None if it can't tell."""
+    for path in ("/System/Info/Public", "/emby/System/Info/Public"):
+        try:
+            r = requests.get(url + path, timeout=10, allow_redirects=False, headers={"accept": "application/json"})
+            info = r.json() if r.status_code == 200 else None
+        except (requests.RequestException, ValueError):
+            continue
+        if not isinstance(info, dict):
+            continue
+        product = str(info.get("ProductName") or "").lower()
+        if "jellyfin" in product:
+            return "jellyfin"
+        if "emby" in product or info.get("ServerName") or info.get("Id"):  # Emby's public information has no product name
+            return "emby"
+    return None
+
+
 def setup(path):
-    """Interactive first-run setup: test the server, detect libraries, write config.yml."""
+    """Interactive first-run setup: find the server and what it is, test the key, detect libraries, write config.yml."""
     path = config.config_path(path)
     if os.path.exists(path) and input(f"{path} exists. Overwrite it? [y/N] ").strip().lower() != "y":
         return
-    kind = input("Server type, emby or jellyfin [emby]: ").strip().lower() or "emby"
-    config.check_type(kind)
-    url = input("Server address [http://127.0.0.1:8096]: ").strip() or "http://127.0.0.1:8096"
+    url = input("Server address, as you open it in a browser [http://127.0.0.1:8096]: ").strip() or "http://127.0.0.1:8096"
     if not url.startswith(("http://", "https://")):
         url = "http://" + url
     url = url.split("/web/")[0].split("/web#")[0].rstrip("/")  # a pasted browser address works too
     for tail in ("/web", "/emby"):
         if url.endswith(tail):
             url = url[: -len(tail)]
-    key = getpass.getpass("API key (Dashboard > API Keys, typing is hidden): ").strip()
+    kind = detect_server(url)
+    if kind:
+        print(f"Found {'Jellyfin' if kind == 'jellyfin' else 'Emby'} at {url}.")
+    else:
+        kind = input("Couldn't tell what server that is. Emby or Jellyfin? [emby]: ").strip().lower() or "emby"
+        config.check_type(kind)
+    key = getpass.getpass("API key (Dashboard > API Keys on your server; typing is hidden): ").strip()
     cfg = config.Config(config._merge(config.DEFAULTS, {"server": {"type": kind, "url": url, "api_key": key}}))
     cfg["base_dir"] = os.path.dirname(os.path.abspath(path))
     try:

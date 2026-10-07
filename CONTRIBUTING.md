@@ -35,7 +35,10 @@ python3 -m venv venv && venv/bin/pip install -r requirements-dev.txt
 venv/bin/python -m pytest tests --ignore=tests/e2e
 ```
 
-The unit tests use a fake server (`tests/conftest.py`), so you don't need Emby or Jellyfin to run them. Every
+The unit tests use a fake server (`tests/conftest.py`), so you don't need Emby or Jellyfin to run them. To work
+on the dashboard, `venv/bin/python -m cinesets web --demo` runs it with made-up artwork and no server; its page
+is plain HTML, CSS and JavaScript in `cinesets/static`, with no build step. `docs/make_preview.py` redraws the
+pictures in `docs/` after poster changes. Every
 PR also gets tested against real throwaway Emby and Jellyfin servers on GitHub Actions. On your first PR those
 checks wait until I approve them.
 
