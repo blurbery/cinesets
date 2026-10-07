@@ -44,10 +44,12 @@ which server answers at an address.
 
 `tests/test_layout.py` keeps it that way. It fails if:
 
-- the centre asks a server anything that isn't in the shell, or checks what a server has (`hasattr`, `getattr`);
+- the centre asks a server anything that isn't in the shell, under any variable name, or checks what a server has
+  (`hasattr`, `getattr`);
 - a server's name or API path turns up anywhere outside `cinesets/servers/`, or the centre imports a server module;
-- a server module leaves any question to the base instead of answering it;
-- loading one server loads another.
+- a server module imports another server's module, or leaves any question to the base instead of answering it;
+- a server is missing from setup's detection order (`ASK_ORDER`);
+- loading any one server loads another.
 
 ## The servers
 
