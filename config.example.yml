@@ -53,7 +53,7 @@ order:
   - universes
 alphabetical_groups: [universes]
 
-# How the posters look. Every setting is optional.
+# How the posters look. Every setting is optional; docs/preview.md has pictures of each one.
 #   artwork          random: each install picks its own artwork from the top titles in each collection, so no
 #                    two servers look alike. fixed: the title named in collections.yml, or the top title.
 #                    Without this setting it's fixed, as in older versions. Streaming posters keep their own look

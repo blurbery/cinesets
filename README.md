@@ -22,6 +22,12 @@ It only ever touches collections it made itself. Your films, shows, libraries, u
 alone. It talks to your server, public [mdblist](https://mdblist.com) lists and Wikimedia Commons (for the
 streaming logos), and that's it. No account, no tracking.
 
+<p align="center">
+  <a href="docs/preview.md"><img src="docs/images/collections-page.jpg" alt="CineSets posters on a Collections page" width="820"></a>
+</p>
+
+<p align="center"><b><a href="docs/preview.md">See every section and poster style in the preview</a></b></p>
+
 > [!NOTE]
 > Emby is fully supported. Jellyfin works and is tested on every change, but it's beta until more people have
 > run it. Silo support is coming.
@@ -94,14 +100,14 @@ collections:
   exclude: [s-trending]              # single collections to leave out
 ```
 
-`./run.sh list` shows every section with its collection keys. Unpicking a collection doesn't delete it from your
-server, it just stops updating; `./run.sh remove --unpicked` deletes those.
+The [preview](docs/preview.md#sections) shows every section with its posters and keys. Unpicking a collection
+doesn't delete it from your server, it just stops updating; `./run.sh remove --unpicked` deletes those.
 
 ## Poster style
 
 Colours, shading and text are settings under `posters` in `config.yml`. New installs also give every server its
-own random artwork from its library, so no two look the same (streaming posters keep their own look).
-`config.example.yml` explains every setting.
+own random artwork from its library, so no two look the same (streaming posters keep their own look). The
+[preview](docs/preview.md#poster-style) has pictures of every setting.
 
 ```yaml
 posters:
