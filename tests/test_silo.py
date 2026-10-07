@@ -503,3 +503,22 @@ def test_an_install_without_the_library_record_makes_it(silo_run, monkeypatch):
     eng.run("apply", catalog.load(cfg), 2)
     assert by_slug(silo_run.fake, "cinesets-m-ghibli")["library_ids"] == ["4"]
     assert load_json(srv.where_file, {})["movie-tmdb-129"] == ["4"]
+
+
+def test_a_collection_moves_out_of_the_first_library_only_when_it_is_clearly_themed(silo_run, monkeypatch):
+    two_thirds = [{"mediatype": "movie", "rank": 1, "id": 129}, {"mediatype": "movie", "rank": 2, "id": 128},
+                  {"mediatype": "movie", "rank": 3, "id": 105}]
+    half = [{"mediatype": "movie", "rank": 1, "id": 129}, {"mediatype": "movie", "rank": 2, "id": 105}]
+    yml = YML + "".join(f"""  - key: m-{key}
+    group: charts
+    type: movie
+    title: {key}
+    min: 1
+    lists: [someone/{key}]
+""" for key in ("themed", "mixed"))
+    monkeypatch.setattr("cinesets.engine.fetch_list", lambda slug, data: {"someone/themed": two_thirds, "someone/mixed": half}.get(slug, silo_run.rows))
+    cfg, srv, eng = silo_run(yml, THREE_LIBRARIES)
+    eng.run("apply", catalog.load(cfg), 1)
+    themed, mixed = by_slug(silo_run.fake, "cinesets-m-themed"), by_slug(silo_run.fake, "cinesets-m-mixed")
+    assert themed["library_ids"] == ["4"] and set(themed["items"]) == {"movie-tmdb-129", "movie-tmdb-128"}
+    assert mixed["library_ids"] == ["1"] and set(mixed["items"]) == {"movie-tmdb-105"}   # half and half: the first library

@@ -205,8 +205,10 @@ class SiloServer:
         return self._where
 
     def narrow(self, coll, ids):
-        """A collection lives in one library: the one of its type in config.yml that holds most of its titles (a
-        title in several counts for the first). Only titles in that library go in it."""
+        """A collection lives in one library, picked from where its titles are, so it works whatever the libraries are
+        called: the library that holds at least two thirds of them (an anime or an international collection, say),
+        or else the first library of its type in config.yml that has any (a title in several counts for the first
+        listed). Only titles in that library go in it."""
         folders = self.library_folders()
         libs = [folders[x["name"]] for x in self.cfg["libraries"] if x["type"] == coll["kind"] and x["name"] in folders]
         where = self.where()
@@ -214,7 +216,8 @@ class SiloServer:
         votes.pop(None, None)
         if not votes:
             return ids
-        home = max(libs, key=lambda lib: (votes[lib], -libs.index(lib)))
+        best = max(libs, key=lambda lib: (votes[lib], -libs.index(lib)))
+        home = best if votes[best] * 3 >= sum(votes.values()) * 2 else next(lib for lib in libs if votes[lib])
         self._home[coll["key"]] = home
         return [i for i in ids if home in where.get(i, ())]
 
