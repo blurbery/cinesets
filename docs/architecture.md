@@ -33,11 +33,13 @@ questions:
 |---|---|
 | Reads | `media_libraries`, `library_folders`, `library_items`, `genres`, `alive`, `backdrop_image` |
 | Collections | `list_collections`, `create_collection`, `wait_until_ready`, `members`, `add_items`, `remove_items`, `upload_poster`, `set_details`, `delete_collection`, `admin_user` |
-| Setup | `detect(url)`: is this my kind of server? (no API key needed) |
+| Setup | `NAMES`, `KEY_PAGE`, `SETUP_NOTE` and `trim(url)`: what setup says for this server and how it tidies a pasted address. `detect(url)`: is this my kind of server, and what's its own address? (no API key needed) |
 | Optional | `arrange`, `narrow` and `prepare`, for a server that orders collections by number or keeps each one in a single library (Silo) |
 
 `servers.connect(cfg)` picks the module from `server.type` in `config.yml`, and `servers.detect(url)` asks each
-module in turn during setup. The engine never builds a request itself.
+module in turn during setup. The engine never builds a request itself, and setup never mentions a server by name.
+`tests/test_layout.py` checks that: it fails if a server's name or API path turns up anywhere outside
+`cinesets/servers/`, or if the centre imports a server module directly.
 
 ## The servers
 
@@ -72,8 +74,9 @@ Plex is next. Adding it, or any other server, goes like this:
 
 1. Write `cinesets/servers/<name>.py` with a class that answers every operation in the shell. Start from
    `silo.py` if the server has its own way of doing things, or from `emby.py` if it speaks the Emby API.
-2. Add it to `NAMES` and `_classes()` in `cinesets/servers/__init__.py`, and its type to `check_type` in
-   `config.py`.
+2. Give the class its `NAMES` (its `server.type` and display name), `KEY_PAGE` and, if it needs one, a
+   `SETUP_NOTE`, and add it to `_modules()` in `cinesets/servers/__init__.py`. Setup, `config.yml` checks and the
+   help text pick it up from there.
 3. Add unit tests with a fake server that answers the same paths as the real one (`tests/conftest.py` and
    `tests/test_silo.py` are both examples).
 4. Add an end-to-end job in `.github/workflows/ci.yml` that runs CineSets against a real, throwaway server.
