@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.1](https://github.com/blurbery/cinesets/compare/v1.3.0...v1.3.1) (2026-10-07)
+
+
+### Bug fixes
+
+* **web:** tidy up when stopped by docker stop or systemctl stop, and make the access key safely ([#26](https://github.com/blurbery/cinesets/issues/26)) ([2573de0](https://github.com/blurbery/cinesets/commit/2573de01388ea8602a916496792b2c94a0b90ac6))
+
 ## [1.3.0](https://github.com/blurbery/cinesets/compare/v1.2.0...v1.3.0) (2026-10-07)
 
 
