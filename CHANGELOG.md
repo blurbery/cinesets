@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.3.0](https://github.com/blurbery/cinesets/compare/v1.2.0...v1.3.0) (2026-10-07)
+
+
+### Features
+
+* Silo support ([#17](https://github.com/blurbery/cinesets/issues/17)) ([61c37dd](https://github.com/blurbery/cinesets/commit/61c37dd4e05cb649cdb64f17dd0a5c167af04374))
+
 ## [1.2.0](https://github.com/blurbery/cinesets/compare/v1.1.0...v1.2.0) (2026-10-07)
 
 
