@@ -22,10 +22,6 @@ It only ever touches collections it made itself. Your films, shows, libraries, u
 alone. It talks to your server, public [mdblist](https://mdblist.com) lists and Wikimedia Commons (for the
 streaming logos), and that's it. No account, no tracking.
 
-<p align="center">
-  <a href="docs/preview.md"><img src="docs/images/collections-page.jpg" alt="CineSets posters on a Collections page" width="820"></a>
-</p>
-
 <p align="center"><b><a href="docs/preview.md">See every section and poster style in the preview</a></b></p>
 
 > [!NOTE]
