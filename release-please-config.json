@@ -15,13 +15,13 @@
         {"type": "perf", "section": "Performance"},
         {"type": "deps", "section": "Dependencies"},
         {"type": "revert", "section": "Reverts"},
-        {"type": "docs", "section": "Documentation", "hidden": true},
-        {"type": "style", "section": "Style", "hidden": true},
-        {"type": "refactor", "section": "Refactoring", "hidden": true},
-        {"type": "test", "section": "Tests", "hidden": true},
-        {"type": "build", "section": "Build", "hidden": true},
-        {"type": "ci", "section": "Continuous integration", "hidden": true},
-        {"type": "chore", "section": "Chores", "hidden": true}
+        {"type": "docs", "section": "Documentation"},
+        {"type": "style", "section": "Style"},
+        {"type": "refactor", "section": "Refactoring"},
+        {"type": "test", "section": "Tests"},
+        {"type": "build", "section": "Build"},
+        {"type": "ci", "section": "Continuous integration"},
+        {"type": "chore", "section": "Chores"}
       ]
     }
   }
