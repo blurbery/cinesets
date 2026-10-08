@@ -337,7 +337,7 @@ def main():
     # 5) after losing its record, CineSets leaves the collections alone until adopt takes them back
     os.remove(os.path.join(data, "state.json"))
     before = {k: v["id"] for k, v in collections(silo).items()}
-    out = cinesets(cfg, "apply")
+    out = cinesets(cfg, "apply", fails=True)
     check(out.count("not created by CineSets") == 5 and {k: v["id"] for k, v in collections(silo).items()} == before,
           "without its record CineSets refused all five collections")
     out = cinesets(cfg, "adopt", "--all")
@@ -354,14 +354,14 @@ def main():
     silo.req("PUT", f"/admin/collections/{theirs}/items/{matrix}", json={"position": 0})
     write(franchise(films[:2]), picks, all_shows, no_talk, by_imdb,
           entry("m-matrix", "movie", "The Matrix", "universes", titles=[["The Matrix", 1999]]))
-    out = cinesets(cfg, "apply")
+    out = cinesets(cfg, "apply", fails=True)
     check("not created by CineSets" in out, "CineSets refused a collection it did not create")
     mine = collections(silo)["Movies - The Matrix"]
     check(not mine.get("poster_thumbhash") and members(silo, theirs) == [matrix], "the other collection was not touched")
 
-    # 7) plan and posters write nothing
+    # 7) plan and posters write nothing (plan says it would turn down The Matrix, so it exits with 1 too)
     before = {k: (v["id"], v.get("item_count")) for k, v in collections(silo).items()}
-    cinesets(cfg, "plan")
+    cinesets(cfg, "plan", fails=True)
     cinesets(cfg, "posters")
     check({k: (v["id"], v.get("item_count")) for k, v in collections(silo).items()} == before, "plan and posters made no changes")
 

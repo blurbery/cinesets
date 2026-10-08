@@ -30,13 +30,15 @@ mkdir -p logs
 ./run.sh logos || echo "Logos skipped for now (posters will show service names). Run ./run.sh logos later."
 
 echo "Running a dry run (this changes nothing and can take a few minutes on a big library)..."
-if ! ./run.sh plan > logs/first-plan.txt 2>&1; then
+# a plan that got to its Summary line ran, even if a list or two failed (those are shown below)
+./run.sh plan > logs/first-plan.txt 2>&1 || true
+if ! grep -q '^Summary:' logs/first-plan.txt || grep -q '^Stopped early:' logs/first-plan.txt; then
   tail -n 20 logs/first-plan.txt
   echo "The dry run failed. Fix the problem above (see logs/first-plan.txt), then run ./install.sh again."
   exit 1
 fi
 total=$(grep -c '^[a-z0-9][a-z0-9-]* *list ' logs/first-plan.txt || true)
-skipped=$(grep -c '^   skipped' logs/first-plan.txt || true)
+skipped=$(grep -cE ', so it is (not made|left as it is on the server)$' logs/first-plan.txt || true)
 echo "Collections that would be made: $((total - skipped)) ($skipped skipped because too few of their titles are in your library)"
 grep -E '^!!' logs/first-plan.txt | head -n 20 || true
 echo "Full dry run: $(pwd)/logs/first-plan.txt"
@@ -53,7 +55,7 @@ made=no
 verb=Create; [ -s data/state.json ] && verb=Update
 echo
 if ask "$verb your collections on the server now? (the first time can take a while on a big library)"; then
-  ./run.sh apply && made=yes
+  ./run.sh apply && made=yes || made=partly  # exit code 1: something failed or the run stopped early
 fi
 
 # the schedule: skipped if one already runs this copy of CineSets (from crontab or /etc/cron.d)
@@ -71,7 +73,11 @@ fi
 
 echo
 echo "CineSets is installed."
-[ "$made" = yes ] || echo "  $verb your collections:     ./run.sh apply"
+case "$made" in
+  yes) ;;
+  partly) echo "  Some collections had a problem (the lines starting with !! above): fix it, then run ./run.sh apply" ;;
+  *) echo "  $verb your collections:     ./run.sh apply" ;;
+esac
 case "$scheduled" in
   yes) echo "  Schedule: added to your crontab (crontab -l shows it)." ;;
   already) echo "  Schedule: already set up." ;;

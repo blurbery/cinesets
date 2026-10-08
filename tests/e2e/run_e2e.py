@@ -207,8 +207,9 @@ def scan(api, expect):
 
 
 # ------------------------------------------------------------ CineSets
-def cinesets(cfg, *args, page=None):
-    """Run CineSets. `page` sets how many items it asks for per page, so a small library still spans many pages."""
+def cinesets(cfg, *args, page=None, fails=False):
+    """Run CineSets. `page` sets how many items it asks for per page, so a small library still spans many pages.
+    `fails` is for a run where CineSets should turn a collection down, which it reports by exiting with 1."""
     cmd = [sys.executable, "-m", "cinesets", *args, "--config", cfg]
     if page:
         # each server module has its own page size; set both so whichever server this is reads one item at a time
@@ -218,8 +219,8 @@ def cinesets(cfg, *args, page=None):
     out = subprocess.run(cmd, cwd=ROOT, capture_output=True, text=True, timeout=600)
     text = out.stdout + out.stderr
     log("cinesets " + " ".join(args) + "\n" + text.strip())
-    if out.returncode:
-        raise SystemExit(f"cinesets {' '.join(args)} exited {out.returncode}")
+    if out.returncode != (1 if fails else 0):
+        raise SystemExit(f"cinesets {' '.join(args)} exited {out.returncode}" + (", not 1" if fails else ""))
     return text
 
 
@@ -442,7 +443,7 @@ def main():
     # 6) after losing its record, CineSets leaves the collections alone until adopt takes them back
     os.remove(os.path.join(data, "state.json"))
     before = boxsets(api)
-    out = cinesets(cfg, "apply")
+    out = cinesets(cfg, "apply", fails=True)
     check(out.count("not created by CineSets") == 4 and boxsets(api) == before,
           "without its record CineSets refused all four collections")
     out = cinesets(cfg, "adopt", "--all")
@@ -456,15 +457,15 @@ def main():
     api.req("POST", "/Collections", params={"Name": "Movies - The Matrix", "Ids": found["Movie"][matrix[0]]["Id"]})
     theirs = boxsets(api)["Movies - The Matrix"]
     write(franchise(bttf[:2]), picks, all_shows, no_talk, entry("m-matrix", "movie", "The Matrix", "universes", titles=[list(matrix)]))
-    out = cinesets(cfg, "apply")
+    out = cinesets(cfg, "apply", fails=True)
     check("not created by CineSets" in out, "CineSets refused a collection it did not create")
     check("Primary" not in (collection_item(api, theirs, user_id).get("ImageTags") or {}),
           "the other collection's poster was not touched")
     check(members(api, theirs, user_id) == [matrix[0]], "the other collection's titles were not touched")
 
-    # 8) plan and posters write nothing
+    # 8) plan and posters write nothing (plan says it would turn down The Matrix, so it exits with 1 too)
     before = boxsets(api)
-    cinesets(cfg, "plan")
+    cinesets(cfg, "plan", fails=True)
     cinesets(cfg, "posters")
     check(boxsets(api) == before, "plan and posters made no changes")
 
