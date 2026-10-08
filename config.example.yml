@@ -121,6 +121,7 @@ web:
   port: 8095
   sign_in: true
   public: false
+  hosts: []          # optional: the only names it answers to, like [cinesets.example.com] (docs/dashboard.md)
 
 # Seconds to pause after each write, and the slowest write (seconds) before a run stops to spare the server.
 write_pause: 1.0

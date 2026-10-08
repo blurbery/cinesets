@@ -40,7 +40,7 @@ DEFAULTS = {
     # number replaces its built-in size (up or down). Franchises always keep every title in their list.
     "limits": {"most": None, "sections": {}, "collections": {}},
     # the dashboard (cinesets web): see web.py and docs/dashboard.md
-    "web": {"host": "127.0.0.1", "port": 8095, "sign_in": True, "public": False},
+    "web": {"host": "127.0.0.1", "port": 8095, "sign_in": True, "public": False, "hosts": []},
 }
 
 
