@@ -75,6 +75,9 @@ alphabetical_groups: [universes]
 #   tint             how strongly the colour washes over the artwork: strong, normal, subtle or none
 #   title            title colour: gradient (two colours), solid (one colour) or white
 # These text settings change streaming posters too:
+#   font             poppins, bebas-neue, abril-fatface, cinzel-decorative, limelight, bangers, creepster,
+#                    audiowide, rye, pacifico, titan-one or courier-prime (text with a letter the font doesn't have
+#                    is drawn in poppins)
 #   align            left or centre
 #   case             normal or upper (all capitals)
 #   label            the small Movies / TV Shows label at the top: true or false
@@ -88,7 +91,7 @@ alphabetical_groups: [universes]
 #   text_shadow      a soft shadow behind text: auto (only text that has been moved), on or off
 #   logo             streaming posters: standard, alt or icon (another version where the service has one)
 #   logo_colour      streaming posters: original or white
-#   sections         settings for every collection in a section, like  genres: {accent: red, align: centre}
+#   sections         settings for every collection in a section, like  genres: {accent: red, font: bebas-neue}
 #   overrides        settings for single collections, like  m-action: {accent: red, title_position: [0.5, 0.6]}
 #                    (a collection's own settings win over its section's, which win over the ones above)
 posters:
@@ -97,6 +100,7 @@ posters:
   shade: medium
   tint: normal
   title: gradient
+  font: poppins
   align: left
   case: normal
   label: true

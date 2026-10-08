@@ -46,7 +46,7 @@ SCENE_FOR = {
 
 
 def font(weight, size):
-    return ImageFont.truetype(os.path.join(ROOT, "assets", "fonts", f"Poppins-{weight}.ttf"), size)
+    return ImageFont.truetype(os.path.join(ROOT, "assets", "fonts", "poppins", f"Poppins-{weight}.ttf"), size)
 
 
 class Studio:
@@ -190,6 +190,19 @@ def random_artwork(studio, by_key):
          "random-artwork.jpg")
 
 
+# a collection each font suits, for the fonts picture
+FONT_FOR = {"poppins": "m-action", "bebas-neue": "m-thriller", "abril-fatface": "m-drama", "cinzel-decorative": "m-middleearth",
+            "limelight": "m-oscars", "bangers": "m-marvel", "creepster": "m-horror", "audiowide": "m-scifi", "rye": "m-indiana",
+            "pacifico": "m-80s", "titan-one": "m-kids", "courier-prime": "m-docs"}
+
+
+def font_sheet(studio, by_key):
+    """Every font, each on a collection it suits. Drawn last, so the other pictures keep the artwork they had."""
+    tile = (240, 360)
+    tiles = [(studio.poster(by_key[FONT_FOR[face]], tile, {"font": face}), face) for face in posters.FONTS]
+    save(sheet(tiles, 6, tile), "style-fonts.jpg")
+
+
 def section_tables(made):
     """Markdown for every section: its picture and a table of its keys, to paste between the markers in preview.md."""
     parts = []
@@ -218,6 +231,7 @@ def main():
         made = section_sheets(studio, cfg, colls)
         style_sheets(studio, by_key)
         random_artwork(studio, by_key)
+        font_sheet(studio, by_key)
     with open(PAGE) as f:
         page = f.read()
     start, end = "<!-- sections:start -->", "<!-- sections:end -->"

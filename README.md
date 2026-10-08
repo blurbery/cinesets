@@ -68,8 +68,8 @@ Most of them take `--only key1,key2` or `--group streaming`. `./run.sh --help` s
 
 ## Dashboard
 
-`./run.sh web` starts a web page where you pick collections, change the poster colours, shading and text, drag and
-resize the title and label (for every poster, a whole section or one collection), shuffle or choose each
+`./run.sh web` starts a web page where you pick collections, change the poster colours, shading, text and font,
+drag and resize the title and label (for every poster, a whole section or one collection), shuffle or choose each
 collection's artwork, set how many titles each collection holds, add MDBList lists or make new collections from
 them, preview every poster, then save and apply. It prints a sign-in link; `./run.sh web --demo` tries it with
 made-up artwork and no server.
@@ -97,8 +97,8 @@ doesn't delete it from your server, it just stops updating; `./run.sh remove --u
 
 ## Poster style
 
-Colours, shading, text and where the text sits are settings under `posters` in `config.yml`, easiest changed in the
-dashboard. New installs also give every server its
+Colours, shading, text, the font and where the text sits are settings under `posters` in `config.yml`, easiest
+changed in the dashboard. New installs also give every server its
 own random artwork from its library, so no two look the same (streaming posters keep their own look). The
 [preview](docs/preview.md#poster-style) has pictures of every setting.
 
@@ -108,9 +108,15 @@ posters:
   accent: auto       # each collection's own colour, or one for all: silver, orange, "#ff3366" and more
   shade: medium      # light, medium or dark
   title: gradient    # gradient, solid or white
+  font: poppins      # or bebas-neue, cinzel-decorative, creepster and eight more
   align: left        # left or centre
   case: normal       # normal or upper
 ```
+
+Twelve fonts come with CineSets, for every poster, a whole section or a single collection. Here's each one on a
+collection it suits; the [preview](docs/preview.md#fonts) lists them all.
+
+![Every font, each on a collection it suits](docs/images/style-fonts.jpg)
 
 ## Your own collections
 
@@ -179,5 +185,5 @@ PR.
 
 [AGPL-3.0-or-later](LICENSE) with a few extra terms in [NOTICE](NOTICE): keep the "CineSets by blurbery"
 credit, mark your changes if you share a modified version, and the licence doesn't cover the CineSets name or
-logo. Poppins is under the SIL Open Font License. Streaming logos belong to their owners and are downloaded to
-your own server, not shipped with CineSets.
+logo. The poster fonts in `assets/fonts` are under the SIL Open Font License. Streaming logos belong to their
+owners and are downloaded to your own server, not shipped with CineSets.

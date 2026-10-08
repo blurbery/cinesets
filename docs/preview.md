@@ -354,8 +354,8 @@ posters: {shade: dark, tint: strong, subtitle_colour: accent}
 posters: {accent: silver, tint: none, label_colour: white, case: upper}
 ```
 
-Streaming posters keep their own artwork, logo and colours, but take the text settings (`align`, `case`, `label`,
-`label_colour` and `subtitle_colour`) so they match the rest.
+Streaming posters keep their own artwork, logo and colours, but take the text settings (`font`, `align`, `case`,
+`label`, `label_colour` and `subtitle_colour`) so they match the rest.
 
 ### Colours
 
@@ -400,6 +400,42 @@ posters:
 ```
 
 The label's words come from `labels` in `config.yml`.
+
+### Fonts
+
+`font` sets the font for the label, title and subtitle. Each one below is shown on a collection it suits, but any
+font works on any poster.
+
+![Every font, each on a collection it suits](images/style-fonts.jpg)
+
+```yaml
+posters:
+  font: poppins          # the default
+  sections:
+    seasonal: {font: pacifico}
+  overrides:
+    m-horror: {font: creepster}
+    m-scifi: {font: audiowide}
+```
+
+| Font | Feels like |
+|---|---|
+| `poppins` | Clean and modern, the default |
+| `bebas-neue` | Tall capitals, a blockbuster or thriller |
+| `abril-fatface` | Bold and classic, drama |
+| `cinzel-decorative` | Carved capitals, an epic or fantasy |
+| `limelight` | Art deco, old Hollywood and awards |
+| `bangers` | Comic book, superheroes |
+| `creepster` | Dripping, horror and Halloween |
+| `audiowide` | Rounded and futuristic, sci-fi |
+| `rye` | Wanted poster, westerns and adventure |
+| `pacifico` | Retro script, romance and the 80s |
+| `titan-one` | Round and chunky, kids and family |
+| `courier-prime` | Typewriter, documentaries and true crime |
+
+The font's name works too, like `font: Bebas Neue`. A few fonts don't have every accented letter (Creepster and
+Rye have no ō or č, for example), so a poster whose text has one is drawn in Poppins instead. Each font has a
+size of its own that evens out how big it looks, and long titles still shrink to fit.
 
 ## Random artwork
 
