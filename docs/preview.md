@@ -209,6 +209,9 @@ Section key `kids`, 6 collections.
 
 Section key `seasonal`, 6 collections.
 
+Each one is only there around its holiday: Halloween from 1 October to 1 November, Christmas from 20 November
+to 6 January. Outside those dates CineSets takes down the copy it made, and makes it again next season.
+
 ![Seasonal](images/section-seasonal.jpg)
 
 <details>
