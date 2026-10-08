@@ -17,7 +17,7 @@ import time
 
 import requests
 
-from . import posters
+from . import lists, posters
 from .lists import fetch_list
 from .servers import ServerError, chunks
 from .store import load_json, save_json
@@ -30,6 +30,43 @@ INDEX_MAX_AGE = 20 * 3600
 
 class Busy(RuntimeError):
     """Another CineSets run holds the lock (raised only when asked not to wait)."""
+
+
+class Result:
+    """What one run did: the counts for the line it ends with, and why it stopped early if it did."""
+
+    def __init__(self, cmd):
+        self.cmd, self.stopped, self.listed = cmd, None, True
+        self.created = self.updated = self.matched = self.below = self.failed = 0
+
+    @property
+    def ok(self):
+        """False when something failed or the run stopped early. Collections below their minimum are not failures."""
+        return not self.failed and not self.stopped
+
+    def summary(self):
+        """`Summary: 3 created, 40 updated, 2 left as they are (below the minimum), 1 failed`, leaving out the parts that
+        are nothing. A plan says what apply would do, or only what matched if it couldn't list the server's collections."""
+        if self.cmd == "plan":
+            done = [(self.created, "would create"), (self.updated, "would update")] if self.listed else [
+                (self.matched, "matched")]
+        elif self.cmd == "posters":
+            done = [(self.created, "posters made")]
+        else:
+            done = [(self.created, "created"), (self.updated, "updated")]
+        parts = [f"{n} {what}" for n, what in done + [(self.below, "left as they are (below the minimum)"),
+                                                      (self.failed, "failed")] if n]
+        return "Summary: " + (", ".join(parts) or "nothing to do")
+
+
+def in_season(active, today=None):
+    """Whether today is inside a seasonal collection's `active: [MM-DD, MM-DD]` window. Both days count, and a window
+    can run past new year (["12-01", "01-06"]). A collection without one is always in season."""
+    if not isinstance(active, (list, tuple)) or len(active) != 2:
+        return True
+    start, end = (str(d) for d in active)
+    today = today or time.strftime("%m-%d")
+    return start <= today <= end if start <= end else (today >= start or today <= end)
 
 
 class Engine:
@@ -45,6 +82,7 @@ class Engine:
         self.logos = os.path.join(self.data, "logos")
         self.posters = os.path.join(self.data, "posters")
         self._titles = None  # (index, {kind: titles_in table}) for the index a run or the dashboard is using
+        self.halt = lambda: False  # the scheduler swaps this for one that says when it has been asked to stop
 
     # ------------------------------------------------------------ library index
     def build_index(self):
@@ -185,11 +223,25 @@ class Engine:
         if pick and SAFE_ID.match(str(pick)):
             used.add(pick)
             bd = self.backdrop(pick)
-        if logo:
-            posters.make_logo_poster(out, coll["label"], logo, self.logos, coll.get("subtitle") or "Popular", bd, coll["title"],
-                                     style)
-        else:
-            posters.make_poster(out, coll["label"], coll["title"], coll.get("subtitle"), coll["accent"], bd, style)
+
+        def draw(art):
+            if logo:
+                posters.make_logo_poster(out, coll["label"], logo, self.logos, coll.get("subtitle") or "Popular", art,
+                                         coll["title"], style)
+            else:
+                posters.make_poster(out, coll["label"], coll["title"], coll.get("subtitle"), coll["accent"], art, style)
+        try:
+            draw(bd)
+        except Exception as e:
+            if not bd:
+                raise
+            # a saved backdrop that can't be drawn (cut off, say): delete it so the next run downloads it again
+            print(f"   {coll['key']}: the saved artwork could not be drawn ({e}); using a plain background, and it is "
+                  "downloaded again next run")
+            with contextlib.suppress(FileNotFoundError):
+                os.remove(bd)
+            bd = None
+            draw(None)
         if bd or not pick:
             st["design"], st["backdrop_item"] = design, pick
             if random_art:
@@ -229,6 +281,8 @@ class Engine:
             from PIL import Image
             with Image.open(tmp) as im:
                 im.verify()
+            with Image.open(tmp) as im:
+                im.load()  # every pixel too: a download cut off part way passes verify() but can't be drawn
             os.replace(tmp, path)
             return path
         except Exception as e:
@@ -255,71 +309,122 @@ class Engine:
 
     # ------------------------------------------------------------ writes
     def collections_by_id(self):
-        """Every collection on the server, id -> name."""
+        """Every collection on the server, id -> name. Ownership is always checked by id: several collections can share
+        a name."""
         return self.srv.list_collections()
 
     def existing_collections(self):
+        """name -> id; a name several collections share keeps only one of them, so this is never used to decide what
+        CineSets owns."""
         return {name: cid for cid, name in self.collections_by_id().items()}
 
     @staticmethod
     def owned_name_ok(st, live_name, coll=None):
-        """A stored id is only trusted while the collection still carries a name CineSets gave it."""
+        """A stored id is only trusted while the collection still carries a name CineSets gave it: the one it saved,
+        or for an entry still in the collections file, its name or create_name. With neither to go on (a record from
+        an old version, for a collection no longer in the file) it isn't trusted."""
         names = {st.get("name")} | ({coll["name"], coll.get("create_name")} if coll else set())
         names.discard(None)
-        return not st.get("name") and not coll or live_name in names
+        return live_name in names
+
+    @staticmethod
+    def renamed(key, cid, live_name):
+        return (f"collection {cid} is now called {live_name!r}, not a name CineSets gave it; not touching it (rename it "
+                f"back, or run: cinesets forget {key})")
+
+    @staticmethod
+    def check_name_free(coll, live):
+        """Before making a collection: stop if its name, or the name it is made under, is on the server already. A
+        name several collections share is never made again, so CineSets can always tell its own apart."""
+        for name in dict.fromkeys([coll["name"], coll.get("create_name", coll["name"])]):
+            held = sum(1 for n in live.values() if n == name)
+            if held > 1:
+                raise RuntimeError(f"{held} collections on the server are called {name!r}, so CineSets can't tell them "
+                                   "apart; not making another (rename or delete the extra ones)")
+            if held and name == coll["name"]:
+                raise RuntimeError(f"a collection named {name!r} already exists and was not created by CineSets "
+                                   f"(if it is from an earlier install, run: cinesets adopt --only {coll['key']})")
+            if held:
+                raise RuntimeError(f"a collection named {name!r} already exists and was not created by CineSets; "
+                                   "not creating another with that name")
+
+    @staticmethod
+    def claimable(key, st, state, live):
+        """Collections an earlier run's create may have made after CineSets gave up waiting: those with the name it
+        asked for that weren't there before it asked, and aren't another entry's."""
+        pending = st.get("pending") or {}
+        before = set(pending.get("not") or ())  # None in older records: the name was free then, or it wasn't made
+        others = {v.get("id") for k, v in state.items() if k != key}
+        return [c for c, n in live.items() if n == pending.get("name") and c not in before and c not in others]
+
+    def claim(self, coll, st, state, live):
+        """Take on a collection an earlier run asked for, if exactly one could be it."""
+        found, name = self.claimable(coll["key"], st, state, live), st["pending"].get("name")
+        if len(found) == 1:
+            st["id"], st["name"] = found[0], name
+            print(f"   claimed {name!r}, created by an earlier run")
+        elif found:
+            print(f"   {coll['key']}: {len(found)} collections are called {name!r}, so CineSets can't tell which one an "
+                  "earlier run made; claiming none of them")
+        st.pop("pending", None)
+        save_json(self.state_file, state)
+
+    def after_failed_create(self, st, state, live, e):
+        """A create that raised: forget it if the server clearly turned it down, claim the collection if the server
+        made it anyway, and otherwise leave it pending so the next run can claim one that turns up late."""
+        name = st["pending"]["name"]
+        if isinstance(e, ServerError) and e.status and 400 <= e.status < 500 and e.status != 408:
+            st.pop("pending", None)  # refused, so nothing was made
+            save_json(self.state_file, state)
+            return
+        try:
+            fresh = self.collections_by_id()
+        except (requests.RequestException, ServerError):
+            return
+        new = [c for c, n in fresh.items() if n == name and c not in live]
+        if len(new) == 1:
+            st["id"], st["name"] = new[0], name
+            st.pop("pending", None)
+            live[new[0]] = name
+            save_json(self.state_file, state)
+            print(f"   recovered {name!r} after a failed create; finishing it next run")
 
     def apply_collection(self, coll, ids, poster, state, live, user_id):
-        name, st, slowest = coll["name"], state.setdefault(coll["key"], {}), 0.0
+        """Make or update one collection. `live` is every collection on the server (id -> name), kept up to date as the
+        run makes and renames them. `poster` is None when it couldn't be drawn: the titles are still updated."""
+        name, key, st, slowest = coll["name"], coll["key"], state.setdefault(coll["key"], {}), 0.0
         create_as = coll.get("create_name", name)
-        by_id = {v: k for k, v in live.items()}
-        if st.get("id") and st["id"] not in by_id:
-            st.pop("id")  # deleted on the server since the last run
-        if st.get("id") and not self.owned_name_ok(st, by_id[st["id"]], coll):
-            raise RuntimeError(f"collection {st['id']} is now called {by_id[st['id']]!r}, not a name CineSets gave it; "
-                               "not touching it (rename it back, or remove its entry)")
-        pending = st.get("pending")
-        if not st.get("id") and pending:
-            # an earlier create may have finished on the server after CineSets gave up waiting
-            found = live.get(pending["name"])
-            if found and found != pending.get("not"):
-                st["id"] = found
-                print(f"   claimed {pending['name']!r}, created by an earlier run")
-            st.pop("pending", None)
-            save_json(self.state_file, state)
-        cid = st.get("id") or live.get(name)
-        created, added = False, 0
-        if cid and st.get("id") != cid:
-            raise RuntimeError(f"a collection named {name!r} already exists and was not created by CineSets "
-                               f"(if it is from an earlier install, run: cinesets adopt --only {coll['key']})")
+        if st.get("id") and st["id"] not in live:
+            print(f"   {key}: the collection CineSets made was deleted on the server, so it is being made again "
+                  "(unpick it to stop that)")
+            st.pop("id")
+        if st.get("id") and not self.owned_name_ok(st, live[st["id"]], coll):
+            raise RuntimeError(self.renamed(key, st["id"], live[st["id"]]))
+        if not st.get("id") and st.get("pending"):
+            self.claim(coll, st, state, live)
+        cid, created, added = st.get("id"), False, 0
         if not cid:
-            if create_as in live:
-                raise RuntimeError(f"a collection named {create_as!r} already exists and was not created by CineSets; "
-                                   "not creating another with that name")
+            self.check_name_free(coll, live)
             first = self.existing_ids(ids[:40])
             if not first:
                 raise RuntimeError("none of its titles are on the server any more")
-            st["pending"] = {"name": create_as, "not": None}
+            st["pending"] = {"name": create_as, "not": sorted(c for c, n in live.items() if n == create_as)}
             save_json(self.state_file, state)
             try:
                 cid, slowest = self.srv.create_collection(create_as, coll, first)
-            except (requests.RequestException, ServerError):
-                # the server may have made the collection before failing; claim it if it is new since this run started
-                cid = self.existing_collections().get(create_as)
-                if cid and cid not in live.values():
-                    st["id"], st["name"] = cid, create_as
-                    st.pop("pending", None)
-                    save_json(self.state_file, state)
-                    print(f"   recovered {create_as!r} after a failed create; finishing it next run")
+            except (requests.RequestException, ServerError) as e:
+                self.after_failed_create(st, state, live, e)
                 raise
             created, added = True, len(first)
-            owner = next((k for k, v in state.items() if k != coll["key"] and v.get("id") == cid), None)
-            if owner or cid in live.values():
+            owner = next((k for k, v in state.items() if k != key and v.get("id") == cid), None)
+            if owner or cid in live:
                 st.pop("pending", None)
                 save_json(self.state_file, state)
                 raise RuntimeError(f"the server returned collection {cid}, which CineSets does not own "
                                    f"({'it belongs to ' + owner if owner else 'it already existed'}); not touching it")
             st["id"], st["name"] = cid, create_as
             st.pop("pending", None)
+            live[cid] = create_as
             save_json(self.state_file, state)
             self.srv.wait_until_ready(cid, user_id)
         # read back what the collection holds, even a new one: Jellyfin 12 can drop the titles it was created with
@@ -332,25 +437,38 @@ class Engine:
         if remove:
             slowest = max(slowest, self.srv.remove_items(cid, remove))
 
-        with open(poster, "rb") as f:
-            raw = f.read()
-        digest = hashlib.sha1(raw).hexdigest()
-        if created or st.get("poster") != digest:
-            kept, took = self.srv.upload_poster(cid, raw, user_id)
-            slowest = max(slowest, took)
-            if kept:
-                st["poster"] = digest
-            else:  # the server took the upload but did not keep it: try again next run
-                st.pop("poster", None)
-                print(f"   {coll['key']}: the server did not keep the poster; it will be uploaded again next run")
+        problem = None
+        if poster:
+            with open(poster, "rb") as f:
+                raw = f.read()
+            digest = hashlib.sha1(raw).hexdigest()
+            if created or st.get("poster") != digest:
+                try:
+                    kept, took = self.srv.upload_poster(cid, raw, user_id)
+                except Exception as e:  # the details below still go on, so a poster problem never holds them up
+                    problem, kept, took = e, False, 0.0
+                slowest = max(slowest, took)
+                if kept:
+                    st["poster"] = digest
+                else:  # the server did not keep it, or the upload failed: try again next run
+                    st.pop("poster", None)
+                    if not problem:
+                        print(f"   {key}: the server did not keep the poster; it will be uploaded again next run")
+                if problem:
+                    save_json(self.state_file, state)
 
         meta = json.dumps([name, coll["sort"], coll.get("overview", ""), coll.get("order", "PremiereDate")])
         if created or st.get("meta") != meta:
             slowest = max(slowest, self.srv.set_details(cid, user_id, coll, name))
             st["meta"] = meta
+            live[cid] = name
         st["name"] = name
         st["count"], st["updated"] = len(ids), int(time.time())
         save_json(self.state_file, state)
+        if problem:
+            print(f"   {key}: its titles and details are up to date, but the poster upload failed; it is tried again "
+                  "next run")
+            raise problem
         return created, added + len(add), len(remove), slowest
 
     def existing_ids(self, ids):
@@ -384,6 +502,8 @@ class Engine:
 
     # ------------------------------------------------------------ one run
     def run(self, cmd, colls, min_items):
+        """Run plan, posters or apply for these collections. Returns a Result, whose `ok` is False when something
+        failed or the run stopped early."""
         with self.lock():
             try:
                 return self._run(cmd, colls, min_items)
@@ -392,25 +512,40 @@ class Engine:
 
     # ------------------------------------------------------------ ownership tools
     def adopt(self, colls):
-        """Take ownership of existing collections with CineSets' names, for example after a reinstall."""
+        """Take ownership of existing collections with CineSets' names, for example after a reinstall. A name several
+        collections share is never adopted: CineSets can't tell which one is its own."""
         with self.lock():
             state = load_json(self.state_file, {})
-            live = self.existing_collections()
+            live = self.collections_by_id()
             owned = {v.get("id") for v in state.values()}
             for coll in colls:
                 st = state.setdefault(coll["key"], {})
-                cid = live.get(coll["name"]) or live.get(coll.get("create_name", ""))
-                if st.get("id") in live.values():
+                if st.get("id") in live:
                     print(f"{coll['key']}: already managed by CineSets")
-                elif not cid:
+                    continue
+                found = None
+                for name in dict.fromkeys(n for n in (coll["name"], coll.get("create_name")) if n):
+                    held = [c for c, n in live.items() if n == name]
+                    if len(held) > 1:
+                        print(f"{coll['key']}: {len(held)} collections are called {name!r}, so CineSets can't tell "
+                              "which one is its own; not adopting any of them (rename or delete the others, then adopt "
+                              "again)")
+                        found = False
+                        break
+                    if held:
+                        found = (held[0], name)
+                        break
+                if found is False:
+                    continue
+                if not found:
                     print(f"{coll['key']}: no collection named {coll['name']!r} on the server")
-                elif cid in owned:
-                    print(f"{coll['key']}: {coll['name']!r} already belongs to another entry")
+                elif found[0] in owned:
+                    print(f"{coll['key']}: {found[1]!r} already belongs to another entry")
                 else:
                     st.clear()
-                    st.update({"id": cid, "name": coll["name"] if live.get(coll["name"]) == cid else coll.get("create_name")})
-                    owned.add(cid)
-                    print(f"{coll['key']}: adopted {coll['name']!r}; the next apply updates its titles, poster and name")
+                    st.update({"id": found[0], "name": found[1]})
+                    owned.add(found[0])
+                    print(f"{coll['key']}: adopted {found[1]!r}; the next apply updates its titles, poster and name")
             save_json(self.state_file, state)
 
     def remove(self, keys, catalogue):
@@ -419,88 +554,210 @@ class Engine:
         by_key = {c["key"]: c for c in catalogue}
         with self.lock():
             state = load_json(self.state_file, {})
-            live = self.collections_by_id()
-            n = 0
-            for key in keys:
-                st = state.get(key) or {}
-                cid = st.get("id")
-                if not cid or cid not in live:
-                    state.pop(key, None)
-                    continue
-                if not self.owned_name_ok(st, live[cid], by_key.get(key)):
-                    print(f"{key}: collection {cid} is now called {live[cid]!r}; not deleting it")
-                    continue
-                self.srv.delete_collection(cid)
-                print(f"deleted {live[cid]!r}")
-                n += 1
-                state.pop(key, None)
-                save_json(self.state_file, state)
+            n = self._delete(keys, by_key, state, self.collections_by_id())
             save_json(self.state_file, state)
             return n
+
+    def _delete(self, keys, by_key, state, live, why=""):
+        """remove() without the lock, for a run that already holds it (seasonal collections out of season)."""
+        n = 0
+        for key in keys:
+            st = state.get(key) or {}
+            cid = st.get("id")
+            if not cid or cid not in live:
+                state.pop(key, None)
+                continue
+            if not self.owned_name_ok(st, live[cid], by_key.get(key)):
+                if st.get("name") or key in by_key:
+                    print(f"{key}: collection {cid} is now called {live[cid]!r}; not deleting it")
+                else:
+                    print(f"{key}: CineSets' record doesn't say what it named collection {cid} (now {live[cid]!r}), "
+                          f"and {key} isn't in the collections file any more, so it can't be sure the collection is "
+                          f"still its own; not deleting it (delete it on the server yourself if it is, then run: "
+                          f"cinesets forget {key})")
+                continue
+            self.srv.delete_collection(cid)
+            print(f"deleted {live.pop(cid)!r}{why}")
+            n += 1
+            state.pop(key, None)
+            save_json(self.state_file, state)
+        return n
+
+    def forget(self, keys):
+        """Drop CineSets' record of these collections without touching the server: they stay as they are, and from
+        then on CineSets treats them like anyone else's. Returns the keys it had a record of."""
+        with self.lock():
+            state = load_json(self.state_file, {})
+            known = [k for k in keys if k in state]
+            for key in keys:
+                st = state.pop(key, None)
+                if st is None:
+                    print(f"{key}: CineSets has no record of it, so there is nothing to forget")
+                elif st.get("id"):
+                    called = f" ({st['name']!r})" if st.get("name") else ""
+                    print(f"{key}: forgot collection {st['id']}{called}. It stays on your server as it is, and CineSets "
+                          "won't change or delete it")
+                else:
+                    print(f"{key}: forgot it (CineSets hadn't made it on the server)")
+            save_json(self.state_file, state)
+            return known
 
     def owned_keys(self):
         return [k for k, v in load_json(self.state_file, {}).items() if v.get("id")]
 
+    @staticmethod
+    def stop_reason(e):
+        """Why a run stops after this error, or None to carry on with the next collection: the server not answering,
+        turning the key down, still asking CineSets to slow down after its retries, or failing itself."""
+        if isinstance(e, requests.RequestException):
+            return f"the server did not answer ({type(e).__name__})"
+        status = e.status if isinstance(e, ServerError) else None
+        if status in (401, 403):
+            return f"the server turned down CineSets' API key (HTTP {status})"
+        if status == 429:
+            return "the server kept asking CineSets to slow down (HTTP 429)"
+        if (status or 0) >= 500:
+            return f"the server had a problem (HTTP {status})"
+        return None
+
     def _run(self, cmd, colls, min_items):
+        result = Result(cmd)
+        try:
+            self._steps(cmd, colls, min_items, result)
+        except (requests.RequestException, ServerError) as e:  # outside a collection: listing them, say
+            print(f"!! {e}")
+            result.failed += 1
+            result.stopped = self.stop_reason(e) or "the server answered with an error"
+        if result.stopped:
+            print(f"Stopped early: {result.stopped}")
+        print(result.summary())
+        return result
+
+    def _steps(self, cmd, colls, min_items, result):
+        lists.new_run()
         index = self.get_index()
         state = load_json(self.state_file, {})
-        used, ready = set(), []
+        used, todo = set(), []  # (collection, its titles), or (collection, None) for one out of season
         for coll in colls:
+            if self.halt():
+                result.stopped = "asked to stop"
+                return
+            if not in_season(coll.get("active")):
+                print(f"{coll['key']:<28} out of season (it runs from {coll['active'][0]} to {coll['active'][1]})")
+                todo.append((coll, None))
+                continue
             try:
                 ids, wanted, matched = self.resolve(coll, index)
             except Exception as e:  # a dead list must not take the whole run down
                 print(f"!! {coll['key']}: {e}")
+                result.failed += 1
                 continue
             top = ", ".join(index["items"][i]["n"] or "?" for i in ids[:4])  # a title can come without a name
             print(f"{coll['key']:<28} list {wanted:>4}  in library {matched:>4}  using {len(ids):>4}  | {top}")
             need = coll.get("min", min_items)
             if not coll.get("titles"):
                 need = min(need, coll["limit"])  # a collection capped at 5 titles is not skipped for having fewer than 8
-            if len(ids) < need:
-                print(f"   skipped {coll['key']}: fewer than {need} matches")
+            # even with --min 0: an empty collection is never made, and one CineSets made is never emptied
+            if len(ids) < need or not ids:
+                why = f"below its minimum ({len(ids)} of {need} matches)" if len(ids) < need else "no matches"
+                where = "left as it is on the server" if (state.get(coll["key"]) or {}).get("id") else "not made"
+                print(f"   {coll['key']}: {why}, so it is {where}")
+                result.below += 1
                 continue
-            if not ids:  # even with --min 0: an empty collection is never made, and one CineSets made is never emptied
-                print(f"   skipped {coll['key']}: no matches")
-                continue
-            ready.append((coll, ids))
+            todo.append((coll, ids))
         if cmd == "plan":
+            self._plan(todo, state, result)
             return
 
-        made = []
-        for coll, ids in ready:
+        drawn, undrawn = {}, set()
+        for coll, ids in todo:
+            if ids is None:
+                continue
             try:
-                self.poster_for(coll, ids, index, state, used)
-                made.append((coll, ids))
-            except Exception as e:  # one bad poster must not stop the rest
-                print(f"!! {coll['key']}: poster failed: {e}")
-        ready = made
+                drawn[coll["key"]] = self.poster_for(coll, ids, index, state, used)
+            except Exception as e:  # one bad poster must not stop the rest, nor keep its collection's titles back
+                print(f"!! {coll['key']}: poster failed: {e}" + ("" if cmd == "posters" else
+                                                                 "; its titles are still updated"))
+                (state.get(coll["key"]) or {}).pop("design", None)  # draw it again next run
+                undrawn.add(coll["key"])
         save_json(self.state_file, state)
         if cmd == "posters":
-            for s in self.contact_sheets([c["key"] for c, _ in ready]):
+            result.created, result.failed = len(drawn), result.failed + len(undrawn)
+            for s in self.contact_sheets(list(drawn)):
                 print("sheet:", s)
             return
 
-        live = self.existing_collections()
+        live = self.collections_by_id()
         user_id = self.srv.admin_user()
-        for coll, ids in ready:
-            poster = os.path.join(self.posters, coll["key"] + ".jpg")
-            try:
-                created, added, removed, slowest = self.apply_collection(coll, ids, poster, state, live, user_id)
-            except requests.RequestException as e:
-                print(f"!! {coll['key']}: the server did not answer ({type(e).__name__}); stopping this run to spare it.")
+        for coll, ids in todo:
+            if self.halt():
+                result.stopped = "asked to stop"
                 break
+            key = coll["key"]
+            try:
+                if ids is None:
+                    if (state.get(key) or {}).get("id") in live:
+                        self._delete([key], {key: coll}, state, live, ", as it is out of season")
+                    continue
+                created, added, removed, slowest = self.apply_collection(coll, ids, drawn.get(key), state, live, user_id)
             except Exception as e:
-                print(f"!! {coll['key']}: {e}")
-                if isinstance(e, ServerError) and (e.status or 0) >= 500:
-                    print("Server error; stopping this run to spare it.")
+                gone = isinstance(e, requests.RequestException)
+                print(f"!! {key}: {'the server did not answer (' + type(e).__name__ + ')' if gone else e}")
+                result.failed += 1
+                result.stopped = self.stop_reason(e)
+                if result.stopped:
                     break
                 continue
-            print(f"{'created' if created else 'updated'} {coll['name']!r}: +{added} -{removed}, slowest write {slowest:.1f}s")
+            print(f"{'created' if created else 'updated'} {coll['name']!r}: +{added} -{removed}, slowest write {slowest:.1f}s"
+                  + (", without a new poster" if key in undrawn else ""))
+            if key in undrawn:
+                result.failed += 1
+            elif created:
+                result.created += 1
+            else:
+                result.updated += 1
             if slowest > self.cfg["slow_write_limit"]:
-                print("Server is taking writes very slowly; stopping this run.")
+                result.stopped = f"the server is taking writes very slowly (one took {slowest:.0f} s)"
                 break
         else:  # every collection was dealt with: put them in page order, if the server needs telling
+            by_key = {c["key"]: c for c in colls}
+            # only the ones still carrying a name CineSets gave them: never one this run turned down as renamed
+            mine = {k: v["id"] for k, v in state.items()
+                    if v.get("id") in live and self.owned_name_ok(v, live[v["id"]], by_key.get(k))}
             try:
-                self.srv.arrange({k: v["id"] for k, v in state.items() if v.get("id")})
+                self.srv.arrange(mine)
             except (requests.RequestException, ServerError) as e:
                 print(f"!! could not put the collections in order: {e}")
+                result.failed += 1
+
+    def _plan(self, todo, state, result):
+        """What apply would do, from one read-only listing of the server's collections."""
+        try:
+            live = self.collections_by_id()
+        except (requests.RequestException, ServerError) as e:
+            print(f"   (could not list the collections on the server, so this only shows what matched: {e})")
+            result.listed = False
+            result.matched = sum(1 for _, ids in todo if ids is not None)
+            return
+        for coll, ids in todo:
+            key = coll["key"]
+            st = state.get(key) or {}
+            cid = st.get("id") if st.get("id") in live else None
+            if ids is None:
+                if cid and self.owned_name_ok(st, live[cid], coll):
+                    print(f"   {key}: apply would delete {live[cid]!r}, as it is out of season")
+                continue
+            if st.get("id") and not cid:
+                print(f"   {key}: the collection CineSets made was deleted on the server, so apply would make it again "
+                      "(unpick it to stop that)")
+            try:
+                if cid and not self.owned_name_ok(st, live[cid], coll):
+                    raise RuntimeError(self.renamed(key, cid, live[cid]))
+                if cid or (st.get("pending") and len(self.claimable(key, st, state, live)) == 1):
+                    result.updated += 1
+                else:
+                    self.check_name_free(coll, live)
+                    result.created += 1
+            except RuntimeError as e:
+                print(f"!! {key}: {e}")
+                result.failed += 1
