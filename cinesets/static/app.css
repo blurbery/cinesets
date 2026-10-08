@@ -23,6 +23,7 @@
   --blue-fill-hover: #0071e3;
   --red-fill: #c4281c;
   --red-fill-hover: #d63426;
+  --red-text: #ff7b72;  /* red words on a button's grey fill, even when hovered */
   --placeholder: #9a9aa1;
   --off: #8e8e95;
   --amber-soft: rgba(255, 159, 10, 0.12);
@@ -98,7 +99,7 @@ code { font-family: var(--mono); }
 .btn-primary:hover:not(:disabled) { background: var(--blue-fill-hover); }
 .btn-danger { background: var(--red-fill); color: #fff; }
 .btn-danger:hover:not(:disabled) { background: var(--red-fill-hover); }
-.btn-danger-text { color: var(--red); }
+.btn-danger-text { color: var(--red-text); }
 .btn-quiet { background: transparent; color: var(--muted); }
 .btn-quiet:hover:not(:disabled) { background: var(--fill); color: var(--text); }
 .btn-small { min-height: 28px; padding: 4px 11px; font-size: 12.5px; }
@@ -538,10 +539,12 @@ select.field { appearance: auto; }
   backdrop-filter: saturate(160%) blur(16px);
 }
 .scopebar-inner { max-width: 720px; margin: 0 auto; display: flex; flex-direction: column; align-items: center; gap: 7px; }
-/* the mode switch in the middle, Undo and Redo to its right */
-.scope-row { width: 100%; display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 340px) minmax(0, 1fr); align-items: center; gap: 8px; }
-.scope-row .seg-scope { grid-column: 2; }
-.scope-row .history { grid-column: 3; justify-self: end; }
+/* the mode switch in the middle and Undo and Redo to its right. The empty space on the left balances them, and is
+   the first thing to give way when it's narrow, so the buttons never sit on the switch. */
+.scope-row { width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; }
+.scope-row::before { content: ""; flex: 0 100 62px; min-width: 0; }
+.scope-row .seg-scope { flex: 0 1 340px; min-width: 0; }
+.scope-row .history { flex: none; }
 .scopebar .seg-scope { width: min(340px, 100%); }
 /* the banner saying exactly what is being edited */
 .mode-banner {

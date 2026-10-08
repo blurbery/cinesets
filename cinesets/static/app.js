@@ -1378,9 +1378,11 @@
     if (box.children.length) {
       const x = el("button", { class: "btn btn-icon btn-small", type: "button", "aria-label": "Remove this list" }, [svg(ICON.x)]);
       x.addEventListener("click", () => {
+        const before = row.previousElementSibling;
         row.remove();
         ncListsChanged();
         syncNcAdd();
+        if (before) before.querySelector("input").focus();  // not lost with the row
       });
       row.append(x);
     }
