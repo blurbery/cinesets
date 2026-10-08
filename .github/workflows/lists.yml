@@ -1,0 +1,34 @@
+# CineSets by blurbery (https://github.com/blurbery/cinesets). SPDX-License-Identifier: AGPL-3.0-or-later
+# Additional terms under AGPL-3.0 section 7 apply: see NOTICE.
+#
+# Every Monday, checks that every MDBList list in collections.yml still exists and has titles. A dead or empty list
+# fails the run, and GitHub emails the repository owner about a failed scheduled run. Run it by hand from Actions,
+# MDBList lists, Run workflow.
+name: MDBList lists
+
+on:
+  schedule:
+    - cron: "41 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mdblist-lists
+  cancel-in-progress: false
+
+jobs:
+  lists:
+    name: MDBList lists
+    runs-on: ubuntu-latest
+    timeout-minutes: 20    # one list at a time, with a pause between them
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt -c constraints.txt
+      - run: python tests/e2e/check_lists.py

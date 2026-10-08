@@ -1,0 +1,29 @@
+# CineSets by blurbery (https://github.com/blurbery/cinesets). SPDX-License-Identifier: AGPL-3.0-or-later
+# Additional terms under AGPL-3.0 section 7 apply: see NOTICE.
+#
+# Weekly pull requests for newer dependencies: the tested versions in constraints.txt and ruff in
+# requirements-dev.txt (pip), the Dockerfile's base image (docker) and the actions in .github/workflows. CI tests each
+# one before it's merged. The titles start with "deps:" or "ci:", the Conventional Commit types the pull request check
+# and the release notes expect (CONTRIBUTING.md, PR titles).
+version: 2
+updates:
+  - package-ecosystem: pip
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: deps
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: deps
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    commit-message:
+      prefix: ci

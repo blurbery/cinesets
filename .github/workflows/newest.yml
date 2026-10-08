@@ -1,0 +1,82 @@
+# CineSets by blurbery (https://github.com/blurbery/cinesets). SPDX-License-Identifier: AGPL-3.0-or-later
+# Additional terms under AGPL-3.0 section 7 apply: see NOTICE.
+#
+# Every Monday, CineSets against the newest Jellyfin, Emby (release and beta) and Silo. Any failure fails the run,
+# and GitHub emails the repository owner about a failed scheduled run, so a server release that breaks CineSets
+# gets noticed. CI (ci.yml) tests the pinned server versions on every change. Run this one by hand from Actions,
+# Newest servers, Run workflow.
+name: Newest servers
+
+on:
+  schedule:
+    - cron: "17 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: newest-servers
+  cancel-in-progress: false
+
+jobs:
+  end-to-end:
+    name: End to end (${{ matrix.server.name }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        server:
+          - {name: "Jellyfin latest", kind: jellyfin, image: "jellyfin/jellyfin:latest"}
+          - {name: "Emby latest", kind: emby, image: "emby/embyserver:latest"}
+          - {name: "Emby beta", kind: emby, image: "emby/embyserver:beta"}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt -c constraints.txt
+      - name: Make tiny test films and shows
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg > /dev/null
+          python tests/e2e/run_e2e.py --make-media media
+      - name: Start a throwaway ${{ matrix.server.name }}
+        run: docker run -d --name media -p 127.0.0.1:8096:8096 -v "$PWD/media:/media:ro" ${{ matrix.server.image }}
+      - name: CineSets against the real server
+        run: python tests/e2e/run_e2e.py --kind ${{ matrix.server.kind }} --url http://127.0.0.1:8096 --media /media
+      - name: Server log on failure
+        if: failure()
+        run: docker logs media 2>&1 | tail -n 150
+
+  end-to-end-silo:
+    name: End to end (Silo latest)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt -c constraints.txt
+      - name: Make tiny test films and shows
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg > /dev/null
+          python tests/e2e/run_silo_e2e.py --make-media media
+      - name: Start a throwaway Silo (latest) and its database
+        run: |
+          docker network create silo
+          docker run -d --name silo-db --network silo -e POSTGRES_USER=silo -e POSTGRES_PASSWORD=silo -e POSTGRES_DB=silo pgvector/pgvector:pg18
+          for _ in $(seq 60); do docker exec silo-db pg_isready -U silo -d silo > /dev/null 2>&1 && break; sleep 2; done
+          docker run -d --name silo --network silo --restart on-failure -p 127.0.0.1:8080:8080 -p 127.0.0.1:8096:8096 \
+            -e DATABASE_URL="postgres://silo:silo@silo-db:5432/silo?sslmode=disable" -e SECRET_KEY="$(openssl rand -base64 48)" \
+            -v "$PWD/media:/mnt/media:ro" ghcr.io/silo-server/silo-server:latest
+      - name: CineSets against the real server
+        run: python tests/e2e/run_silo_e2e.py --url http://127.0.0.1:8080 --media /mnt/media
+      - name: Server log on failure
+        if: failure()
+        run: docker logs silo 2>&1 | tail -n 200
