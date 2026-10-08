@@ -1,0 +1,20 @@
+# CineSets by blurbery (https://github.com/blurbery/cinesets). SPDX-License-Identifier: AGPL-3.0-or-later
+# Additional terms under AGPL-3.0 section 7 apply: see NOTICE.
+#
+# The tested versions of CineSets' dependencies. install.sh, the Docker image and CI install these exactly:
+#   pip install -r requirements.txt -c constraints.txt
+# requirements.txt keeps the oldest versions CineSets works with. Dependabot proposes updates here every week, and
+# CI tests each one before it's merged.
+#
+# Pillow 12, requests 2.33 and urllib3 2.7 need Python 3.10 or newer, so Python 3.9 keeps the last release that
+# supports it. Leave the python_version < "3.10" lines as they are until CineSets drops Python 3.9.
+pillow==11.3.0; python_version < "3.10"
+pillow==12.3.0; python_version >= "3.10"
+requests==2.32.5; python_version < "3.10"
+requests==2.34.2; python_version >= "3.10"
+urllib3==2.6.3; python_version < "3.10"
+urllib3==2.8.0; python_version >= "3.10"
+pyyaml==6.0.3
+certifi==2026.7.22
+charset-normalizer==3.5.2
+idna==3.20
