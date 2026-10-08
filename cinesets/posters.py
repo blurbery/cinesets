@@ -4,7 +4,7 @@
 # Additional terms under AGPL-3.0 section 7 apply: see NOTICE.
 """Collection posters: a gold section label, a big two-tone title bottom-left over the collection's own
 artwork, or a streaming service logo for service collections. The `posters` settings in config.yml change the
-colours, shading and text; at their defaults every poster comes out exactly as it always has."""
+colours, shading, text and font; at their defaults every poster comes out exactly as it always has."""
 import colorsys
 import os
 import re
@@ -14,7 +14,24 @@ from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
 
 from .config import ROOT
 
-FONTS = os.path.join(ROOT, "assets", "fonts")
+FONT_DIR = os.path.join(ROOT, "assets", "fonts")
+# fonts for the poster text, each in assets/fonts/<key> with its licence (all SIL Open Font License 1.1):
+# key -> (name, file for the label and title, file for the subtitle, size, line height). Size evens out how big each
+# font looks next to Poppins; line height is the step from one line to the next, in font sizes.
+FONTS = {
+    "poppins": ("Poppins", "Poppins-SemiBold.ttf", "Poppins-Regular.ttf", 1.0, 1.12),
+    "bebas-neue": ("Bebas Neue", "BebasNeue-Regular.ttf", "BebasNeue-Regular.ttf", 1.2, 0.95),
+    "abril-fatface": ("Abril Fatface", "AbrilFatface-Regular.ttf", "AbrilFatface-Regular.ttf", 1.0, 1.1),
+    "cinzel-decorative": ("Cinzel Decorative", "CinzelDecorative-Bold.ttf", "CinzelDecorative-Regular.ttf", 0.9, 1.12),
+    "limelight": ("Limelight", "Limelight-Regular.ttf", "Limelight-Regular.ttf", 0.95, 1.1),
+    "bangers": ("Bangers", "Bangers-Regular.ttf", "Bangers-Regular.ttf", 1.15, 0.95),
+    "creepster": ("Creepster", "Creepster-Regular.ttf", "Creepster-Regular.ttf", 1.1, 1.0),
+    "audiowide": ("Audiowide", "Audiowide-Regular.ttf", "Audiowide-Regular.ttf", 0.9, 1.12),
+    "rye": ("Rye", "Rye-Regular.ttf", "Rye-Regular.ttf", 0.95, 1.1),
+    "pacifico": ("Pacifico", "Pacifico-Regular.ttf", "Pacifico-Regular.ttf", 0.95, 1.4),
+    "titan-one": ("Titan One", "TitanOne-Regular.ttf", "TitanOne-Regular.ttf", 0.9, 1.05),
+    "courier-prime": ("Courier Prime", "CourierPrime-Bold.ttf", "CourierPrime-Regular.ttf", 1.1, 1.05),
+}
 W, H = 1000, 1500
 PAD = 78
 LABEL_COLOUR = (240, 196, 92)
@@ -41,6 +58,7 @@ STYLE = {
     "shade": "medium",           # how dark the artwork is: light, medium, dark
     "tint": "normal",            # how strongly the accent colour washes over the artwork: strong, normal, subtle, none
     "title": "gradient",         # gradient (two-tone), solid (the accent's first colour) or white
+    "font": "poppins",           # the font for all the text: one of FONTS
     "align": "left",             # left or centre
     "case": "normal",            # normal or upper
     "label": True,               # the small label at the top (Movies, TV Shows)
@@ -63,6 +81,7 @@ CHOICES = {
     "shade": ("light", "medium", "dark"),
     "tint": ("strong", "normal", "subtle", "none"),
     "title": ("gradient", "solid", "white"),
+    "font": tuple(FONTS),
     "align": ("left", "centre"),
     "case": ("normal", "upper"),
     "text_shadow": ("auto", "on", "off"),
@@ -70,7 +89,7 @@ CHOICES = {
     "logo_colour": ("original", "white"),
 }
 TEXT_COLOURS = {"gold": LABEL_COLOUR, "white": (255, 255, 255)}
-TEXT_SETTINGS = ("align", "case", "label", "label_colour", "subtitle_colour")
+TEXT_SETTINGS = ("font", "align", "case", "label", "label_colour", "subtitle_colour")
 LOGO_SETTINGS = ("logo", "logo_colour")
 POSITIONS = ("label_position", "title_position")
 SIZES = {"title_size": (0.5, 2.0), "label_size": (0.5, 2.0)}
@@ -114,6 +133,8 @@ def _spellings(raw):
             raw.setdefault(au, raw.pop(us))
     if raw.get("align") == "center":
         raw["align"] = "centre"
+    if isinstance(raw.get("font"), str):  # "Bebas Neue" or bebas_neue for bebas-neue
+        raw["font"] = re.sub(r"[\s_]+", "-", raw["font"].strip().lower())
     return raw
 
 
@@ -199,8 +220,43 @@ def _text_colour(value, accent):
     return TEXT_COLOURS.get(value) or _hex(value)
 
 
-def _font(weight, size):
-    return ImageFont.truetype(os.path.join(FONTS, f"Poppins-{weight}.ttf"), size)
+def _font(face, size, subtitle=False):
+    """One of FONTS at a size: its file for the label and title, or for the subtitle."""
+    entry = FONTS[face]
+    return ImageFont.truetype(os.path.join(FONT_DIR, face, entry[2] if subtitle else entry[1]), size)
+
+
+_DRAWN = {}  # (font, character) -> whether the font has that character
+
+
+def _glyph(font, ch):
+    box = font.getbbox(ch)
+    img = Image.new("L", (max(1, box[2]) + 2, max(1, box[3]) + 2))
+    ImageDraw.Draw(img).text((0, 0), ch, font=font, fill=255)
+    return img.size, img.tobytes()
+
+
+def _draws(face, text):
+    """Whether the font has every character in the text, rather than drawing its box for a missing one."""
+    for ch in set(text):
+        if ch.isspace():
+            continue
+        if (face, ch) not in _DRAWN:
+            fonts = [_font(face, 40), _font(face, 40, subtitle=True)]
+            # U+FFFF is never a character, so every font draws its missing-character box for it
+            _DRAWN[(face, ch)] = all(_glyph(f, ch) != _glyph(f, "\uffff") for f in fonts)
+        if not _DRAWN[(face, ch)]:
+            return False
+    return True
+
+
+def _with_font(style, *texts):
+    """The style, switched to Poppins when its font is missing a character in any of the texts."""
+    face = style.get("font", "poppins")
+    text = "".join(t for t in texts if t)
+    if style.get("case") == "upper":
+        text = text.upper()
+    return style if face == "poppins" or _draws(face, text) else {**style, "font": "poppins"}
 
 
 def _cover(img, w, h):
@@ -229,9 +285,12 @@ def _cover(img, w, h):
 def _gradient_text(base, xy, text, font, c1, c2):
     x, y = xy
     box = font.getbbox(text)
-    tw, th = box[2], box[3]
+    # letters that reach left of or above where the text starts (a j, a swash) are kept, not cut off
+    dx, dy = min(0, box[0]), min(0, box[1])
+    x, y = x + dx, y + dy
+    tw, th = box[2] - dx, box[3] - dy
     mask = Image.new("L", (tw + 8, th + 8), 0)
-    ImageDraw.Draw(mask).text((0, 0), text, font=font, fill=255)
+    ImageDraw.Draw(mask).text((-dx, -dy), text, font=font, fill=255)
     grad = Image.new("RGB", mask.size)
     px = grad.load()
     for i in range(mask.width):
@@ -267,14 +326,14 @@ def _background(backdrop, tint, shade_level="medium", tint_level="normal"):
     return Image.composite(Image.new("RGB", (W, H), (4, 2, 10)), bg, shade.resize((W, H)))
 
 
-def _fit(weight, lines, start, max_w):
+def _fit(face, lines, start, max_w, subtitle=False):
     size = start
     while size > 60:
-        f = _font(weight, size)
+        f = _font(face, size, subtitle)
         if all(f.getbbox(t)[2] <= max_w for t in lines):
             return f
         size -= 4
-    return _font(weight, 60)
+    return _font(face, 60, subtitle)
 
 
 def _x(style, font, text):
@@ -294,8 +353,8 @@ def _label_place(style, label):
     """Where the label goes: (text, font, x, y), or None when it is switched off."""
     if not style["label"]:
         return None
-    size = style.get("label_size", 1.0)
-    f = _font("SemiBold", 66 if size == 1 else round(66 * size))
+    face = style.get("font", "poppins")
+    f = _font(face, round(66 * style.get("label_size", 1.0) * FONTS[face][3]))
     label = label.upper() if style["case"] == "upper" else label
     box = f.getbbox(label)
     moved = style.get("label_position")
@@ -333,17 +392,19 @@ def _fraction(box):
 def poster_image(label, title, subtitle=None, accent="purple", backdrop=None, style=None):
     """The poster as an image, plus where its text sits: {"label": box or None, "title": box}, each box
     [left, top, right, bottom] as fractions of the poster (the dashboard draws its drag handles from these)."""
-    style = style or STYLE
+    style = _with_font(style or STYLE, label, title, subtitle)
     c1, c2, tint = accent_colours(accent if style["accent"] == "auto" else style["accent"])
     if style["case"] == "upper":
         title, subtitle = title.upper(), subtitle.upper() if subtitle else subtitle
     title_lines = title.split("\n")
     sub_lines = subtitle.split("\n") if subtitle else []
     max_w = W - 2 * PAD
-    size = style.get("title_size", 1.0)
-    tf = _fit("SemiBold", title_lines, 150 if size == 1 else round(150 * size), max_w)
-    sf = _fit("Regular", sub_lines, min(tf.size, 132 if size == 1 else round(132 * size)), max_w) if sub_lines else None
-    line_h = lambda f: int(f.size * 1.12)
+    face = style.get("font", "poppins")
+    scale, leading = FONTS[face][3:]
+    size = style.get("title_size", 1.0) * scale
+    tf = _fit(face, title_lines, round(150 * size), max_w)
+    sf = _fit(face, sub_lines, min(tf.size, round(132 * size)), max_w, subtitle=True) if sub_lines else None
+    line_h = lambda f: int(f.size * leading)
     total = len(title_lines) * line_h(tf) + (len(sub_lines) * line_h(sf) if sf else 0)
     lines = [(t, tf) for t in title_lines] + [(t, sf) for t in sub_lines]
     block_w = max(f.getbbox(t)[2] for t, f in lines)
@@ -446,7 +507,10 @@ def make_logo_poster(out_path, label, logo_key, logos_dir, subtitle="Popular", b
 
 def logo_poster_image(label, logo_key, logos_dir, subtitle="Popular", backdrop=None, fallback_title=None, style=None):
     """The service poster as an image, plus where its text sits (see poster_image). Text cannot be moved here."""
-    style = {k: v for k, v in (style or STYLE).items() if k not in LAYOUT}
+    style = _with_font({k: v for k, v in (style or STYLE).items() if k not in LAYOUT}, label, subtitle,
+                       (fallback_title or logo_key).replace("\n", " "))
+    face = style.get("font", "poppins")
+    scale, leading = FONTS[face][3:]
     colour, tint = SERVICES.get(logo_key, ((255, 255, 255), (16, 14, 22)))
     if backdrop:
         img = _cover(Image.open(backdrop).convert("RGB"), W, H).filter(ImageFilter.GaussianBlur(18))
@@ -475,12 +539,13 @@ def logo_poster_image(label, logo_key, logos_dir, subtitle="Popular", backdrop=N
         img.paste(logo, (x, y), logo)
     else:
         name = (fallback_title or logo_key).replace("\n", " ")
-        f = _fit("SemiBold", [name], 170, W - 2 * PAD)
+        f = _fit(face, [name], round(170 * scale), W - 2 * PAD)
         draw.text(((W - f.getbbox(name)[2]) // 2, int(H * 0.42) - f.size // 2), name, font=f,
                   fill=(255, 255, 255) if white else colour)
 
-    f = _font("SemiBold", 150)
+    f = _font(face, round(150 * scale))
     subtitle = subtitle.upper() if style["case"] == "upper" else subtitle
-    x, y = _x(style, f, subtitle), H - PAD - 30 - int(f.size * 1.12)
+    line_h = int(f.size * leading)
+    x, y = _x(style, f, subtitle), H - PAD - 30 - line_h
     draw.text((x, y), subtitle, font=f, fill=_text_colour(style["subtitle_colour"], colour))
-    return img, {"label": _fraction(label_box), "title": _fraction((x, y, x + f.getbbox(subtitle)[2], y + int(f.size * 1.12)))}
+    return img, {"label": _fraction(label_box), "title": _fraction((x, y, x + f.getbbox(subtitle)[2], y + line_h))}

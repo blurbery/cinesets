@@ -42,8 +42,8 @@ What keeps other people and other sites out:
 
 The Design tab has two modes:
 
-- **Whole section:** pick a section, or **Every section**, and change the text and the poster colour, shade and
-  tint for every poster in it.
+- **Whole section:** pick a section, or **Every section**, and change the text, the font and the poster colour,
+  shade and tint for every poster in it.
 - **Each poster:** pick one poster and change anything about it, including its artwork and its words.
 
 A poster's own settings win over its section's, which win over Every section. Streaming posters keep the service's

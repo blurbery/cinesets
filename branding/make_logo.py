@@ -4,13 +4,13 @@
 # Additional terms under AGPL-3.0 section 7 apply: see NOTICE.
 """CineSets logo: fanned stack of gold poster cards, front card with film sprockets and a play mark.
 
-Usage: python branding/make_logo.py [fonts_dir] [out_dir]   (defaults: assets/fonts, branding)
+Usage: python branding/make_logo.py [fonts_dir] [out_dir]   (defaults: assets/fonts/poppins, branding)
 """
 import os, sys
 from PIL import Image, ImageDraw, ImageFilter, ImageFont, ImageChops
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-FONTS = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "..", "assets", "fonts")
+FONTS = sys.argv[1] if len(sys.argv) > 1 else os.path.join(HERE, "..", "assets", "fonts", "poppins")
 OUT = sys.argv[2] if len(sys.argv) > 2 else HERE
 os.makedirs(OUT, exist_ok=True)
 SS = 4  # supersampling

@@ -33,7 +33,7 @@
     logo_colour: { original: "Original", white: "White" },
   };
   const SETTING_NAMES = {
-    accent: "accent colour", shade: "shade", tint: "tint", title: "title style", align: "alignment", case: "capitals",
+    accent: "accent colour", shade: "shade", tint: "tint", title: "title style", font: "font", align: "alignment", case: "capitals",
     label: "label", label_colour: "label colour", subtitle_colour: "subtitle colour",
     label_position: "label position", title_position: "title position", title_size: "title size", label_size: "label size",
     text_shadow: "text shadow", artwork: "artwork on each run", logo: "logo", logo_colour: "logo colours",
@@ -1512,9 +1512,8 @@
     else setSetting(setting, value);
   }
 
-  function segControl(setting, label, values, hint) {
+  function segControl(setting, label, values, hint, names = LABELS[setting] || {}) {
     const r = controlRow(setting, label, hint);
-    const names = LABELS[setting] || {};
     const seg = el("div", { class: "seg", role: "radiogroup", "aria-labelledby": r.labelId });
     const inputs = values.map((v) => {
       const input = el("input", { class: "vh", type: "radio", name: "ctl-" + setting, value: v });
@@ -1634,6 +1633,14 @@
     return r.row;
   }
 
+  /** The font for all the text: a wrapping row of font names, which the server sends with their keys. */
+  function fontControl(values) {
+    const hint = "For the label, title and subtitle. Text with a letter the font doesn't have is drawn in Poppins.";
+    const row = segControl("font", "Font", values, hint, (S.info && S.info.fonts) || {});
+    row.querySelector(".seg").classList.add("seg-wrap");
+    return row;
+  }
+
   function sizeLimits(setting) {
     const lim = S.info && S.info.limits && S.info.limits[setting];
     return Array.isArray(lim) && lim.length === 2 ? lim.map(Number) : [0.5, 2.0];
@@ -1676,6 +1683,7 @@
       ch.tint && segControl("tint", "Tint", ch.tint, "How strongly the accent colour washes over the artwork."),
     ]);
     group("Text", [
+      ch.font && fontControl(ch.font),
       ch.title && segControl("title", "Title style", ch.title),
       sizeControl("title_size", "Title size", "The title and subtitle together. Long titles still shrink to fit."),
       ch.align && segControl("align", "Alignment", ch.align, "Applies to the label and the title."),

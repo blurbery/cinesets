@@ -260,6 +260,7 @@ class Dashboard:
                 "config": os.path.basename(self.cfg_path) if self.cfg_path else None, "can_apply": not self.demo,
                 "choices": {k: list(v) for k, v in posters.CHOICES.items()},
                 "accents": {k: {"start": _hex(v[0]), "end": _hex(v[1])} for k, v in posters.ACCENTS.items()},
+                "fonts": {k: v[0] for k, v in posters.FONTS.items()},
                 "text_colours": list(posters.TEXT_COLOURS) + ["accent"], "gold": _hex(posters.LABEL_COLOUR),
                 "defaults": posters.STYLE, "limits": {k: list(v) for k, v in posters.SIZES.items()},
                 "custom_file": os.path.basename(self.cfg.path("custom_collections")),

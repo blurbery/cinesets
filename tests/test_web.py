@@ -205,6 +205,7 @@ def test_info_settings_and_collections(site):
     call = site[0]
     info = call("/api/info")[1]
     assert info["server"] == "emby" and info["can_apply"] and "silver" in info["accents"]
+    assert info["fonts"]["bebas-neue"] == "Bebas Neue" and info["choices"]["font"] == list(info["fonts"])
     assert info["defaults"]["title_position"] is None and info["limits"] == {"title_size": [0.5, 2.0], "label_size": [0.5, 2.0]}
     settings = call("/api/settings")[1]
     assert settings["collections"] == {"sections": "all", "include": [], "exclude": []} and settings["version"]

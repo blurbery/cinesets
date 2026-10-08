@@ -332,6 +332,7 @@ def test_example_config_loads_with_the_documented_defaults():
     ("{accent: '#12345'}", "accent must be one of"),
     ("{label: maybe}", "label must be true or false"),
     ("{label_colour: '#zzzzzz'}", "label_colour must be gold, white, accent"),
+    ("{font: comic-sans}", "font must be one of poppins, bebas-neue"),
     ("loud", "posters must be"),
 ])
 def test_poster_settings_are_checked(make_cfg, bad, message):
@@ -384,6 +385,77 @@ def test_streaming_posters_only_take_text_settings():
     assert posters.style_changes(style, logo=True) == {"case": "upper"}
     assert posters.style_changes(style) == {"accent": "red", "shade": "dark", "case": "upper"}
     assert posters.style_changes(posters.check_style({})) == {}
+
+
+# ---------------------------------------------------------------- fonts
+def test_every_font_ships_with_its_licence():
+    from PIL import ImageFont
+    from cinesets import posters
+    with open(os.path.join(ROOT, "NOTICE")) as f:
+        notice = " ".join(f.read().split())
+    for key, (name, title_file, subtitle_file, size, leading) in posters.FONTS.items():
+        folder = os.path.join(ROOT, "assets", "fonts", key)
+        for file in (title_file, subtitle_file):
+            ImageFont.truetype(os.path.join(folder, file), 40)
+        with open(os.path.join(folder, "OFL.txt")) as f:
+            assert "SIL OPEN FONT LICENSE" in f.read().upper()
+        assert name in notice and 0.5 <= size <= 1.5 and 0.9 <= leading <= 1.5
+    assert posters.CHOICES["font"][0] == posters.STYLE["font"] == "poppins"
+
+
+def test_every_font_draws_its_own_poster(tmp_path):
+    from cinesets import posters
+    default = posters.poster_image("Movies", "Back to\nthe Future", "Saga", "blue")[0].tobytes()
+    assert posters.poster_image("Movies", "Back to\nthe Future", "Saga", "blue", None,
+                                posters.check_style({"font": "poppins"}))[0].tobytes() == default
+    made, logos = set(), set()
+    for key in posters.FONTS:
+        style = posters.check_style({"font": key, "case": "upper", "align": "centre"})
+        img, layout = posters.poster_image("Movies", "Back to\nthe Future", "Saga", "blue", None, style)
+        assert img.size == (posters.W, posters.H)
+        assert all(0 <= v <= 1 for v in layout["label"] + layout["title"])    # the text stays on the poster
+        made.add(img.tobytes())
+        logo = posters.logo_poster_image("TV Shows", "netflix", str(tmp_path), "Popular", None, "Netflix", style)[0]
+        logos.add(logo.tobytes())
+    assert len(made) == len(logos) == len(posters.FONTS)                   # each font changes the picture
+
+
+def test_font_names_sections_and_overrides():
+    from cinesets import posters
+    style = posters.check_style({"font": "Bebas Neue", "sections": {"genres": {"font": "creepster"}},
+                                 "overrides": {"m-scifi": {"font": "AUDIOWIDE"}}})
+    assert style["font"] == "bebas-neue"
+    fonts = [posters.style_for(style, k, g)["font"] for k, g in (("m-horror", "genres"), ("m-scifi", "genres"), ("m-bttf", "universes"))]
+    assert fonts == ["creepster", "audiowide", "bebas-neue"]
+    assert posters.check_style({"font": "titan_one"})["font"] == "titan-one"
+    with pytest.raises(SystemExit, match="overrides m-a: font must be one of"):
+        posters.check_style({"overrides": {"m-a": {"font": "wingdings"}}})
+    # a font is a text setting, so streaming posters change with it, and Poppins changes nothing
+    assert posters.style_changes(posters.check_style({"font": "rye"}), logo=True) == {"font": "rye"}
+    assert posters.style_changes(posters.check_style({"font": "poppins"}), logo=True) == {}
+
+
+def test_text_a_font_cannot_draw_falls_back_to_poppins(tmp_path):
+    from cinesets import posters
+    rye, poppins = posters.check_style({"font": "rye"}), posters.check_style({})
+    draw = lambda title, style: posters.poster_image("TV Shows", title, None, "red", None, style)[0].tobytes()
+    assert draw("Shōgun", rye) == draw("Shōgun", poppins)          # Rye has no ō
+    assert draw("Shogun", rye) != draw("Shogun", poppins)
+    logo = lambda sub, style: posters.logo_poster_image("TV Shows", "netflix", str(tmp_path), sub, None, "Netflix", style)[0].tobytes()
+    assert logo("Čapek", rye) == logo("Čapek", poppins) and logo("Capek", rye) != logo("Capek", poppins)
+    assert posters._draws("rye", "Shogun 2 & More!") and not posters._draws("creepster", "Dvořák")
+
+
+def test_gradient_titles_keep_letters_that_start_left_of_the_text():
+    from PIL import Image, ImageDraw
+    from cinesets import posters
+    font = posters._font("cinzel-decorative", 150)
+    assert font.getbbox("Nolan")[0] < 0                               # Cinzel's N swings out to the left
+    white = (255, 255, 255)
+    gradient, solid = Image.new("RGB", (900, 300)), Image.new("RGB", (900, 300))
+    posters._gradient_text(gradient, (100, 50), "Nolan", font, white, white)
+    ImageDraw.Draw(solid).text((100, 50), "Nolan", font=font, fill=white)
+    assert gradient.tobytes() == solid.tobytes()
 
 
 # ---------------------------------------------------------------- picking collections
