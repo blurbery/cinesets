@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.4.0](https://github.com/blurbery/cinesets/compare/v1.3.1...v1.4.0) (2026-10-08)
+
+
+### Features
+
+* **posters:** a choice of fonts ([#29](https://github.com/blurbery/cinesets/issues/29)) ([c20a8e0](https://github.com/blurbery/cinesets/commit/c20a8e07f9e066e063acc86786a8f256cf3f11fe))
+
 ## [1.3.1](https://github.com/blurbery/cinesets/compare/v1.3.0...v1.3.1) (2026-10-07)
 
 
