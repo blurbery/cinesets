@@ -2488,20 +2488,20 @@
   }
 
   /** Keep at most `most` entries, dropping the ones stored longest ago (a Map keeps the order they were set in). */
-  function keep(map, key, entry, most) {
+  function cachePut(map, key, entry, most) {
     map.delete(key);
     map.set(key, entry);
     while (map.size > most) map.delete(map.keys().next().value);
   }
 
   function storeCache(key, hash, res) {
-    keep(S.cache, key, {
+    cachePut(S.cache, key, {
       hash, image: res.image, layout: res.layout || {}, draggable: res.draggable, streaming: res.streaming, artwork: res.artwork || null,
     }, CACHE_MAX);
   }
 
   function storeTile(key, hash, image) {
-    keep(S.tiles, key, { hash, image }, TILE_MAX);
+    cachePut(S.tiles, key, { hash, image }, TILE_MAX);
   }
 
   /** A picture for a small poster: its own small render, or a full-size one of the same design. */
@@ -2682,7 +2682,7 @@
     try {
       const res = await api("api/text", { method: "POST", body: { key: c.key, reset: true } });
       S.textDraft = null;
-      toast(res.message || "Back to the usual words.", "ok", 0,
+      toast(res.message || "Back to the usual words.", "ok", 10000,
         fields.length ? { label: "Undo", run: () => putTextBack(c.key, before, fields) } : null);
       await reloadCollections();
       refreshTextCard(true);
@@ -4037,7 +4037,7 @@
         if ($("app").hidden) return;
         e.preventDefault();
         save();
-      } else if ((e.metaKey || e.ctrlKey) && !e.altKey && (key === "z" || (key === "y" && !e.shiftKey))) {
+      } else if ((e.metaKey || e.ctrlKey) && !e.altKey && (key === "z" || (key === "y" && e.ctrlKey && !e.metaKey && !e.shiftKey))) {
         // design edits on the Design and Preview all tabs; text fields keep their own undo
         if ($("app").hidden || $("confirm").open || typing(e.target) || (S.tab !== "design" && S.tab !== "grid")) return;
         e.preventDefault();
