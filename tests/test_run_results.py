@@ -154,6 +154,18 @@ def test_any_other_error_moves_on_to_the_next_collection(make_cfg, capsys):
     assert len(tries) == 2 and last_lines(capsys.readouterr().out) == ["Summary: 1 created, 1 failed"]
 
 
+def test_a_struggling_server_while_matching_stops_the_run(make_cfg, capsys):
+    cfg, srv, eng = setup_run(make_cfg)
+    asked = []
+
+    def busy(coll, index):
+        asked.append(coll["key"])
+        raise ServerError("GET /Items -> 503 unavailable", 503)
+    eng.resolve = busy
+    assert not eng.run("apply", catalog.load(cfg), 8).ok and asked == ["m-one"] and srv.writes() == []
+    assert last_lines(capsys.readouterr().out, 2) == ["Stopped early: the server had a problem (HTTP 503)", "Summary: 1 failed"]
+
+
 def test_an_error_outside_a_collection_stops_the_run_plainly(make_cfg, capsys):
     cfg, srv, eng = setup_run(make_cfg)
     failing(srv, lambda m, p: "BoxSet" in p, ServerError("GET /Items -> 401 unauthorised", 401))

@@ -93,7 +93,7 @@ def test_a_list_that_keeps_failing_is_named_every_run(mdblist, tmp_path, capsys)
     for _ in range(2):
         assert lists.fetch_list("someone/gone", str(tmp_path)) == ROWS
         out = capsys.readouterr().out
-        assert out.startswith("!! someone/gone: mdblist has answered HTTP 404 today")
+        assert out.startswith("Warning: someone/gone: mdblist has answered HTTP 404 today")
         assert "copy it saved 4 h ago" in out and "may have been deleted or made private" in out
     record = json.loads(path.read_text())
     record["failing"] -= 5 * 86400                # five days on

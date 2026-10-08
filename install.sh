@@ -55,7 +55,7 @@ made=no
 verb=Create; [ -s data/state.json ] && verb=Update
 echo
 if ask "$verb your collections on the server now? (the first time can take a while on a big library)"; then
-  ./run.sh apply && made=yes
+  ./run.sh apply && made=yes || made=partly  # exit code 1: something failed or the run stopped early
 fi
 
 # the schedule: skipped if one already runs this copy of CineSets (from crontab or /etc/cron.d)
@@ -73,7 +73,11 @@ fi
 
 echo
 echo "CineSets is installed."
-[ "$made" = yes ] || echo "  $verb your collections:     ./run.sh apply"
+case "$made" in
+  yes) ;;
+  partly) echo "  Some collections had a problem (the lines starting with !! above): fix it, then run ./run.sh apply" ;;
+  *) echo "  $verb your collections:     ./run.sh apply" ;;
+esac
 case "$scheduled" in
   yes) echo "  Schedule: added to your crontab (crontab -l shows it)." ;;
   already) echo "  Schedule: already set up." ;;

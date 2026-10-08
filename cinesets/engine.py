@@ -648,9 +648,12 @@ class Engine:
                 continue
             try:
                 ids, wanted, matched = self.resolve(coll, index)
-            except Exception as e:  # a dead list must not take the whole run down
+            except Exception as e:  # a dead list must not take the whole run down, but a struggling server does
                 print(f"!! {coll['key']}: {e}")
                 result.failed += 1
+                result.stopped = self.stop_reason(e)
+                if result.stopped:
+                    return
                 continue
             top = ", ".join(index["items"][i]["n"] or "?" for i in ids[:4])  # a title can come without a name
             print(f"{coll['key']:<28} list {wanted:>4}  in library {matched:>4}  using {len(ids):>4}  | {top}")

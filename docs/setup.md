@@ -82,7 +82,8 @@ docker compose up -d                       # creates the collections, then keeps
 Inside the container `127.0.0.1` is the container itself, so give setup your server's LAN address (port 8080 for
 Silo). `up -d` runs the schedule from `config.yml`, the first time starting with everything straight away. When
 each job last ran is kept in `data/`, so a restart carries on where it left off, a job that didn't finish is tried
-again after about an hour, and `docker compose stop` stops it cleanly between collections. Changes to
+again after about an hour. `docker compose stop` lets it finish the collection it's on first, and if Docker's grace
+period runs out nothing is lost, as the record is saved after each collection. Changes to
 `config.yml`, from the dashboard or by hand, apply from the next job; restart the container only after changing
 the `schedule` itself. Any command in the README works as `docker compose run --rm cinesets <command>`.
 

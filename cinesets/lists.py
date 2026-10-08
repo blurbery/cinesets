@@ -89,7 +89,7 @@ def fetch_list(slug, data_dir, patient=True):
     except (requests.RequestException, ValueError) as e:
         problem = type(e).__name__
     if cached:
-        print(f"!! {slug}: {_stale(cached, path, problem, status)}")
+        print(f"Warning: {slug}: {_stale(cached, path, problem, status)}")
         return cached["rows"]
     raise RuntimeError(f"mdblist {slug}: {problem}")
 
