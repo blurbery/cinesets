@@ -58,6 +58,7 @@ FILES = {"/": ("index.html", "text/html; charset=utf-8"), "/app.js": ("app.js", 
          "/app.css": ("app.css", "text/css; charset=utf-8"), "/icon.png": ("icon.png", "image/png")}
 MAX_BODY = 1 << 20
 PREVIEW = (600, 900)
+TILE = (300, 450)  # the small posters in the section strip and Preview all
 CSP = ("default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script-src 'self'; connect-src 'self'; "
        "frame-ancestors 'none'; base-uri 'none'; form-action 'none'")
 LOCAL = ("127.0.0.1", "localhost", "::1")
@@ -202,7 +203,9 @@ class Dashboard:
         self.loaded = (None, None)            # (file times, catalogue) so previews don't re-read the files each time
         self.ids, self.provisional, self.scene_files = {}, {}, {}
         self.rng = random.Random()
-        self.run_state = {"running": False, "command": None, "lines": collections.deque(maxlen=500), "exit": None}
+        self.run_state = {"running": False, "command": None, "lines": collections.deque(maxlen=500), "exit": None,
+                          "id": None, "total": 0, "problems": 0, "summary": None, "stopped": None}
+        self.run_lock = threading.Lock()      # the run's lines and its count change together
         self.work = tempfile.mkdtemp(prefix="cinesets-web-")
         if demo:
             self.cfg_path = None
@@ -265,7 +268,8 @@ class Dashboard:
                 "defaults": posters.STYLE, "limits": {k: list(v) for k, v in posters.SIZES.items()},
                 "custom_file": os.path.basename(self.cfg.path("custom_collections")),
                 "logo_versions": self.logo_versions(),
-                "limit_range": [1, config.LIMIT_MOST], "default_limit": self.cfg["defaults"]["limit"]}
+                "limit_range": [1, config.LIMIT_MOST], "default_limit": self.cfg["defaults"]["limit"],
+                "min_items": self.settings_now()["defaults"]["min_items"]}
 
     def logo_versions(self):
         """Each streaming service's logos: [{"key", "label", "downloaded"}], standard first."""
@@ -475,12 +479,16 @@ class Dashboard:
         return out
 
     def set_text(self, body):
-        """Change one collection's label, title or subtitle (saved straight away), or put back the usual words."""
+        """Change one collection's label, title or subtitle (saved straight away), or put back the usual words. A
+        change that would give it the same name as another collection is turned down, since the two would look the
+        same on the server."""
         coll = self.coll(body.get("key"))
         text = {} if body.get("reset") else self.checked_text(body)
         if not text and not body.get("reset"):
             raise Problem("Give a label, title or subtitle")
         with self.lock:
+            path = self.cfg.path("custom_collections")
+            before = open(path).read() if os.path.exists(path) else None
             custom = catalog.read_custom(self.cfg)
             own = next((c for c in custom["collections"] if c.get("key") == coll["key"]), None)
             if coll.get("custom") and own and "group" in own:
@@ -503,12 +511,28 @@ class Dashboard:
                 if set(own) == {"key"}:
                     custom["collections"].remove(own)
             self.write_custom(custom)
+            same = lambda name: " ".join(name.split()).casefold()
+            colls = catalog.load(self.cfg)
+            now = next(c for c in colls if c["key"] == coll["key"])
+            twin = next((c for c in colls if c["key"] != coll["key"] and same(c["name"]) == same(now["name"])), None)
+            if twin and same(now["name"]) != same(coll["name"]):
+                if before is None:
+                    os.remove(path)
+                else:
+                    config._replace(path, before)
+                raise Problem(f"Another collection is already called {twin['name']!r} ({twin['key']}). Change the "
+                              "words so the two names differ.")
         fresh = self.coll(coll["key"])
         return {"key": coll["key"], "name": fresh["name"], "text": {f: fresh.get(f) for f in catalog.TEXT},
                 "message": "Saved. If the collection is on your server already, it is renamed on the next apply."
                 if fresh["name"] != coll["name"] else "Saved."}
 
     def preview(self, body):
+        """The poster with the page's unsaved settings: 600x900 as JSON with its text layout, or with size "small" just
+        a 300x450 JPEG, for the strip and Preview all."""
+        small = body.get("size", "full") == "small"
+        if body.get("size", "full") not in ("full", "small"):
+            raise Problem("size must be full or small")
         coll = self.coll(body.get("key"))
         if isinstance(body.get("text"), dict):  # words being typed, not saved yet
             draft = self.checked_text(body["text"])
@@ -523,7 +547,9 @@ class Dashboard:
             else:
                 img, layout = posters.poster_image(coll["label"], coll["title"], coll.get("subtitle"), coll["accent"], art, style)
             buf = io.BytesIO()
-            img.resize(PREVIEW, Image.LANCZOS).save(buf, "JPEG", quality=86)
+            img.resize(TILE if small else PREVIEW, Image.LANCZOS).save(buf, "JPEG", quality=86)
+        if small:
+            return "image/jpeg", buf.getvalue()
         name = None
         if item and not self.demo:
             name = self.index["items"].get(item, {}).get("n")
@@ -708,19 +734,52 @@ class Dashboard:
             env = dict(os.environ, PYTHONUNBUFFERED="1")
             proc = subprocess.Popen(self.run_command(command), cwd=config.ROOT, env=env, stdout=subprocess.PIPE,
                                     stderr=subprocess.STDOUT, text=True, bufsize=1)
-            self.run_state.update(running=True, command=command, exit=None)
-            self.run_state["lines"].clear()
+            with self.run_lock:
+                self.run_state.update(running=True, command=command, exit=None, id=secrets.token_hex(6), total=0,
+                                      problems=0, summary=None, stopped=None)
+                self.run_state["lines"].clear()
         threading.Thread(target=self._follow, args=(proc,), daemon=True).start()
         return {"started": True}
 
     def _follow(self, proc):
+        """Keep the run's last 500 lines, count them all, and note what the run says about how it went: lines
+        starting with !! are problems, and it ends with a Summary line (and Stopped early: why, if it did)."""
         for line in proc.stdout:
-            self.run_state["lines"].append(line.rstrip("\n"))
-        self.run_state.update(running=False, exit=proc.wait())
+            line = line.rstrip("\n")
+            text = line.strip()
+            with self.run_lock:
+                st = self.run_state
+                st["lines"].append(line)
+                st["total"] += 1
+                if text.startswith("!! "):
+                    st["problems"] += 1
+                elif text.startswith("Summary:"):
+                    st["summary"] = text[len("Summary:"):].strip()
+                elif text.startswith("Stopped early:"):
+                    st["stopped"] = text[len("Stopped early:"):].strip()
+        code = proc.wait()
+        with self.run_lock:
+            self.run_state.update(running=False, exit=code)
 
     def run_status(self, q=None):
-        st = self.run_state
-        return {"running": st["running"], "command": st["command"], "lines": list(st["lines"]), "exit": st["exit"]}
+        """The run and its output. With ?since=N (the lines the page has already), only the lines after those, with
+        the run's id, how many lines it has written, how many were problems and its summary, so the log keeps
+        growing past the 500 lines kept here and the page can tell a new run, or a restarted dashboard, from its own.
+        Lines that were no longer kept are counted in `skipped`."""
+        with self.run_lock:
+            st = self.run_state
+            out = {"running": st["running"], "command": st["command"], "lines": list(st["lines"]), "exit": st["exit"]}
+            more = {"run": st["id"], "total": st["total"], "problems": st["problems"], "summary": st["summary"],
+                    "stopped": st["stopped"]}
+        if (q or {}).get("since") is None:
+            return out
+        try:
+            since = max(0, int(q["since"]))
+        except ValueError:
+            raise Problem("since must be a whole number")
+        first = more["total"] - len(out["lines"])  # the number of the oldest line still kept
+        start = min(max(since, first), more["total"])
+        return {**out, **more, "lines": out["lines"][start - first:], "skipped": start - min(since, start)}
 
 
 ROUTES = {
@@ -729,7 +788,7 @@ ROUTES = {
     ("GET", "/api/collections"): lambda app, q, body: app.collections(),
     ("GET", "/api/artwork"): lambda app, q, body: app.artwork(q),
     ("GET", "/api/thumb"): lambda app, q, body: ("image/jpeg", app.thumb(q)),
-    ("GET", "/api/run"): lambda app, q, body: app.run_status(),
+    ("GET", "/api/run"): lambda app, q, body: app.run_status(q),
     ("POST", "/api/preview"): lambda app, q, body: app.preview(body),
     ("POST", "/api/artwork"): lambda app, q, body: app.choose(body),
     ("POST", "/api/save"): lambda app, q, body: app.save(body),
