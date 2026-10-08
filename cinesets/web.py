@@ -10,10 +10,11 @@
 Who can use it: whoever signs in with the access key (made on first run and kept in data/web.json, readable by its
 owner only) or the password set with --set-password. Signing in sets a session cookie: HttpOnly, SameSite=Strict,
 scoped to the API, signed with a secret from the same file, and marked Secure behind an HTTPS proxy. Every API request
-must also carry an X-CineSets header, which other web sites can't add, and failed sign-ins are rate limited. --new-key
-signs everyone out. The API key for the media server never reaches the browser: artwork is fetched here and passed
-on. It listens on this machine only unless --host says otherwise; for other computers, put it behind Tailscale or a
-reverse proxy with HTTPS (see the README). Every URL in the page is relative, so a proxy can serve it under a path.
+must also carry an X-CineSets header, which other web sites can't add, and wrong passwords are rate limited (the access
+key never is). --new-key and --set-password sign everyone out. The API key for the media server never reaches the
+browser: artwork is fetched here and passed on. It listens on this machine only unless --host says otherwise; for other
+computers, put it behind Tailscale or a reverse proxy with HTTPS (see the README). Every URL in the page is relative, so
+a proxy can serve it under a path.
 
 Settings are saved to config.yml (the old one is kept as config.yml.bak, and a save made over changes from elsewhere
 is refused); artwork choices go in data/state.json with the rest of CineSets' record, and the posters change on the
@@ -93,10 +94,10 @@ def read_access(path):
                 os.link(part, path)
             except FileExistsError:
                 pass  # another process made it first: use theirs
-            except OSError:  # a filesystem without hard links: an exclusive create instead
-                with contextlib.suppress(FileExistsError), open(path, "x") as f:
-                    os.chmod(path, 0o600)
-                    json.dump(_new_access(), f)
+            except OSError:  # a filesystem without hard links: an exclusive create, readable by you from the start
+                with contextlib.suppress(FileExistsError):
+                    with os.fdopen(os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as f:
+                        json.dump(_new_access(), f)
         finally:
             os.remove(part)
     access = load_json(path, None)
@@ -118,35 +119,46 @@ def hash_password(password, salt=None):
 
 
 def set_password(path, password):
-    """Set the dashboard password, or remove it with an empty one (the access key always works)."""
+    """Set the dashboard password, or remove it with an empty one (the access key always works). Either way the cookie
+    secret changes too, which signs everyone out, so nobody stays in on the old password."""
     if password and len(password) < PASSWORD_MIN:
         raise SystemExit(f"Use at least {PASSWORD_MIN} characters.")
     access = read_access(path)
-    save_json(path, {**access, "password": hash_password(password) if password else None})
+    hashed = hash_password(password) if password else None
+    save_json(path, {**access, "secret": secrets.token_hex(32), "password": hashed})
 
 
 def check_password(stored, password):
     if not stored:
         return False
-    digest = hashlib.pbkdf2_hmac("sha256", password.encode(), bytes.fromhex(stored["salt"]), int(stored["rounds"])).hex()
+    given = password.encode("utf-8", "surrogatepass")  # JSON can carry half a character: a wrong password, not a crash
+    digest = hashlib.pbkdf2_hmac("sha256", given, bytes.fromhex(stored["salt"]), int(stored["rounds"])).hex()
     return hmac.compare_digest(digest, stored["hash"])
 
 
 class Gate:
     """Signs people in and checks their session cookie. Re-reads web.json when it changes, so --new-key and
-    --set-password work without a restart. Wrong keys are rate limited per address and overall (behind a proxy every
-    request comes from the proxy's address, so the overall limit is the one that counts)."""
+    --set-password work without a restart, and both sign everyone out. The access key is 192 random bits, so it always
+    works. Anything else counts as a password try, and those are rate limited per address and overall (behind a proxy
+    every request comes from the proxy's address, so the overall limit is the one that counts)."""
+
+    TRIES, TRIES_ALL, WINDOW = 5, 20, 600  # wrong tries from one address, and from everyone, per 10 minutes
+    COOKIE_MOST = 128  # a session cookie is about 75 characters, so anything much longer isn't one
 
     def __init__(self, path):
         self.path, self.stamp, self.access = path, None, None
-        self.fails, self.lock = collections.defaultdict(list), threading.Lock()
+        self.fails, self.lock = {}, threading.Lock()
         self.current()
 
     def current(self):
-        stamp = os.stat(self.path).st_mtime_ns if os.path.exists(self.path) else None
+        try:  # web.json is replaced whole, so a new inode or size spots a change even where file times are coarse
+            st = os.stat(self.path)
+            stamp = (st.st_ino, st.st_mtime_ns, st.st_size)
+        except FileNotFoundError:
+            stamp = None
         if stamp != self.stamp or self.access is None:
             self.access = read_access(self.path)
-            self.stamp = os.stat(self.path).st_mtime_ns
+            self.stamp = stamp  # taken before reading, so a change made meanwhile is read next time
         return self.access
 
     def _sign(self, expiry):
@@ -157,25 +169,39 @@ class Gate:
         return f"{expiry}.{self._sign(expiry)}"
 
     def valid(self, value):
+        if len(value or "") > self.COOKIE_MOST:  # int() on thousands of digits is slow, and refused on newer Pythons
+            return False
         expiry, _, signature = (value or "").partition(".")
         if not (expiry.isascii() and expiry.isdigit()) or int(expiry) < time.time():
             return False
         return hmac.compare_digest(signature.encode(), self._sign(int(expiry)).encode())
 
     def login(self, given, address):
-        now = time.time()
-        with self.lock:
-            for who in (address, "*"):
-                self.fails[who] = [t for t in self.fails[who] if now - t < 600]
-            if len(self.fails[address]) >= 5 or len(self.fails["*"]) >= 20:
-                raise Problem("Too many tries. Wait a few minutes, then try again.", 429)
         access = self.current()
         given = str(given or "")
-        if hmac.compare_digest(given.encode(), access["key"].encode()) or check_password(access.get("password"), given):
-            return True
+        if hmac.compare_digest(given.encode("utf-8", "surrogatepass"), access["key"].encode()):
+            return True  # nobody can guess the key, so it isn't limited: a flood of wrong tries can't lock you out
+        now = time.time()
         with self.lock:
-            self.fails[address].append(now)
-            self.fails["*"].append(now)
+            for who in list(self.fails):  # forget tries older than the window, and addresses with none left
+                self.fails[who] = [t for t in self.fails[who] if now - t < self.WINDOW]
+                if not self.fails[who]:
+                    del self.fails[who]
+            mine, everyone = self.fails.get(address, []), self.fails.get("*", [])
+            if len(mine) >= self.TRIES or len(everyone) >= self.TRIES_ALL:
+                free = max(mine[-self.TRIES] if len(mine) >= self.TRIES else 0,
+                           everyone[-self.TRIES_ALL] if len(everyone) >= self.TRIES_ALL else 0) + self.WINDOW
+                minutes = max(1, int((free - now + 59) // 60))
+                raise Problem(f"Too many wrong tries. Wait about {minutes} minute{'s' if minutes > 1 else ''} before "
+                              "trying a password again, or sign in with the link that has the access key.", 429)
+            for who in (address, "*"):  # counted before checking, so tries sent together can't all slip past the limit
+                self.fails.setdefault(who, []).append(now)
+        if check_password(access.get("password"), given):
+            with self.lock:
+                for who in (address, "*"):  # the right password doesn't count against anyone
+                    with contextlib.suppress(KeyError, ValueError):
+                        self.fails[who].remove(now)
+            return True
         time.sleep(0.4)
         raise Problem("That isn't the access key or password.", 401)
 
@@ -810,60 +836,80 @@ class Handler(http.server.BaseHTTPRequestHandler):
     server_version = "CineSets"
     sys_version = ""
     timeout = 30  # a connection that sends nothing for this long is dropped
+    body_seconds = 30  # and a request body has this long to arrive in full, however slowly it trickles in
+    drain_seconds = 5  # a body turned down unread is dropped for up to this long, so the browser still gets the answer
+    login_most = 4096  # sign-in and sign-out bodies hold a key or a password, nothing more
 
     def log_message(self, fmt, *args):  # quiet: the terminal shows only the link and problems
         pass
 
     def do_GET(self):
-        self.guarded("GET")
+        self.route("GET")
 
     def do_POST(self):
-        self.guarded("POST")
+        self.route("POST")
 
-    def guarded(self, method):
+    @contextlib.contextmanager
+    def slot(self):
+        """One of the BUSY_LIMIT places for work. Taken only once a request has its body and, where it needs one, its
+        session, so slow uploads and people who haven't signed in can't hold them all."""
         if not self.server.slots.acquire(blocking=False):
-            return self.send(503, "application/json", json.dumps({"error": "The dashboard is busy. Try again."}).encode())
+            raise Problem("The dashboard is busy. Try again.", 503)
         try:
-            self.route(method)
+            yield
         finally:
             self.server.slots.release()
 
     def from_here(self):
         """A browser on this same machine, not something passed on by a proxy, and not a lookalike name."""
-        host = (self.headers.get("Host") or "").rsplit(":", 1)[0] if not (self.headers.get("Host") or "").startswith("[") \
-            else (self.headers.get("Host") or "")[1:].split("]")[0]
-        return host in LOCAL and not any(self.headers.get(h) for h in PROXIED)
+        return host_name(self.headers.get("Host")) in LOCAL and not any(self.headers.get(h) for h in PROXIED)
+
+    def known_name(self):
+        """The Host header is this machine's own name, an IP address (no other site can point its name at one) or a
+        name in web: hosts."""
+        name = host_name(self.headers.get("Host")).lower().rstrip(".")
+        return name in LOCAL or name in self.server.hosts or is_address(name)
 
     def https(self):
         return self.headers.get("X-Forwarded-Proto", "").lower() == "https"
 
     def route(self, method):
         url = urlparse(self.path)
-        self.cookie_out = None
+        self.cookie_out, self.body_read = None, False
         try:
             if self.server.local_only and not self.from_here():
                 raise Problem("Sign-in is turned off, so this dashboard only answers a browser on the machine it runs on "
                               "(or an SSH tunnel to it).", 403)
+            if self.server.hosts and not self.known_name():
+                raise Problem("This dashboard doesn't answer to that name. If it's yours, add it to web: hosts in "
+                              "config.yml.", 403)
             if method == "GET" and url.path in FILES:
                 name, kind = FILES[url.path]
-                with open(os.path.join(STATIC, name), "rb") as f:
-                    return self.send(200, kind, f.read())
+                with self.slot(), open(os.path.join(STATIC, name), "rb") as f:
+                    data = f.read()
+                return self.send(200, kind, data)
             if (method, url.path) not in ROUTES and (method, url.path) not in OPEN:
                 raise Problem("Not found", 404)
             if self.headers.get("X-CineSets") != "1":  # other web sites can't add this header to a request
                 raise Problem("Requests must come from the CineSets dashboard page", 403)
-            body = self.read_json() if method == "POST" else {}
             if (method, url.path) in OPEN:
-                return self.send_json(self.session(url.path, body))
-            if not self.signed_in():
+                body = self.read_json(self.login_most) if method == "POST" else {}
+                with self.slot():
+                    result = self.session(url.path, body)
+                return self.send_json(result)
+            if not self.signed_in():  # before reading the body, so nobody signed out can make it wait for one
                 raise Problem("Sign in first", 401)
+            body = self.read_json() if method == "POST" else {}
             q = {k: v[0] for k, v in parse_qs(url.query).items()}
-            result = ROUTES[(method, url.path)](self.server.app, q, body)
+            with self.slot():
+                result = ROUTES[(method, url.path)](self.server.app, q, body)
             if isinstance(result, tuple):
                 return self.send(200, result[0], result[1])
             self.send_json(result)
         except Problem as e:
-            self.send(e.status, "application/json", json.dumps({"error": str(e)}).encode())
+            with contextlib.suppress(BrokenPipeError, ConnectionResetError):
+                self.send(e.status, "application/json", json.dumps({"error": str(e)}).encode())
+                self.discard()
         except (BrokenPipeError, ConnectionResetError):
             pass
         except Exception:
@@ -894,20 +940,59 @@ class Handler(http.server.BaseHTTPRequestHandler):
         return {"signed_in": self.signed_in(), "demo": self.server.app.demo, "sign_in": gate is not None,
                 "password": bool(gate and gate.current().get("password"))}
 
-    def read_json(self):
-        try:
-            size = int(self.headers.get("Content-Length") or 0)
-        except ValueError:
-            raise Problem("Bad request")
-        if size > MAX_BODY:
+    def read_json(self, most=MAX_BODY):
+        self.body_read = True  # now or never: a body too big or too slow isn't waited for afterwards
+        size = self.body_size()
+        if size > most:
             raise Problem("That request is too big", 413)
         try:
-            body = json.loads(self.rfile.read(size) or b"{}")
+            body = json.loads(b"".join(self.receive(size, self.body_seconds)) or b"{}")
         except ValueError:
             raise Problem("That request is not JSON")
         if not isinstance(body, dict):
             raise Problem("That request is not a JSON object")
         return body
+
+    def body_size(self):
+        """Content-Length, as a plain whole number. A negative one is refused too: reading -1 bytes would wait for the
+        connection to close."""
+        size = (self.headers.get("Content-Length") or "0").strip()
+        if not (size.isascii() and size.isdigit()) or len(size) > 12:
+            raise Problem("Bad request")
+        return int(size)
+
+    def receive(self, size, seconds):
+        """The body's next `size` bytes, a piece at a time, all within `seconds`. The connection's own timeout only
+        counts the wait for each piece, so a byte every few seconds would otherwise keep going as long as it liked."""
+        deadline = time.monotonic() + seconds
+        try:
+            while size > 0:
+                wait = deadline - time.monotonic()
+                if wait <= 0:
+                    raise Problem("That request took too long to arrive", 408)
+                self.connection.settimeout(wait)
+                piece = self.rfile.read1(min(size, 1 << 16))
+                if not piece:
+                    raise Problem("That request ended early")
+                size -= len(piece)
+                yield piece
+        except socket.timeout:
+            raise Problem("That request took too long to arrive", 408)
+        finally:
+            self.connection.settimeout(self.timeout)
+
+    def discard(self):
+        """After turning down a request without reading its body, read the body and drop it, for a few seconds at most,
+        so the browser gets the answer rather than a connection reset halfway through sending."""
+        self.close_connection = True
+        if self.command != "POST" or self.body_read:
+            return
+        self.body_read = True
+        with contextlib.suppress(Problem, OSError):
+            size = self.body_size()
+            if size <= MAX_BODY:
+                for _ in self.receive(size, self.drain_seconds):
+                    pass
 
     def send_json(self, result):
         self.send(200, "application/json", json.dumps(result).encode())
@@ -933,10 +1018,39 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.wfile.write(data)
 
 
-def make_server(app, host="127.0.0.1", port=8095, sign_in=True, public=False):
+def host_name(value):
+    """The name in a Host header, without its port or the brackets around an IPv6 address."""
+    value = value or ""
+    return value[1:].split("]")[0] if value.startswith("[") else value.rsplit(":", 1)[0]
+
+
+def is_address(name):
+    """An IP address rather than a name."""
+    for family in (socket.AF_INET, socket.AF_INET6):
+        with contextlib.suppress(OSError, ValueError):
+            socket.inet_pton(family, name)
+            return True
+    return False
+
+
+def check_hosts(raw):
+    """`hosts` in config.yml's `web` (optional): more names the dashboard answers to, like [cinesets.example.com].
+    Set, it turns away every other name except this machine's own and IP addresses, so a site that points its own
+    name at this machine (DNS rebinding) gets nowhere. Not set, any name is answered."""
+    names = [raw] if isinstance(raw, str) else raw
+    if names is None:
+        return []
+    if not isinstance(names, list) or not all(isinstance(n, str) and n.strip() for n in names):
+        raise SystemExit(f"config.yml web: hosts must be a list of names like [cinesets.example.com], not {raw!r}")
+    names = [n.strip().lower() for n in names]
+    return [(n.rsplit(":", 1)[0] if n.count(":") == 1 else n).rstrip(".") for n in names]  # no port needed
+
+
+def make_server(app, host="127.0.0.1", port=8095, sign_in=True, public=False, hosts=None):
     """sign_in=False is allowed only on this machine's own address, and then only a browser on this machine is
     answered, or an SSH tunnel to it (which looks the same, and needs a login to the machine); nothing passed on by a
-    proxy or Tailscale. public=True accepts sign-ins only over HTTPS."""
+    proxy or Tailscale. public=True accepts sign-ins only over HTTPS. hosts (with sign-in on) lists the only names,
+    besides this machine's own and IP addresses, that it answers to."""
     if not sign_in and not app.demo and host not in LOCAL:
         raise SystemExit("Sign-in can only be turned off when the dashboard listens on this machine only "
                          "(host 127.0.0.1). For other computers, keep sign-in on.")
@@ -947,6 +1061,7 @@ def make_server(app, host="127.0.0.1", port=8095, sign_in=True, public=False):
     httpd.app, httpd.slots, httpd.public = app, threading.BoundedSemaphore(BUSY_LIMIT), public
     httpd.gate = Gate(access_file(app.cfg)) if sign_in and not app.demo else None
     httpd.local_only = not sign_in and not app.demo
+    httpd.hosts = set(hosts or ()) if httpd.gate else set()
     return httpd
 
 
@@ -973,11 +1088,12 @@ def serve(cfg_path=None, host=None, port=None, demo=False, sign_in=None, public=
     host, port = host or web["host"], port or web["port"]
     sign_in = web["sign_in"] if sign_in is None else sign_in
     public = web["public"] if public is None else public
+    hosts = check_hosts(web.get("hosts"))
     print("Demo mode: made-up artwork, no server, no sign-in, nothing saved." if demo else
           "Reading your settings and library...")
     app = Dashboard(cfg_path, demo)
     try:
-        httpd = make_server(app, host, port, sign_in, public)
+        httpd = make_server(app, host, port, sign_in, public, hosts)
     except OSError as e:
         app.close()
         raise SystemExit(f"Could not start the dashboard on {host}:{port} ({e.strerror or e}). Try another --port.")
@@ -998,6 +1114,10 @@ def serve(cfg_path=None, host=None, port=None, demo=False, sign_in=None, public=
               "(on Docker: docker compose run --rm cinesets web --link)\n")
     if public:
         print("Public mode: sign-ins are taken only over HTTPS, through your reverse proxy.")
+        if host not in LOCAL:  # fine for Docker's service, which listens on 0.0.0.0 but is published on 127.0.0.1
+            print(f"Warning: it listens on {host}, not just this machine. Public mode believes the X-Forwarded-Proto "
+                  "header from whoever connects, and anyone who reaches this port directly can send it, so make sure "
+                  "only your proxy can (on Docker, publish the port on 127.0.0.1 only).")
     elif host not in LOCAL:
         print("It is open to other computers. Use it over Tailscale or a reverse proxy with HTTPS, not straight from "
               "the internet (see docs/dashboard.md).")
@@ -1032,8 +1152,8 @@ def manage(cfg_path, what, host=None, port=None):
         if getpass.getpass("Once more: ") != first:
             raise SystemExit("Those didn't match; nothing changed.")
         set_password(path, first)
-        print("Password set. Sign in with it, or with the link below." if first else
-              "Password removed. Sign in with the link below.")
+        print("Password set, and everyone is signed out. Sign in with it, or with the link below." if first else
+              "Password removed, and everyone is signed out. Sign in with the link below.")
     print(link(cfg, host, port))
     if host in LOCAL:
         print("If you reach the dashboard another way (Tailscale, a proxy, another computer), use that address with "

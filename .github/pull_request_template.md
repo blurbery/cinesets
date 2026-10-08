@@ -6,6 +6,15 @@
 
 <!-- Unit tests, a plan or apply on your own server (Emby, Jellyfin or Silo, which version), poster previews. Leave out server addresses, API keys, user names and anything else private. -->
 
+## Release notes
+
+<!-- Leave the box empty and the title becomes this PR's line in the release notes. If the PR makes more than one change, list every change in the box instead (the title's one too), one per line, written like a title: "fix(web): the run log keeps updating". Each line becomes its own line in the release notes. No "-" in front and nothing else inside the box. -->
+
+```text
+BEGIN_COMMIT_OVERRIDE
+END_COMMIT_OVERRIDE
+```
+
 ## AI disclosure (required)
 
 <!-- Tick one box by changing [ ] to [x]. The check fails until this is filled in, and PRs without it don't get merged. See CONTRIBUTING.md. -->

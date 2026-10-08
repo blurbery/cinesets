@@ -1,9 +1,10 @@
 # CineSets by blurbery (https://github.com/blurbery/cinesets). SPDX-License-Identifier: AGPL-3.0-or-later
 # Additional terms under AGPL-3.0 section 7 apply: see NOTICE.
 #
-# Checks every pull request's title (Conventional Commits, which drive versions and release notes) and its AI
-# disclosure (required by CONTRIBUTING.md). It reads only the pull request's title and description from the
-# event payload: nothing is checked out or run from the pull request.
+# Checks every pull request's title (Conventional Commits, which drive versions and release notes), its AI
+# disclosure (required by CONTRIBUTING.md) and its release notes box, and shows the lines it will add to the release
+# notes. It reads only the pull request's title and description from the event payload: nothing is checked out or
+# run from the pull request.
 name: Pull request
 
 on:
@@ -65,6 +66,25 @@ jobs:
                           "tool and say what it did, for example 'Claude wrote the first draft of the parser and "
                           "its tests; I reviewed every line and ran the tests on my own server'.")
 
+          # The release notes box. release-please reads the raw description (comments and all), takes whatever is
+          # between the first two markers and, if that isn't empty, uses it instead of the title. A line it can't
+          # read is dropped without a word, and so is the whole PR when the first line is the bad one, so every
+          # line here has to read like a title.
+          notes = [title]
+          raw = (pr.get("body") or "").replace("\r\n", "\n")
+          if "BEGIN_COMMIT_OVERRIDE" in raw:
+              box = raw.split("BEGIN_COMMIT_OVERRIDE")[1].split("END_COMMIT_OVERRIDE")[0].strip()
+              if box:
+                  notes = [line.rstrip() for line in box.split("\n") if line.strip()]
+                  bad = [line for line in notes if not re.fullmatch(rf"({types})(\([a-z0-9 ._/-]+\))?!?: \S.*", line)]
+                  if bad:
+                      errors.append(
+                          "These lines in the release notes box would be left out of the release notes: "
+                          + "; ".join(repr(line) for line in bad) + ". Write each line like a title, for example "
+                          "'fix(web): the run log keeps updating', starting at the very beginning of the line "
+                          "(no '-', '*' or spaces in front), and keep everything else, comments included, out "
+                          "of the box. Or empty the box to use the title.")
+
           summary = os.environ.get("GITHUB_STEP_SUMMARY")
           if errors:
               for e in errors:
@@ -75,5 +95,11 @@ jobs:
                               + "\n\nEdit the title or description and this check runs again. "
                               "See CONTRIBUTING.md.\n")
               sys.exit(1)
-          print("Title and AI disclosure look good.")
+          print("Title, AI disclosure and release notes look good. In the release notes:")
+          for line in notes:
+              print(f"  {line}")
+          if summary:
+              with open(summary, "a", encoding="utf-8") as f:
+                  f.write("### In the release notes\n\nOnce merged, this pull request adds:\n\n"
+                          + "\n".join(f"- `{line}`" for line in notes) + "\n")
           PY

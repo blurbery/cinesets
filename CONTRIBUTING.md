@@ -85,7 +85,7 @@ Markdown and JSON files don't need one.
 
 ## PR titles
 
-PRs get squash merged, so the title becomes the commit and ends up in the release notes. Use
+PRs get squash merged, so the title becomes the commit and its line in the release notes. Use
 [Conventional Commits](https://www.conventionalcommits.org):
 
 | Title | For | Next version |
@@ -93,13 +93,33 @@ PRs get squash merged, so the title becomes the commit and ends up in the releas
 | `feat: ...` | A new feature or collection | 1.**1**.0 |
 | `fix: ...` | A bug fix | 1.0.**1** |
 | `perf:`, `deps:`, `revert:` | Speed-ups, dependency bumps, undoing a change | 1.0.**1** |
-| `docs:`, `test:`, `refactor:`, `style:`, `build:`, `ci:`, `chore:` | Things users won't notice | No release |
+| `docs:`, `test:`, `refactor:`, `style:`, `build:`, `ci:`, `chore:` | Docs, tests, tidying and tooling | 1.0.**1** |
 
-A scope is fine too, like `feat(collections): add Studio Ghibli`.
+A scope is fine too, like `feat(collections): add Studio Ghibli`. Each type has its own heading in the release
+notes, so every merged PR shows up there.
 
 > [!CAUTION]
 > Add `!` for a breaking change, like `feat!: rename the labels setting`. That makes the next version
 > **2**.0.0, so only use it when people have to change their setup.
+
+### A PR with more than one change
+
+The title gives a PR one line in the release notes. If it makes several changes, list every one of them (the
+title's too) in the **Release notes** box in the PR description, one per line and each written like a title. Each
+line becomes its own line in the notes:
+
+```text
+BEGIN_COMMIT_OVERRIDE
+feat(posters): a choice of fonts
+fix(web): the run log keeps updating on long runs
+docs: how to uninstall a Docker install
+END_COMMIT_OVERRIDE
+```
+
+Leave the box empty to use the title. Lines need to start right at the beginning, with no `-` in front, and nothing
+else can go in the box, comments included: the release notes would quietly leave out anything they can't read, so
+the **Title and AI disclosure** check fails on it instead. When the check passes, its summary shows the lines the
+PR will add. Ending a line with the PR's number, like `(#31)`, links it in the notes.
 
 ## AI use
 
@@ -133,6 +153,29 @@ and the notes go up on [Releases](https://github.com/blurbery/cinesets/releases)
 
 > [!NOTE]
 > You don't need to touch the version number or the changelog.
+
+<details>
+<summary><b>Merging a release PR (for the maintainer)</b></summary>
+
+GitHub doesn't start the checks on a PR made by the release workflow until someone who can write to the repository
+presses **Approve workflows to run** in its merge box. Every merge to `main` updates the release PR and asks again,
+so press it just before merging, wait for the checks to pass, then merge.
+
+To skip that step, give the release workflow a GitHub App of its own:
+
+1. Make a GitHub App (Settings, Developer settings, GitHub Apps, New GitHub App) with the webhook turned off and
+   these repository permissions: Contents, Issues and Pull requests, each "Read and write".
+2. Generate a private key for it and install it on this repository only.
+3. In this repository's Settings, Secrets and variables, Actions, add a variable `RELEASE_APP_CLIENT_ID` holding the
+   App's client ID and a secret `RELEASE_APP_PRIVATE_KEY` holding the whole private key file.
+
+From the next merge on, the App makes the release PR and its checks start by themselves. Delete the variable to go
+back.
+
+To change the notes of a PR that's merged but not released yet, edit its release notes box, then run the **Release**
+workflow by hand (Actions, Release, Run workflow) so the release PR catches up.
+
+</details>
 
 ## Licence
 
