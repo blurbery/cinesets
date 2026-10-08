@@ -50,6 +50,45 @@ def _merge(base, extra):
     return out
 
 
+OTHER_KEYS = {"schedule"}  # settings that are read but have no default (schedule: the Docker scheduler's jobs)
+_warned = set()
+
+
+def check_keys(raw, where="config.yml"):
+    """Warn (never stop) about settings CineSets doesn't know, at the top level and inside each block, so a typo like
+    `colections:` doesn't quietly fall back to the default. The known names come from DEFAULTS; `posters` checks its
+    own, and blocks whose entries are names of your choosing (limits: sections, say) aren't looked inside."""
+    import difflib
+    found = []
+    for key in raw:
+        if key not in DEFAULTS and key not in OTHER_KEYS:
+            found.append((str(key), sorted(set(DEFAULTS) | OTHER_KEYS)))
+        elif isinstance(DEFAULTS.get(key), dict) and DEFAULTS[key] and isinstance(raw[key], dict):
+            found += [(f"{key}.{k}", [f"{key}.{n}" for n in DEFAULTS[key]]) for k in raw[key] if k not in DEFAULTS[key]]
+    for name, known in found:
+        if (where, name) in _warned:
+            continue
+        _warned.add((where, name))
+        close = difflib.get_close_matches(name, known, n=1)
+        print(f"Note: {where}: CineSets doesn't know the setting `{name}`, so it is ignored"
+              + (f" (did you mean `{close[0]}`?)" if close else ""))
+
+
+def read_yaml(f, where="config.yml"):
+    """config.yml's settings, with a clear message when it isn't valid YAML or isn't a list of settings."""
+    try:
+        raw = yaml.safe_load(f)
+    except yaml.YAMLError as e:
+        raise SystemExit(f"{where} isn't valid YAML, so it can't be read. Fix the line it points to:\n{e}")
+    if raw is None:
+        return {}
+    if not isinstance(raw, dict):
+        raise SystemExit(f"{where} should hold settings like `server:` and `libraries:` (see config.example.yml), "
+                         f"not a {type(raw).__name__}")
+    check_keys(raw, where)
+    return raw
+
+
 class Config(dict):
     def path(self, key):
         p = self[key]
@@ -61,7 +100,7 @@ def load(path=None):
     raw = {}
     if os.path.exists(path):
         with open(path) as f:
-            raw = yaml.safe_load(f) or {}
+            raw = read_yaml(f, os.path.basename(path))
     cfg = Config(_merge(DEFAULTS, raw))
     cfg["base_dir"] = os.path.dirname(os.path.abspath(path))
     srv = cfg["server"]
