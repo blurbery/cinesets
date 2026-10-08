@@ -54,19 +54,34 @@ def empty_index(items):
             "items": items}
 
 
-def reference(coll, index):
-    """Franchise matching as it was before titles_in, reading every title in the index for each franchise."""
+def reference(coll, index, short):
+    """Franchise matching without titles_in, reading every title in the index for each title wanted: the exact title
+    and year first, then the loose title (short: item id -> catalog.loose_title) from that year or one either side,
+    each item used once."""
     kind = coll["kind"]
     canon = set(index[kind]["imdb"].values()) | set(index[kind]["tmdb"].values())
-    want = {(t.lower(), y) for t, y in coll["titles"]}
-    found = {}
-    for iid, it in index["items"].items():
-        if it.get("k", kind) != kind:
-            continue
-        k = ((it.get("n") or "").lower(), it.get("y"))
-        if k in want and (k not in found or (iid in canon and found[k] not in canon)):
-            found[k] = iid
-    return [found[(t.lower(), y)] for t, y in coll["titles"] if (t.lower(), y) in found]
+
+    def best(same):
+        pick = None
+        for iid, it in index["items"].items():
+            if it.get("k", kind) == kind and same(iid, it) and (pick is None or (iid in canon and pick not in canon)):
+                pick = iid
+        return pick
+
+    picks, used = {}, set()
+    for n, (t, y) in enumerate(coll["titles"]):
+        iid = best(lambda iid, it: ((it.get("n") or "").lower(), it.get("y")) == (t.lower(), y))
+        if iid and iid not in used:
+            picks[n] = iid
+            used.add(iid)
+    for n, (t, y) in enumerate(coll["titles"]):
+        for year in () if n in picks else (y, y - 1, y + 1):
+            iid = best(lambda iid, it: it.get("y") == year and short[iid] and short[iid] == catalog.loose_title(t))
+            if iid and iid not in used:
+                picks[n] = iid
+                used.add(iid)
+                break
+    return [picks[n] for n in sorted(picks)]
 
 
 def test_franchises_read_a_big_library_once(make_cfg):
@@ -85,7 +100,8 @@ def test_franchises_read_a_big_library_once(make_cfg):
 
 def test_matching_is_the_same_as_reading_every_title_each_time(make_cfg):
     """Copies of a title in several libraries, the canonical one later, names in other cases or missing, the same name
-    in other years, an index from before titles had a kind, and franchises whose titles are all missing."""
+    in other years, titles wanted twice or a year out, an index from before titles had a kind, and franchises whose
+    titles are all missing."""
     rng = random.Random(5)
     eng = Engine(make_cfg(), FakeServer())
     names = [f"Title {n}" for n in range(60)]
@@ -98,10 +114,12 @@ def test_matching_is_the_same_as_reading_every_title_each_time(make_cfg):
                                    **({"k": kind} if kind else {})}
         if rng.random() < 0.4:                             # this copy holds a provider id, so it is canonical
             index[kind or rng.choice(["movie", "show"])][rng.choice(["imdb", "tmdb"])].setdefault(f"tt{n}", f"i{n}")
+    short = {iid: catalog.loose_title(it["n"]) for iid, it in index["items"].items()}
     for n in range(300):
-        titles = [(rng.choice(names + ["Nowhere"]), rng.choice([1999, 2000, 2001, 1990])) for _ in range(rng.randint(1, 6))]
+        titles = [(rng.choice(names + ["Nowhere"]), rng.choice([1998, 1999, 2000, 2001, 2002, 1990]))
+                  for _ in range(rng.randint(1, 6))]
         coll = {"key": f"f{n}", "kind": rng.choice(["movie", "show"]), "titles": titles}
-        assert eng.resolve(coll, index)[0] == reference(coll, index)
+        assert eng.resolve(coll, index)[0] == reference(coll, index, short)
     missing = {"key": "none", "kind": "movie", "titles": [("Nowhere", 1990)]}
     assert eng.resolve(missing, index) == ([], 1, 0)
 

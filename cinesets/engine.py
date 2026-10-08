@@ -81,9 +81,24 @@ class Engine:
         """Matched item ids in list order, plus (titles wanted, titles matched)."""
         kind = coll["kind"]
         if coll.get("titles"):
-            # fixed franchise list: exact title and year
-            found = self.titles_in(index, kind)
-            ids = self.srv.narrow(coll, [found[(t.lower(), y)] for t, y in coll["titles"] if (t.lower(), y) in found])
+            # fixed franchise list: the exact title and year first, then the same title written another way (case,
+            # accents, punctuation, "&" or "and", a leading "The") from that year or one either side. Each library
+            # item fills one place at most, and a remake from another year never counts.
+            from .catalog import loose_title
+            found, near = self.titles_in(index, kind), self.titles_in(index, kind, loose=True)
+            picks, used = {}, set()
+            for n, (t, y) in enumerate(coll["titles"]):
+                iid = found.get((str(t).lower(), y))
+                if iid and iid not in used:
+                    picks[n] = iid
+                    used.add(iid)
+            for n, (t, y) in enumerate(coll["titles"]):
+                years = near.get(loose_title(t), {}) if n not in picks and isinstance(y, int) else {}
+                iid = next((years[x] for x in (y, y - 1, y + 1) if x in years and years[x] not in used), None)
+                if iid:
+                    picks[n] = iid
+                    used.add(iid)
+            ids = self.srv.narrow(coll, [picks[n] for n in sorted(picks)])
             return ids, len(coll["titles"]), len(ids)
         ids, seen, wanted = [], set(), 0
         for slug in coll["lists"]:
@@ -109,24 +124,32 @@ class Engine:
             ids = kept
         return ids[:limit], wanted, len(ids)
 
-    def titles_in(self, index, kind):
+    def titles_in(self, index, kind, loose=False):
         """(lower-case title, year) -> item id for every title of one kind, worked out once per index rather than once
         per franchise, so a big library is read through once. A title in the library more than once is the copy the
-        index treats as canonical (it holds the title's IMDb or TMDB id), or else the first one."""
+        index treats as canonical (it holds the title's IMDb or TMDB id), or else the first one.
+        loose=True gives the table made in the same pass for the second try: catalog.loose_title -> {year: item id}."""
+        from .catalog import loose_title
         if self._titles is None or self._titles[0] is not index:
             self._titles = (index, {})
         tables = self._titles[1]
         if kind not in tables:
             canon = set(index[kind]["imdb"].values()) | set(index[kind]["tmdb"].values())
-            found = {}
+            found, near = {}, {}
             for iid, it in index["items"].items():
                 if it.get("k", kind) != kind:  # an index from before "k" counts every title as either kind
                     continue
                 k = ((it.get("n") or "").lower(), it.get("y"))
                 if k not in found or (iid in canon and found[k] not in canon):
                     found[k] = iid
-            tables[kind] = found  # only once it is whole: the dashboard answers several requests at a time
-        return tables[kind]
+                short = loose_title(k[0]) if isinstance(k[1], int) else ""
+                if short:
+                    years = near.setdefault(short, {})
+                    if k[1] not in years or (iid in canon and years[k[1]] not in canon):
+                        years[k[1]] = iid
+            tables[kind + " loose"] = near
+            tables[kind] = found  # only once both are whole: the dashboard answers several requests at a time
+        return tables[kind + " loose" if loose else kind]
 
     @staticmethod
     def match_row(row, kind, index):

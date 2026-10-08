@@ -533,8 +533,7 @@ def test_added_lists_extend_a_built_in_collection(make_cfg):
     assert colls["m-new"]["custom"] and colls["m-new"]["section"] == "Mine" and colls["m-a"]["title"] == "A"
     with open(cfg.path("custom_collections"), "w") as f:
         f.write("collections:\n  - {key: m-f, add_lists: [x/two]}\n")
-    with pytest.raises(SystemExit, match="fixed list of titles"):
-        catalog.load(cfg)
+    assert "added_lists" not in {c["key"]: c for c in catalog.load(cfg)}["m-f"]   # skipped with a note, still loads
     with open(cfg.path("custom_collections"), "w") as f:
         f.write("collections:\n  - {key: m-b, group: g, type: movie, title: B, lists: ['../etc']}\n")
     with pytest.raises(SystemExit, match="not an mdblist list"):
