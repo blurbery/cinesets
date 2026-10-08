@@ -24,9 +24,10 @@
 </p>
 
 I made CineSets because I wanted my server's Collections page to look good without having to look after it.
-It builds trending, streaming, genre, best of, kids and seasonal collections, plus 65 movie franchises, from
-what's already in your library. Each one gets a matching poster, they stay in a set order and they update on a
-schedule.
+It builds trending, streaming, genre, best of, kids, regional and seasonal collections, plus 114 franchises and
+studios (89 movie franchises from fixed film lists, 14 more from public lists, 7 studios and directors and 4 TV
+universes), from what's already in your library. Each one gets a matching poster, they stay in a set order and
+they update on a schedule.
 
 It only ever touches collections it made itself. Your films, shows, libraries, users and settings are left
 alone. It talks to your server, public [mdblist](https://mdblist.com) lists and Wikimedia Commons (for the
@@ -126,8 +127,9 @@ touch.
 
 To change the built-in catalogue itself, copy `collections.yml` to `my-collections.yml` (on Docker, put it in
 `./config`), set `collections_file: my-collections.yml` in `config.yml` and change whatever you like. The top of
-the file explains every field. A collection needs at least 8 matches in your library before it's made, so
-regional ones like Stan only show up if you have the shows.
+the file explains every field. A collection needs at least 8 matches in your library before it's made (fewer for
+franchises and small lists), so streaming ones like Stan and regional ones like Korean Series only show up if you
+have enough of their titles.
 
 <details>
 <summary><b>Examples</b></summary>
