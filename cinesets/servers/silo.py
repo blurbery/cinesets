@@ -14,17 +14,19 @@ import re
 import sys
 import time
 from collections import Counter
+from functools import partial
 from urllib.parse import quote, urljoin, urlparse
 
 import requests
 
 from .. import __version__
 from ..store import load_json, save_json
-from . import ServerError, public_info, warn_plain_http
+from . import ServerError, public_info, send, verify_setting, warn_plain_http
 from .base import Server
 
 PAGE = 200            # the most Silo sends in one page
 ID_LOOKUP_PAUSE = 0.05
+ID_RECHECK = 7 * 24 * 3600   # a show missing some of its ids is looked up again after a week, in case Silo has them now
 SORTS = {"PremiereDate": {"field": "release_date", "order": "asc"}, "SortName": {"field": "title", "order": "asc"}}
 CONTENT_ID = re.compile(r"^(movie|series)-(tmdb|imdb|tvdb)-(.+)$")
 
@@ -41,11 +43,35 @@ def provider_id(value):
     return m.group(0) if m else ""
 
 
+def kept_ids(entry):
+    """A show's ids as data/silo-ids.json keeps them: {"ids": {...}, "checked": when}, or only the ids (older files)."""
+    if isinstance(entry, dict) and "checked" in entry:
+        return entry.get("ids") or {}
+    return entry if isinstance(entry, dict) else {}
+
+
+def look_up(entry, now):
+    """Whether a show's ids need looking up: never looked up, or missing some and not looked up for a week (older
+    files have no date, so those are looked up again once)."""
+    if entry is None:
+        return True
+    ids = kept_ids(entry)
+    if all(ids.get(k) for k in ("tmdb", "imdb", "tvdb")):
+        return False
+    return now - (entry.get("checked") or 0) >= ID_RECHECK
+
+
+def _origin(url):
+    """Scheme, host and port: two links go to the same place only if all three match."""
+    u = urlparse(url)
+    return u.scheme, u.hostname, u.port or {"http": 80, "https": 443}.get(u.scheme)
+
+
 COMPAT_NOTE = "That is Silo's Jellyfin-compatible port. CineSets needs Silo's own address, the one its web app opens on."
 
 
-def _own_api(url):
-    info = public_info(url, "/api/v2/system/info")
+def _own_api(url, verify=True):
+    info = public_info(url, "/api/v2/system/info", verify)
     return bool(info and info.get("api_major") and "contract_digest" in info)
 
 
@@ -60,16 +86,16 @@ class SiloServer(Server):
         return url
 
     @staticmethod
-    def detect(url):
+    def detect(url, verify=True):
         """("silo", url, None) if Silo's own API answers at `url`. Given Silo's Jellyfin-compatible port (it says who it
         is on its sign-in page), Silo's own address on port 8080 with a note, or None for the address if Silo's
         isn't there, so setup asks for it."""
-        if _own_api(url):
+        if _own_api(url, verify):
             return "silo", url, None
-        info = public_info(url, "/Branding/Configuration")
+        info = public_info(url, "/Branding/Configuration", verify)
         if info and "Silo" in str(info.get("LoginDisclaimer") or ""):
             guess = urlparse(url)._replace(netloc=f"{urlparse(url).hostname}:8080", path="").geturl()
-            return "silo", (guess if _own_api(guess) else None), COMPAT_NOTE
+            return "silo", (guess if _own_api(guess, verify) else None), COMPAT_NOTE
         return None
 
     def __init__(self, cfg):
@@ -80,6 +106,7 @@ class SiloServer(Server):
         self.root = srv["url"]
         self.base = self.root + "/api/v2"
         warn_plain_http(self.root)
+        self.verify = verify_setting(cfg)
         self.pause = float(cfg["write_pause"])
         self.session = requests.Session()
         self.session.headers.update({"accept": "application/json", "Authorization": f"Bearer {srv['api_key']}",
@@ -94,44 +121,63 @@ class SiloServer(Server):
         self._next = {}         # collection id -> the position the next added title gets
 
     # ------------------------------------------------------------ requests
-    def call(self, method, path, timeout=120, **kw):
+    def request(self, method, path, timeout=120, retry=None, **kw):
+        """One request, and how long the try that got its answer took. Reads are sent again after a dropped connection
+        or a busy answer, and so are writes whose caller says retry=True: ones that do the same thing however often
+        they arrive. Any request is sent again after a 429, which says Silo turned it away."""
         # never follow redirects: the API key travels in headers and must not reach another host
-        for attempt in range(6):
-            r = self.session.request(method, self.base + path, timeout=timeout, allow_redirects=False, **kw)
-            if r.status_code != 429 or attempt == 5:
-                break
-            wait = r.headers.get("Retry-After", "")
-            time.sleep(min(float(wait), 60) if wait.replace(".", "", 1).isdigit() else 2 ** attempt)
+        again = method == "GET" if retry is None else retry
+        r, took = send(partial(self.session.request, method), self.base + path, again, timeout=timeout,
+                       allow_redirects=False, verify=self.verify, **kw)
         if 300 <= r.status_code < 400:
             raise ServerError(f"{method} {path.split('?')[0]} was redirected to {r.headers.get('Location', '?')}: "
                               f"set server.url to the address Silo answers on directly", r.status_code)
         if r.status_code not in (200, 201, 204):
             raise ServerError(f"{method} {path.split('?')[0]} -> {r.status_code} {self.problem(r)}", r.status_code)
-        return r
+        return r, took
 
-    @staticmethod
-    def problem(r):
+    def call(self, method, path, timeout=120, retry=None, **kw):
+        return self.request(method, path, timeout, retry, **kw)[0]
+
+    @classmethod
+    def problem(cls, r):
+        """Silo's own words for a refused request, and what to do about it."""
         try:
             body = r.json()
         except ValueError:
-            return r.text[:200]
-        detail = str(body.get("detail") or body.get("title") or "") if isinstance(body, dict) else ""
+            body = None
+        silo = isinstance(body, dict)  # Silo answers with problem JSON; anything else is from something in front of it
+        detail = (str(body.get("detail") or body.get("title") or "") if silo else r.text)[:200]
         if r.status_code == 401:
-            detail += " (Silo did not accept the API key)"
+            detail += (f" (Silo did not accept the API key: make one under {cls.KEY_PAGE} that belongs to an "
+                       "administrator and has no scopes, and put it in server.api_key)")
         elif r.status_code == 403:
-            detail += (" (CineSets needs an API key that belongs to an administrator and has no scopes: "
-                       "Admin > API keys in Silo)")
-        return detail[:300]
+            detail += (" (CineSets needs an API key that belongs to an administrator and has no scopes: make one under "
+                       f"{cls.KEY_PAGE} in Silo and put it in server.api_key)")
+        elif r.status_code == 404 and not silo:
+            detail = ("(nothing answered there, so server.url is probably not Silo's own address: use the one its web "
+                      "app opens on, not its Jellyfin-compatible port)")
+        elif r.status_code == 413:
+            detail = ("(a proxy in front of Silo turned the upload away as too big: raise its limit, nginx's "
+                      "client_max_body_size, to 10m say)")
+        elif r.status_code == 429:
+            detail += (" (Silo is limiting how often CineSets can ask, and still was after waiting: try again later, "
+                       "or raise write_pause in config.yml)")
+        return detail.strip()
 
     def get(self, path, **kw):
         return self.call("GET", path, **kw).json()
 
-    def timed(self, method, path, pause=None, **kw):
-        """A write that backs off when the server is slow to take it."""
-        t = time.time()
-        r = self.call(method, path, **kw)
-        took = time.time() - t
-        time.sleep((self.pause if pause is None else pause) + min(took, 10))
+    def timed(self, method, path, pause=None, retry=None, **kw):
+        """A write, then a pause that spares Silo. Returns the response and how long the write took."""
+        r, took = self.request(method, path, retry=retry, **kw)
+        # Writes start no closer together than `pause` (write_pause, or a tenth of it between titles), and the pause
+        # after one is at least as long as it took, so Silo rests as long as it works however slow it gets. The pause
+        # used to be `pause` plus the write's time, after a write that had already taken that long, which counted the
+        # write's time twice: on a fast server writes came about twice as far apart as they needed to be, and a first
+        # run on a big library could take most of an hour.
+        floor = self.pause if pause is None else pause
+        time.sleep(max(floor - took, min(took, 10)))
         return r, took
 
     def pages(self, path, **kw):
@@ -244,22 +290,23 @@ class SiloServer(Server):
 
     def add_show_ids(self, items, name):
         """A show's content id carries one provider id (TVDB when it has one); lists also match by IMDb and TMDB, so
-        look the others up once per show and keep them."""
+        look the others up and keep them, with when they were looked up. A show with all three is looked up once; one
+        missing some (or that Silo had no record of) is looked up again after a week (see look_up)."""
         known = load_json(self.ids_file, {})
-        todo = [it for it in items if it["id"] not in known and it["ids"]]
+        now = time.time()
+        todo = [it for it in items if it["ids"] and look_up(known.get(it["id"]), now)]
         if todo:
-            print(f"  looking up the ids of {len(todo)} shows in {name} (once; later runs reuse them)")
+            print(f"  looking up the ids of {len(todo)} shows in {name} (later runs reuse them)")
         for n, it in enumerate(todo, start=1):
             try:
                 d = self.get(f"/catalog/items/{quote(it['id'], safe='')}", headers=self.profile())
             except ServerError as e:
-                if e.status == 404:
-                    known[it["id"]] = {}
-                    continue
-                raise
-            known[it["id"]] = {k: v for k, v in (("tmdb", provider_id(d.get("tmdb_id"))),
-                                                 ("imdb", provider_id(d.get("imdb_id"))),
-                                                 ("tvdb", provider_id(d.get("tvdb_id")))) if v}
+                if e.status != 404:
+                    raise
+                d = {}
+            found = {k: v for k, v in (("tmdb", provider_id(d.get("tmdb_id"))), ("imdb", provider_id(d.get("imdb_id"))),
+                                       ("tvdb", provider_id(d.get("tvdb_id")))) if v}
+            known[it["id"]] = {"ids": {**kept_ids(known.get(it["id"])), **found}, "checked": int(now)}
             if n % 250 == 0:
                 save_json(self.ids_file, known)
                 print(f"    {n} of {len(todo)}")
@@ -267,7 +314,7 @@ class SiloServer(Server):
         if todo:
             save_json(self.ids_file, known)
         for it in items:
-            it["ids"] = {**known.get(it["id"], {}), **it["ids"]}
+            it["ids"] = {**kept_ids(known.get(it["id"])), **it["ids"]}
 
     def genres(self, ids):
         out = {}
@@ -291,16 +338,29 @@ class SiloServer(Server):
         if not d.get("backdrop_url"):
             raise ServerError(f"{item_id} has no backdrop", 404)
         url = urljoin(self.root + "/", d["backdrop_url"])
-        if urlparse(url).netloc == urlparse(self.root).netloc:
-            r = self.session.get(url, timeout=60, allow_redirects=False)
+        if _origin(url) == _origin(self.root):  # Silo's own address, the only place the API key goes
+            r = send(self.session.get, url, True, timeout=60, allow_redirects=False, verify=self.verify)[0]
             if 300 <= r.status_code < 400 and r.headers.get("Location"):
-                url = urljoin(url, r.headers["Location"])
-                r = requests.get(url, timeout=60)  # a signed link to storage: no API key goes with it
+                r = self.from_storage(urljoin(url, r.headers["Location"]))  # Silo sent CineSets on to its storage
         else:
-            r = requests.get(url, timeout=60)  # artwork storage, with a signed link: no API key goes with it
+            r = self.from_storage(url)
         if r.status_code != 200:
             raise ServerError(f"backdrop for {item_id} -> {r.status_code}", r.status_code)
         return r.content
+
+    def from_storage(self, url, hops=3):
+        """Artwork from Silo's storage, with a signed link: no API key goes with it. A redirect is followed only to the
+        same scheme, host and port, a few at most, so a link can't send CineSets anywhere else."""
+        for _ in range(hops + 1):
+            r = send(requests.get, url, True, timeout=60, allow_redirects=False, verify=self.verify)[0]
+            if not (300 <= r.status_code < 400 and r.headers.get("Location")):
+                break
+            onward = urljoin(url, r.headers["Location"])
+            if _origin(onward) != _origin(url):
+                raise ServerError(f"artwork storage sent CineSets on to {urlparse(onward).netloc}, another host, so it "
+                                  "stopped there", r.status_code)
+            url = onward
+        return r
 
     # ------------------------------------------------------------ collections
     def list_collections(self):
@@ -320,7 +380,8 @@ class SiloServer(Server):
         libs = [home] if home else self.library_ids(coll["kind"])
         body = {"title": name, "slug": f"cinesets-{coll['key']}", "library_ids": libs,
                 "description": coll.get("overview", ""), "collection_type": "manual", "visibility": "visible"}
-        r, took = self.timed("POST", "/admin/collections", json=body)
+        # never sent twice: a try that failed may still have made it
+        r, took = self.timed("POST", "/admin/collections", json=body, retry=False)
         cid = str(r.json()["id"])
         self._next[cid], self._attached[cid] = 0, libs
         return cid, max(took, self.add_items(cid, ids))
@@ -332,7 +393,8 @@ class SiloServer(Server):
         """Move a collection to its library (see narrow) when that changed, before its titles are brought up to date."""
         home = self._home.get(coll["key"])
         if home and self._attached.get(cid) != [home]:
-            self.timed("PATCH", f"/admin/collections/{cid}", json={"library_ids": [home]}, headers={"If-Match": "*"})
+            self.timed("PATCH", f"/admin/collections/{cid}", json={"library_ids": [home]}, headers={"If-Match": "*"},
+                       retry=True)
             self._attached[cid] = [home]
 
     def members(self, cid, user_id):
@@ -341,13 +403,14 @@ class SiloServer(Server):
         return {r["media_item_id"] for r in rows}
 
     def add_items(self, cid, ids):
-        """One write per title, with a short pause between them. Titles Silo no longer has are skipped."""
+        """One write per title, with a short pause between them. Titles Silo no longer has are skipped. Adding a title
+        twice changes nothing, so a failed write is tried again."""
         slowest, gone = 0.0, 0
         for i in ids:
             pos = self._next.get(cid, 0)
             try:
                 took = self.timed("PUT", f"/admin/collections/{cid}/items/{quote(i, safe='')}", json={"position": pos},
-                                  pause=self.pause / 10)[1]
+                                  pause=self.pause / 10, retry=True)[1]
             except ServerError as e:
                 if e.status != 404:
                     raise
@@ -363,9 +426,10 @@ class SiloServer(Server):
         slowest = 0.0
         for i in ids:
             try:
-                took = self.timed("DELETE", f"/admin/collections/{cid}/items/{quote(i, safe='')}", pause=self.pause / 10)[1]
+                took = self.timed("DELETE", f"/admin/collections/{cid}/items/{quote(i, safe='')}",
+                                  pause=self.pause / 10, retry=True)[1]
             except ServerError as e:
-                if e.status != 404:
+                if e.status != 404:  # not a member: already out, perhaps by a try whose answer was lost
                     raise
                 continue
             slowest = max(slowest, took)
@@ -378,7 +442,8 @@ class SiloServer(Server):
             return None
 
     def upload_poster(self, cid, raw, user_id):
-        r, took = self.timed("PUT", f"/admin/collections/{cid}/poster", files={"image": ("poster.jpg", raw, "image/jpeg")})
+        r, took = self.timed("PUT", f"/admin/collections/{cid}/poster",
+                             files={"image": ("poster.jpg", raw, "image/jpeg")}, retry=True)
         try:
             body = r.json()
         except ValueError:
@@ -389,10 +454,14 @@ class SiloServer(Server):
         """Name, description and the order titles show in (Silo has no sort name; arrange places collections)."""
         body = {"title": name, "description": coll.get("overview", ""),
                 "sort_config": SORTS.get(coll.get("order", "PremiereDate"), {})}
-        return self.timed("PATCH", f"/admin/collections/{cid}", json=body, headers={"If-Match": "*"})[1]
+        return self.timed("PATCH", f"/admin/collections/{cid}", json=body, headers={"If-Match": "*"}, retry=True)[1]
 
     def delete_collection(self, cid):
-        self.timed("DELETE", f"/admin/collections/{cid}", headers={"If-Match": "*"})
+        try:
+            self.timed("DELETE", f"/admin/collections/{cid}", headers={"If-Match": "*"}, retry=True)
+        except ServerError as e:
+            if e.status != 404:  # gone already, by a try whose answer was lost on the way back
+                raise
 
     def arrange(self, owned):
         """Put CineSets' collections in Collections page order in each library, in the places they already hold among
@@ -410,7 +479,7 @@ class SiloServer(Server):
             want = [next(it) if i in ours else i for i in now]
             if want != now:
                 self.timed("PUT", "/admin/collections/order", json={"library_id": lib, "ordered_ids": want},
-                           headers={"If-Match": r.headers.get("ETag") or "*"})
+                           headers={"If-Match": r.headers.get("ETag") or "*"}, retry=True)
                 moved += 1
         if moved:
             print(f"Put the collections in order in {moved} libraries.")

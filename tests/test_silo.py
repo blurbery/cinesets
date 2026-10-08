@@ -450,7 +450,7 @@ def test_setup_writes_a_silo_config_with_the_biggest_library_of_each_type_first(
     out = tmp_path / "config.yml"
     cli.setup(str(out))
     cfg = config.load(str(out))
-    assert cfg["server"] == {"type": "silo", "url": "http://192.0.2.10:8080", "api_key": KEY}
+    assert cfg["server"] == {"type": "silo", "url": "http://192.0.2.10:8080", "api_key": KEY, "verify": True}
     assert cfg["libraries"] == [{"name": "Movies", "type": "movie"}, {"name": "Movies Anime", "type": "movie"},
                                 {"name": "TV Shows", "type": "show"}]                # the mixed library is left out
 

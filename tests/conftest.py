@@ -91,7 +91,8 @@ class FakeBase:
             return Resp(data=[{"Name": n, "ItemId": fid} for n, fid in self.libraries.items()])
         if method == "GET" and u.path == "/Items":
             if q.get("IncludeItemTypes") == "BoxSet":
-                return self.page([{"Id": c, "Name": v["Name"]} for c, v in self.collections.items()], q)
+                boxsets = [{"Id": c, "Name": v["Name"], "Type": "BoxSet"} for c, v in self.collections.items()]
+                return self.page(boxsets, q)
             if q.get("ParentId") in self.libraries.values():
                 return self.page([i for i in self.items.values()
                                   if i.get("lib") == q["ParentId"] and i["Type"] == q.get("IncludeItemTypes")], q)
