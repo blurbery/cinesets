@@ -16,7 +16,8 @@ that browser.
 
 ```bash
 ./run.sh web --link           # show the sign-in link again
-./run.sh web --set-password   # sign in with a password of your own as well (12 characters or more)
+./run.sh web --set-password   # sign in with a password of your own as well (12 characters or more);
+                              # setting, changing or removing it signs everyone out
 ./run.sh web --new-key        # a new key: everyone is signed out and old links stop working
 ```
 
@@ -34,7 +35,7 @@ What keeps other people and other sites out:
   [Reaching it from another computer](#reaching-it-from-another-computer)).
 - Every request must also carry a header that other web sites can't add, so a page you visit elsewhere can't use
   your session.
-- Wrong keys and passwords are rate limited.
+- Wrong passwords are rate limited. The access key never is, so nobody can lock you out by guessing.
 - Your media server's API key never reaches the browser.
 - The page loads nothing from the internet.
 
@@ -86,7 +87,11 @@ its own; nginx needs the line shown below). Then:
 - sign-ins are only taken over HTTPS;
 - browsers are told to always use HTTPS;
 - the session cookie is marked Secure;
-- wrong keys and passwords stay rate limited.
+- wrong passwords stay rate limited.
+
+The dashboard believes `X-Forwarded-Proto` from whoever connects, so keep it where only your proxy can reach it: on
+127.0.0.1, or on Docker published on the host's 127.0.0.1 as the example does. It warns when it starts if public
+mode listens on other addresses.
 
 Set a password of your own with `./run.sh web --set-password`, or use the access key link.
 
@@ -126,6 +131,11 @@ usual. Franchises always keep every film in their list. These are saved under `l
 
 Keep the dashboard on 127.0.0.1 with sign-in on, and put something in front of it that adds HTTPS. Every change to
 CineSets is tested with the Caddy and nginx setups below, on their own name and under a path.
+
+> [!TIP]
+> Give the dashboard a name of its own, like `cinesets.example.com`, rather than a path on a site you already
+> have. To a browser, everything else served on that name is the same site as the dashboard, so a page or script
+> there could use your dashboard session. Keeping the cookie to the dashboard's path doesn't stop that.
 
 | Way in | Who can reach it | HTTPS | `public: true` | Good for |
 |---|---|---|---|---|
@@ -251,6 +261,22 @@ Then open the sign-in link on your own computer. It's already `http://127.0.0.1:
 `./run.sh web --host 0.0.0.0` listens on every address of the machine. It's plain http, so the sign-in travels
 unencrypted on your network, and anyone there who gets the link can change your settings. Tailscale or a proxy
 with HTTPS is better.
+
+### Only the names you use
+
+If you like, list the names you reach the dashboard by, and it turns away requests for any other name:
+
+```yaml
+web:
+  hosts: [cinesets.example.com]
+```
+
+This guards against DNS rebinding, where another site points its own name at your machine so your browser talks
+to the dashboard for it. This machine's own names (127.0.0.1, localhost) and IP addresses always work, so list
+every other name you use: your proxy's, and `<machine>.<tailnet>.ts.net` if you use `tailscale serve`. An nginx
+without `proxy_set_header Host $host` passes on the name in its `proxy_pass` line instead, so list that too if it
+isn't 127.0.0.1 (`cinesets-web` on Docker, say). Without `hosts`, every name is answered. It applies with sign-in
+on; with sign-in off, only this machine's own names are answered anyway.
 
 ## Keeping it running
 

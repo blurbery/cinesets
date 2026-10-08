@@ -13,7 +13,7 @@ import requests
 from .store import load_json, save_json
 
 LIST_TTL = 3 * 3600
-SLUG = re.compile(r"^[A-Za-z0-9_.-]{1,80}/[A-Za-z0-9_.-]{1,120}$")
+SLUG = re.compile(r"^[A-Za-z0-9_.-]{1,80}/[A-Za-z0-9_.-]{1,120}\Z")
 
 
 def slug_of(text):
