@@ -104,7 +104,9 @@ Set a password of your own with `./run.sh web --set-password`, or use the access
 The Lists tab shows the MDBList lists behind every collection, each linking to its page.
 
 - **Add a list** to a collection, or **make a new collection** by pasting a list's address. CineSets shows how many
-  titles the list has and how many are in your library before you save.
+  titles the list has and how many of the type you pick are in your library before you save, and says when that's
+  fewer than a run makes a collection from (`min_items` under `defaults`, 8 unless you changed it). A list with
+  none in your library can't become a collection.
 - **Your collections and added lists** go in `custom-collections.yml` next to `config.yml`. CineSets reads it as
   well as its own catalogue, so updating CineSets never overwrites them.
 - **Removing** a collection there doesn't delete it from your server. `./run.sh remove --unpicked` does that.
@@ -119,13 +121,20 @@ usual. Franchises always keep every film in their list. These are saved under `l
 ## Your settings
 
 - **Saving:** writes the `posters`, `collections` and `limits` blocks in `config.yml` and leaves every other line
-  and comment alone. The file stays readable by you only, and the old version is kept as `config.yml.bak`.
+  and comment alone. The file stays readable by you only, and the old version is kept as `config.yml.bak`. Save
+  also keeps words typed in a poster's Text card, which go in `custom-collections.yml`; two collections can't be
+  given the same name.
+- **Undo:** Ctrl+Z (Cmd+Z on a Mac), or the arrows above the poster, steps back through design changes, and
+  Shift+Ctrl+Z (Shift+Cmd+Z) steps forward again. Removing a list, "Use the usual words" and resetting a design
+  each offer Undo too.
 - **Two people at once:** if `config.yml` changed after you opened the dashboard (another tab, someone else, or a
   hand edit), saving says so instead of overwriting the changes. Reload, then save again.
 - **Artwork:** choices are saved as soon as you make them, in `data/state.json` with the rest of CineSets' record.
   Keep the `data/` folder, as the README says.
 - **When posters change:** on the next apply, whether that's the Apply button, `./run.sh apply` or the schedule. On
-  Docker the schedule reads `config.yml` again before every job, so there's nothing to restart.
+  Docker the schedule reads `config.yml` again before every job, so there's nothing to restart. With unsaved
+  changes, Apply offers to save them first. When a run ends, the run log says how it went: what was created and
+  updated, any problems (the lines starting with `!!`) and whether it stopped early.
 
 ## Reaching it from another computer
 
