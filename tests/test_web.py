@@ -643,7 +643,7 @@ def test_public_mode_takes_sign_ins_only_over_https(make_cfg):
 
 
 def test_web_settings_in_config(make_cfg):
-    assert make_cfg()["web"] == {"host": "127.0.0.1", "port": 8095, "sign_in": True, "public": False}
+    assert make_cfg()["web"] == {"host": "127.0.0.1", "port": 8095, "sign_in": True, "public": False, "hosts": []}
     for bad, words in (("web: {port: 0}", "port must be"), ("web: {sign_in: maybe}", "sign_in must be true or false"),
                        ("web: [x]", "web must have")):
         with pytest.raises(SystemExit, match=words):
