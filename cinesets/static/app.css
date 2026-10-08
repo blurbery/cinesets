@@ -962,7 +962,10 @@ input[type="range"] { height: 22px; cursor: pointer; }
   .scopebar { margin: 0 -14px 14px; padding: 10px 14px 9px; }
   .brand { flex: 1; }
   .tabs { order: 3; width: 100%; }
-  .topbar-actions { flex-wrap: wrap; }
+  /* the bar at the bottom shows the unsaved state and Save, so the top keeps the rest, wrapping rather than
+     widening the page past the screen (which would also push that bar out of sight) */
+  .topbar-actions { flex: 1 1 auto; min-width: 0; flex-wrap: wrap; }
+  .topbar-actions > #dirty, .topbar-actions > #save-btn, .topbar-actions > .topbar-sep { display: none; }
   .main { position: static; }
   .main > [role="tabpanel"] { position: static; }
   .panel-collections, .panel-grid, .panel-lists { overflow: visible; }
