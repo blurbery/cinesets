@@ -8,14 +8,21 @@ Jellyfin began as a fork of Emby and the two APIs are still close, but each serv
 for one can't change what the other gets."""
 import base64
 import time
+from functools import partial
+from urllib.parse import urlparse
 
 import requests
 
 from .. import __version__
-from . import ServerError, chunks, public_info, warn_plain_http
+from . import ServerError, chunks, public_info, send, verify_setting, warn_plain_http
 from .base import Server
 
 PAGE = 5000
+# a fixed order to page through, so no title slips between pages (Jellyfin 10.11 can skip some without one): by
+# name, then year, then when it was added
+ORDER = "SortBy=SortName,ProductionYear,DateCreated&SortOrder=Ascending"
+# paths every Jellyfin server answers, so a 404 on one means server.url isn't Jellyfin's address
+BASE_PATHS = ("/Library/VirtualFolders", "/Users", "/Items", "/Collections", "/System/Info")
 
 
 class JellyfinCalls(Server):
@@ -23,21 +30,28 @@ class JellyfinCalls(Server):
     these, so it answers exactly the requests a real Jellyfin server gets."""
 
     def all_items(self, query, what, pause=0.0, keep=None):
-        """Every item an /Items query returns, a page at a time. A short page is not taken as the end, since a server
-        or a proxy in front of it may send fewer items than asked for: reading stops at an empty page. With `keep`,
-        each item is cut down to keep(item) as its page arrives, so a big library is never held in memory whole."""
-        out, seen, start = [], set(), 0
+        """Every item an /Items query returns, a page at a time, in a fixed order. A short page is not taken as the
+        end, since a server or a proxy in front of it may send fewer items than asked for: reading stops at an empty
+        page. The first page also asks how many there are, to say so if fewer came back. With `keep`, each item is
+        cut down to keep(item) as its page arrives, so a big library is never held in memory whole."""
+        out, seen, start, total = [], set(), 0, None
         while True:
-            page = self.get(f"/Items?{query}&StartIndex={start}&Limit={PAGE}&EnableTotalRecordCount=false")["Items"]
-            new = [i for i in page if i["Id"] not in seen]
+            page = self.get(f"/Items?{query}&StartIndex={start}&Limit={PAGE}&{ORDER}"
+                            f"&EnableTotalRecordCount={'true' if start == 0 else 'false'}")
+            if start == 0:
+                total = page.get("TotalRecordCount")
+            new = [i for i in page["Items"] if i["Id"] not in seen]
             if not new:
-                if page:  # the same items again: the server ignored StartIndex, so stop rather than loop forever
+                if page["Items"]:  # the same items again: the server ignored StartIndex, so stop, not loop forever
                     print(f"   the server sent the same page of {what} twice; anything after it was not read")
-                return out
+                break
             seen.update(i["Id"] for i in new)
             out += [keep(i) for i in new] if keep else new
-            start += len(page)
+            start += len(page["Items"])
             time.sleep(pause)
+        if isinstance(total, int) and len(seen) < total:
+            print(f"   {what}: the server counted {total} but sent {len(seen)}; the others were not read")
+        return out
 
     # ------------------------------------------------------------ libraries
     def media_libraries(self):
@@ -68,7 +82,11 @@ class JellyfinCalls(Server):
         return {i["Id"] for i in self.get(f"/Items?Ids={','.join(ids)}")["Items"]}
 
     def backdrop_image(self, item_id, width=1920, quality=90):
-        return self.call("GET", f"/Items/{item_id}/Images/Backdrop?maxWidth={width}&quality={quality}").content
+        """A poster is cut from the middle of a wide backdrop, so for posters and their previews it's the backdrop's
+        height that counts: 1920 wide is only 1080 tall, stretched to fill a 1500 tall poster. So those are asked for
+        by height (1600 for 1920), and thumbnails, which are shown wide, by width."""
+        size = f"maxHeight={width * 5 // 6}" if width > 800 else f"maxWidth={width}"
+        return self.call("GET", f"/Items/{item_id}/Images/Backdrop?{size}&quality={quality}").content
 
     # ------------------------------------------------------------ collections
     def list_collections(self):
@@ -80,8 +98,9 @@ class JellyfinCalls(Server):
         return ids
 
     def create_collection(self, name, coll, ids):
-        """Make a collection holding `ids`. Returns its id and how long the write took."""
-        r, took = self.timed("POST", f"/Collections?Name={requests.utils.quote(name)}&Ids={','.join(ids)}")
+        """Make a collection holding `ids`. Returns its id and how long the write took. Never sent twice: a try that
+        failed may still have made it."""
+        r, took = self.timed("POST", f"/Collections?Name={requests.utils.quote(name)}&Ids={','.join(ids)}", retry=False)
         return r.json()["Id"], took
 
     def wait_until_ready(self, cid, user_id, seconds=20):
@@ -103,16 +122,17 @@ class JellyfinCalls(Server):
         return {i["Id"] for i in self.all_items(f"ParentId={cid}&UserId={user_id}", f"collection {cid}")}
 
     def add_items(self, cid, ids):
-        """Returns the slowest write."""
+        """Returns the slowest write. Adding a title twice changes nothing, so a failed write is tried again."""
         slowest = 0.0
         for batch in chunks(ids):
-            slowest = max(slowest, self.timed("POST", f"/Collections/{cid}/Items?Ids={','.join(batch)}")[1])
+            slowest = max(slowest, self.timed("POST", f"/Collections/{cid}/Items?Ids={','.join(batch)}", retry=True)[1])
         return slowest
 
     def remove_items(self, cid, ids):
         slowest = 0.0
         for batch in chunks(ids):
-            slowest = max(slowest, self.timed("DELETE", f"/Collections/{cid}/Items?Ids={','.join(batch)}")[1])
+            slowest = max(slowest, self.timed("DELETE", f"/Collections/{cid}/Items?Ids={','.join(batch)}",
+                                              retry=True)[1])
         return slowest
 
     def poster_tag(self, cid, user_id):
@@ -134,7 +154,7 @@ class JellyfinCalls(Server):
         """Upload a JPEG poster. Returns whether the server kept it, and how long the write took."""
         before = self.poster_tag(cid, user_id)
         took = self.timed("POST", f"/Items/{cid}/Images/Primary", data=base64.b64encode(raw),
-                          headers={"Content-Type": "image/jpeg"})[1]
+                          headers={"Content-Type": "image/jpeg"}, retry=True)[1]
         return self.has_poster(cid, user_id, changed_from=before), took
 
     def set_details(self, cid, user_id, coll, name):
@@ -146,10 +166,19 @@ class JellyfinCalls(Server):
         item["DisplayOrder"] = coll.get("order", "PremiereDate")
         lock = {"Name", "Overview"}  # Jellyfin has no lock for the sort name
         item["LockedFields"] = sorted(set(item.get("LockedFields") or []) | lock)
-        return self.timed("POST", f"/Items/{cid}", json=item)[1]
+        return self.timed("POST", f"/Items/{cid}", json=item, retry=True)[1]
 
     def delete_collection(self, cid):
-        self.timed("DELETE", f"/Items/{cid}")
+        """Only once Jellyfin confirms it's a collection: DELETE /Items/{id} deletes any item, a film and its files
+        too."""
+        found = self.get(f"/Items?Ids={cid}&IncludeItemTypes=BoxSet&Recursive=true")["Items"]
+        if not any(str(i.get("Id")) == str(cid) and i.get("Type") == "BoxSet" for i in found):
+            raise ServerError(f"Jellyfin's item {cid} is not a collection, so CineSets did not delete it")
+        try:
+            self.timed("DELETE", f"/Items/{cid}", retry=True)
+        except ServerError as e:
+            if e.status != 404:  # gone already, by a try whose answer was lost on the way back
+                raise
 
     def arrange(self, owned):
         """Nothing to do: the sort names set_details writes keep Jellyfin's Collections page in order."""
@@ -162,18 +191,20 @@ class JellyfinServer(JellyfinCalls):
 
     @staticmethod
     def trim(url):
-        """A pasted web app address works too: drop /web/index.html#... and a trailing /web."""
-        url = url.split("/web/")[0].split("/web#")[0].rstrip("/")
-        if url.endswith("/web"):
-            url = url[: -len("/web")]
-        return url
+        """A pasted web app address works too: drop /web/index.html#... and a trailing /web from the path. Only the
+        path, so a server called web keeps its name."""
+        parts = urlparse(url)
+        path = parts.path.split("/web/")[0].rstrip("/")
+        if path.endswith("/web"):
+            path = path[: -len("/web")]
+        return parts._replace(path=path, params="", query="", fragment="").geturl()
 
     @staticmethod
-    def detect(url):
+    def detect(url, verify=True):
         """("jellyfin", url, None) from the server's public information (no API key needed), or None."""
         # the first of these that says which server it is decides
         for path in ("/System/Info/Public", "/emby/System/Info/Public"):
-            info = public_info(url, path)
+            info = public_info(url, path, verify)
             if info is None:
                 continue
             product = str(info.get("ProductName") or "").lower()
@@ -189,6 +220,7 @@ class JellyfinServer(JellyfinCalls):
             raise SystemExit("No API key: set server.api_key in config.yml or CINESETS_API_KEY")
         self.base = srv["url"]
         warn_plain_http(srv["url"])
+        self.verify = verify_setting(cfg)
         self.pause = float(cfg["write_pause"])
         self.session = requests.Session()
         self.session.headers.update({"accept": "application/json", "X-Emby-Token": srv["api_key"],
@@ -197,29 +229,58 @@ class JellyfinServer(JellyfinCalls):
             f'MediaBrowser Client="CineSets", Device="CineSets", DeviceId="cinesets", '
             f'Version="{__version__}", Token="{srv["api_key"]}"')
 
-    def call(self, method, path, timeout=120, **kw):
+    def request(self, method, path, timeout=120, retry=None, **kw):
+        """One request, and how long the try that got its answer took. Reads are sent again after a dropped connection
+        or a busy answer, and so are writes whose caller says retry=True: ones that do the same thing however often
+        they arrive."""
         # never follow redirects: the API key travels in headers and must not reach another host
-        r = self.session.request(method, self.base + path, timeout=timeout, allow_redirects=False, **kw)
+        again = method == "GET" if retry is None else retry
+        r, took = send(partial(self.session.request, method), self.base + path, again, timeout=timeout,
+                       allow_redirects=False, verify=self.verify, **kw)
         if 300 <= r.status_code < 400:
             raise ServerError(f"{method} {path.split('?')[0]} was redirected to {r.headers.get('Location', '?')}: "
                               f"set server.url to the address the server answers on directly", r.status_code)
         if r.status_code not in (200, 201, 204):
-            raise ServerError(f"{method} {path.split('?')[0]} -> {r.status_code} {r.text[:200]}", r.status_code)
-        return r
+            raise ServerError(self.refused(method, path, r), r.status_code)
+        return r, took
+
+    def refused(self, method, path, r):
+        """What a refused request means, and what to do about it."""
+        where = path.split("?")[0]
+        said = f"{method} {where} -> {r.status_code}"
+        if r.status_code in (401, 403):
+            return (f"{said}: Jellyfin did not accept the API key. CineSets needs one from {self.KEY_PAGE} on Jellyfin "
+                    "(only an administrator can make them) in server.api_key")
+        if r.status_code == 404 and where in BASE_PATHS:
+            return (f"{said}: nothing answered there, so server.url is probably not Jellyfin's address. Use the "
+                    "address Jellyfin's web app opens on")
+        if r.status_code == 413:
+            return (f"{said}: a proxy in front of Jellyfin turned the upload away as too big. Raise its limit (nginx's "
+                    "client_max_body_size, to 10m say)")
+        if r.status_code == 429:
+            return (f"{said}: Jellyfin, or a proxy in front of it, is limiting how often CineSets can ask, and still "
+                    "was after waiting. Try again later, or raise write_pause in config.yml")
+        return f"{said} {r.text[:200]}"
+
+    def call(self, method, path, timeout=120, retry=None, **kw):
+        return self.request(method, path, timeout, retry, **kw)[0]
 
     def get(self, path, **kw):
         return self.call("GET", path, **kw).json()
 
-    def timed(self, method, path, **kw):
+    def timed(self, method, path, retry=None, **kw):
         """A write that backs off when the server is slow to take it."""
-        t = time.time()
-        r = self.call(method, path, **kw)
-        took = time.time() - t
+        r, took = self.request(method, path, retry=retry, **kw)
         time.sleep(self.pause + min(took, 10))
         return r, took
 
     def admin_user(self):
-        return next(u["Id"] for u in self.get("/Users") if u.get("Policy", {}).get("IsAdministrator"))
+        """Collections are made as an administrator: the first one Jellyfin lists."""
+        admin = next((u["Id"] for u in self.get("/Users") if (u.get("Policy") or {}).get("IsAdministrator")), None)
+        if admin is None:
+            raise ServerError(f"Jellyfin lists no administrator for this API key, and CineSets makes collections as "
+                              f"one. Use a key from {self.KEY_PAGE} on Jellyfin in server.api_key")
+        return admin
 
     def item(self, user_id, item_id):
         """One item with full metadata, as the edit endpoint expects it back."""

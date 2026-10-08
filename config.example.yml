@@ -11,6 +11,9 @@ server:
   api_key: ""                    # Dashboard > API Keys on Emby or Jellyfin. On Silo, Admin > API keys: a key
                                  # that belongs to an administrator, with no scopes. Or leave empty and set
                                  # CINESETS_API_KEY in the environment.
+  verify: true                   # check the server's https certificate. For a self-signed one, the path of the
+                                 # CA certificate that signed it (relative to this file), or false to skip the
+                                 # check (only on your own network).
 
 # Libraries CineSets matches titles in. Names must match your server's library names exactly
 # (for example "Films" or "Kids TV"). When a title is in several, the first library listed wins.

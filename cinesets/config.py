@@ -13,12 +13,13 @@ import tempfile
 
 import yaml
 
-from .servers import SERVERS
+from .servers import SERVERS, server_class
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 DEFAULTS = {
-    "server": {"type": next(iter(SERVERS)), "url": "http://127.0.0.1:8096", "api_key": ""},  # the first server listed
+    # the first server listed; verify: check the server's certificate (true), skip that (false) or use a CA file
+    "server": {"type": next(iter(SERVERS)), "url": "http://127.0.0.1:8096", "api_key": "", "verify": True},
     "libraries": [],
     "collections_file": "collections.yml",
     # collections added in the dashboard, and lists added to existing ones; read as well as collections_file
@@ -72,6 +73,8 @@ def load(path=None):
     check_type(srv["type"])
     if not srv["url"].startswith(("http://", "https://")):
         raise SystemExit(f"server.url must start with http:// or https:// (got {srv['url']!r})")
+    # a pasted browser address works here too, tidied the way setup tidies it, by this server's own module only
+    srv["url"] = server_class(srv["type"]).trim(srv["url"])
     cfg["libraries"] = cfg["libraries"] or []
     for lib in cfg["libraries"]:
         t = str(lib.get("type", "")).lower()

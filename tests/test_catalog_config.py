@@ -202,7 +202,8 @@ def test_setup_writes_private_valid_config(tmp_path, monkeypatch):
     cli.setup(str(out))
     assert oct(os.stat(out).st_mode & 0o777) == "0o600"
     cfg = config.load(str(out))
-    assert cfg["server"] == {"type": "jellyfin", "url": "http://192.0.2.10:8096", "api_key": 'k"ey\\with: odd'}
+    assert cfg["server"] == {"type": "jellyfin", "url": "http://192.0.2.10:8096", "api_key": 'k"ey\\with: odd',
+                             "verify": True}
     assert cfg["libraries"] == [{"name": 'Kid\'s "Films"', "type": "movie"}, {"name": "TV: All", "type": "show"}]
 
 

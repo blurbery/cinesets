@@ -66,7 +66,16 @@ Jellyfin-compatible one can't make collections.
   all" shows them all.
 - **The first `apply`:** Silo adds titles to a collection one at a time, so it takes a while on a big library.
   The first run also looks up each TV show's IMDb and TMDB ids once, so lists match the same shows they do on
-  Emby, and keeps them in `data/silo-ids.json`.
+  Emby, and keeps them in `data/silo-ids.json`. A show missing some of them is looked up again after a week.
+
+### A self-signed certificate
+
+If your server's `https://` address has a certificate CineSets doesn't trust (a self-signed one, say), it stops
+and says so. Set `verify` under `server` in `config.yml` to the CA certificate file that signed it (a path relative
+to `config.yml`'s folder; on Docker, one inside the container), or to `false` to skip the check, which is only wise
+on your own network. It covers everything CineSets fetches from the server, Silo's artwork storage included.
+Setup can't ask for it yet: give setup the server's `http://` address and change `url` afterwards, or fill in
+`config.yml` from `config.example.yml` by hand.
 
 ## Docker
 
