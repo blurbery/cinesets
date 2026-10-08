@@ -64,6 +64,7 @@ collections you want, does a dry run and offers to make them and keep them updat
 | `./run.sh apply --reshuffle` | Picks new random artwork for the posters (with `artwork: random`) |
 | `./run.sh adopt --all` | Takes your collections back after a reinstall |
 | `./run.sh remove --only KEY` | Deletes a collection CineSets made (`--unpicked` for the ones you unpicked, `--all` for all of them) |
+| `./run.sh forget KEY` | Stops managing a collection and leaves it on your server as it is (`adopt` takes it back) |
 
 Most of them take `--only key1,key2` or `--group streaming`. `./run.sh --help` shows the rest.
 

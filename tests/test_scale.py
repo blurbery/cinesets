@@ -143,12 +143,12 @@ def test_no_collection_is_made_or_emptied_with_no_matches_even_at_min_0(make_cfg
     (coll,) = srv.collections.values()                    # m-gone has nothing in the library, so it is not made
     assert coll["members"] == ["m1", "m2"]
     out = capsys.readouterr().out
-    assert "skipped m-gone: no matches" in out and "!!" not in out
+    assert "m-gone: no matches, so it is not made" in out and "!!" not in out
     seed_index(cfg, {"x1": ("Something Else", 2001, "movie")})   # the library has lost both films
     srv.calls.clear()
     eng.run("apply", catalog.load(cfg), 0)
     assert coll["members"] == ["m1", "m2"] and srv.writes() == []
-    assert "skipped m-bttf: no matches" in capsys.readouterr().out
+    assert "m-bttf: no matches, so it is left as it is on the server" in capsys.readouterr().out
 
 
 def test_a_title_without_a_name_does_not_stop_the_run(make_cfg, monkeypatch, capsys):

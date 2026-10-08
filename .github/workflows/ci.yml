@@ -13,9 +13,11 @@ on:
 permissions:
   contents: read
 
+# A new push to a pull request replaces its older run. Every push to main, and every scheduled run, gets a run of
+# its own, so a merge straight after another can't cancel the first one's tests.
 concurrency:
-  group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
   tests:

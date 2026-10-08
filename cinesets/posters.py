@@ -97,7 +97,7 @@ LAYOUT = POSITIONS + tuple(SIZES)  # where text sits and how big: streaming post
 # shade: (artwork brightness, top darkening, bottom darkening, glow when there is no artwork)
 SHADES = {"light": (0.92, 0.62, 0.86, 0.9), "medium": (0.78, 0.78, 0.95, 0.8), "dark": (0.62, 0.86, 1.0, 0.6)}
 TINTS = {"strong": 0.56, "normal": 0.38, "subtle": 0.2, "none": 0.0}
-HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
+HEX = re.compile(r"^#[0-9a-fA-F]{6}\Z")
 
 
 def _hex(value):

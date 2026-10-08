@@ -76,6 +76,23 @@
       </span>
     </div>
 
+    <div id="offline" class="banner banner-offline" role="alert" hidden>
+      <span id="offline-text" class="banner-text"></span>
+      <span class="banner-actions">
+        <button id="offline-retry" class="btn btn-small" type="button">Try now</button>
+      </span>
+    </div>
+
+    <section id="intro" class="intro" aria-labelledby="intro-title" hidden>
+      <h2 id="intro-title" class="intro-title">Getting started</h2>
+      <ol class="intro-steps">
+        <li><span>Turn collections on in <button id="intro-collections" class="link-btn" type="button">Collections</button>.</span></li>
+        <li><span>Design their posters in Design, for a whole section or one poster at a time.</span></li>
+        <li><span>Press Save, then Apply to make them on <span id="intro-server">your media server</span>.</span></li>
+      </ol>
+      <button id="intro-close" class="btn btn-small" type="button">Got it</button>
+    </section>
+
     <main class="main">
       <!-- Collections: turn collections on and off -->
       <section id="panel-collections" class="panel-collections" role="tabpanel" aria-labelledby="tab-collections" hidden>
@@ -119,7 +136,7 @@
           <div class="col-toolbar">
             <div class="col-title">
               <h1>Lists</h1>
-              <p class="muted">Where each collection's titles come from. List changes save to the server straight away; they are not part of Save.</p>
+              <p class="muted">Where each collection's titles come from. List changes are kept straight away, without Save, and reach your media server on the next apply.</p>
             </div>
             <a class="btn" href="https://mdblist.com/lists/" target="_blank" rel="noopener noreferrer">Find lists on MDBList</a>
           </div>
@@ -133,6 +150,7 @@
               <button id="nc-check" class="btn btn-primary" type="button">Check</button>
             </div>
             <div id="nc-result" class="nc-result" role="status" aria-live="polite" hidden></div>
+            <p id="nc-warn" class="nc-warn" role="status" hidden></p>
 
             <div id="nc-mode" class="seg nc-mode" role="radiogroup" aria-label="What to do with these lists" hidden>
               <label class="seg-opt"><input class="vh" type="radio" name="nc-mode" value="new" checked><span>New collection</span></label>
@@ -221,9 +239,19 @@
         <div id="centre" class="centre">
           <div id="scopebar" class="scopebar">
             <div class="scopebar-inner">
-              <div class="seg seg-scope" role="radiogroup" aria-label="Design mode">
-                <label class="seg-opt"><input class="vh" type="radio" name="mode" value="section" checked><span>Whole section</span></label>
-                <label class="seg-opt"><input class="vh" type="radio" name="mode" value="poster"><span>Each poster</span></label>
+              <div class="scope-row">
+                <div class="seg seg-scope" role="radiogroup" aria-label="Design mode">
+                  <label class="seg-opt"><input class="vh" type="radio" name="mode" value="section" checked><span>Whole section</span></label>
+                  <label class="seg-opt"><input class="vh" type="radio" name="mode" value="poster"><span>Each poster</span></label>
+                </div>
+                <span class="btn-group history">
+                  <button id="undo-btn" class="btn btn-icon btn-small" type="button" aria-label="Undo" title="Undo (Ctrl or Cmd + Z)" disabled>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M9 14L4 9l5-5M4 9h10.5a5.5 5.5 0 010 11H11" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </button>
+                  <button id="redo-btn" class="btn btn-icon btn-small" type="button" aria-label="Redo" title="Redo (Shift + Ctrl or Cmd + Z)" disabled>
+                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M15 14l5-5-5-5M20 9H9.5a5.5 5.5 0 000 11H13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+                  </button>
+                </span>
               </div>
               <div id="mode-banner" class="mode-banner">
                 <p id="scope-line" class="scope-line" role="status" aria-live="polite"></p>
@@ -236,7 +264,7 @@
           <div class="editor">
             <div class="editor-head">
               <div class="editor-title">
-                <h1 id="ed-name"></h1>
+                <h1 id="ed-name" tabindex="-1"></h1>
                 <div class="ed-meta">
                   <span id="ed-kind" class="tag"></span>
                   <span id="ed-section"></span>
@@ -261,6 +289,10 @@
                 </div>
                 <div id="candidate-tag" class="candidate-tag" hidden></div>
                 <span class="stage-spinner spinner" aria-hidden="true"></span>
+                <div id="stage-fail" class="stage-fail" role="alert" hidden>
+                  <p id="stage-fail-text"></p>
+                  <button id="stage-retry" class="btn btn-small" type="button">Try again</button>
+                </div>
               </div>
             </div>
 
@@ -268,6 +300,7 @@
               <div class="strip-head">
                 <h2 id="strip-heading" class="strip-title"></h2>
                 <span class="hint">Click a poster to show it above.</span>
+                <button id="strip-retry" class="link-btn" type="button" hidden>Try the missing ones again</button>
               </div>
               <div id="strip-row" class="strip-row"></div>
             </section>
@@ -290,7 +323,7 @@
             <section id="text-panel" class="card textcard" aria-labelledby="text-heading">
               <div class="artwork-head">
                 <h2 id="text-heading">Text</h2>
-                <span class="art-status">Saves straight away on the server, not with Save.</span>
+                <span class="art-status">Save text (or Save at the top) keeps it. Your media server shows it after the next apply.</span>
               </div>
               <div class="text-grid">
                 <div class="nc-field">
@@ -335,13 +368,16 @@
                   <span>Automatic</span>
                 </button>
               </div>
-              <p class="hint">Artwork changes save straight away on the server. They are not part of Save.</p>
+              <p class="hint">Artwork choices are kept as soon as you make them, without Save. Your media server shows them after the next apply.</p>
               <div id="chooser" class="chooser" hidden>
                 <div class="chooser-head">
-                  <span id="chooser-msg">Hover over a title to preview it, click to use it.</span>
-                  <button id="chooser-close" class="btn btn-icon btn-small" type="button" aria-label="Close the artwork chooser">
-                    <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-                  </button>
+                  <span id="chooser-msg"></span>
+                  <span class="chooser-actions">
+                    <button id="chooser-use" class="btn btn-small btn-primary" type="button" hidden>Use this</button>
+                    <button id="chooser-close" class="btn btn-icon btn-small" type="button" aria-label="Close the artwork chooser">
+                      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
+                    </button>
+                  </span>
                 </div>
                 <div id="chooser-grid" class="chooser-grid"></div>
               </div>
@@ -366,7 +402,10 @@
               <h1>Preview all</h1>
               <p class="hint">Every collection that is on, in the current style with unsaved changes. Click a poster to design it.</p>
             </div>
-            <span id="grid-status" class="grid-status" role="status" aria-live="polite"></span>
+            <span class="grid-side">
+              <span id="grid-status" class="grid-status" role="status" aria-live="polite"></span>
+              <button id="grid-retry" class="btn btn-small" type="button" hidden>Try the missing ones again</button>
+            </span>
           </div>
           <div id="grid" class="grid"></div>
           <p id="grid-empty" class="empty" hidden>No collections are on yet. Turn some on in the Collections tab.</p>
@@ -384,6 +423,14 @@
       </div>
       <pre id="runlog-text" class="runlog-text" tabindex="0" aria-label="Run output"></pre>
     </section>
+
+    <!-- phones: the poster stays in view while the Style controls are scrolled to, and Save and Apply stay at hand -->
+    <button id="mini" class="mini is-on" type="button" aria-label="Back to the poster"><img id="mini-img" alt=""></button>
+    <div id="mobilebar" class="mobilebar">
+      <span id="m-dirty" class="dirty"></span>
+      <button id="m-save" class="btn btn-primary" type="button" disabled>Save</button>
+      <button id="m-apply" class="btn" type="button">Apply</button>
+    </div>
   </div>
 
   <div id="sr-live" class="vh" aria-live="polite"></div>
@@ -395,6 +442,7 @@
       <p id="confirm-text"></p>
       <div class="dialog-actions">
         <button id="confirm-cancel" class="btn" value="cancel">Cancel</button>
+        <button id="confirm-alt" class="btn" value="alt" hidden></button>
         <button id="confirm-ok" class="btn btn-primary" value="ok">OK</button>
       </div>
     </form>

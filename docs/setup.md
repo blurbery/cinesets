@@ -66,7 +66,16 @@ Jellyfin-compatible one can't make collections.
   all" shows them all.
 - **The first `apply`:** Silo adds titles to a collection one at a time, so it takes a while on a big library.
   The first run also looks up each TV show's IMDb and TMDB ids once, so lists match the same shows they do on
-  Emby, and keeps them in `data/silo-ids.json`.
+  Emby, and keeps them in `data/silo-ids.json`. A show missing some of them is looked up again after a week.
+
+### A self-signed certificate
+
+If your server's `https://` address has a certificate CineSets doesn't trust (a self-signed one, say), it stops
+and says so. Set `verify` under `server` in `config.yml` to the CA certificate file that signed it (a path relative
+to `config.yml`'s folder; on Docker, one inside the container), or to `false` to skip the check, which is only wise
+on your own network. It covers everything CineSets fetches from the server, Silo's artwork storage included.
+Setup can't ask for it yet: give setup the server's `http://` address and change `url` afterwards, or fill in
+`config.yml` from `config.example.yml` by hand.
 
 ## Docker
 
@@ -80,7 +89,10 @@ docker compose up -d                       # creates the collections, then keeps
 ```
 
 Inside the container `127.0.0.1` is the container itself, so give setup your server's LAN address (port 8080 for
-Silo). `up -d` runs the schedule from `config.yml`, starting with everything straight away. Changes to
+Silo). `up -d` runs the schedule from `config.yml`, the first time starting with everything straight away. When
+each job last ran is kept in `data/`, so a restart carries on where it left off, a job that didn't finish is tried
+again after about an hour. `docker compose stop` lets it finish the collection it's on first, and if Docker's grace
+period runs out nothing is lost, as the record is saved after each collection. Changes to
 `config.yml`, from the dashboard or by hand, apply from the next job; restart the container only after changing
 the `schedule` itself. Any command in the README works as `docker compose run --rm cinesets <command>`.
 
@@ -89,6 +101,11 @@ the `schedule` itself. Any command in the README works as `docker compose run --
 The installer can add the schedule to your crontab: Trending Top 20 every 6 hours, charts and seasonal daily,
 and everything on Sundays. To run it from `/etc/cron.d` instead, `deploy/cron.example` has the same jobs. Docker
 runs the `schedule` from `config.yml`. CineSets takes its own lock, so overlapping runs wait for each other.
+
+Each `plan` and `apply` ends with a line like `Summary: 3 created, 40 updated, 2 left as they are (below the
+minimum), 1 failed`, and `Stopped early: ...` above it when it stopped to spare the server. It exits with code 1
+when something failed or it stopped early, so cron mail, systemd and the dashboard show the problem. Collections
+left as they are because too few of their titles are in your library don't count as failures.
 
 ## Updating CineSets
 

@@ -18,14 +18,16 @@ class Server:
     SETUP_NOTE = None
 
     @staticmethod
-    def detect(url):
+    def detect(url, verify=True):
         """(server type, its own address or None to ask for it, a note for setup or None) if this server answers at
-        `url`, from its public information (no API key), or None if it isn't this server."""
+        `url`, from its public information (no API key), or None if it isn't this server. `verify` is server.verify,
+        for the server's certificate."""
         raise NotImplementedError
 
     @staticmethod
     def trim(url):
-        """A pasted browser address, tidied (a web app page on the end taken off)."""
+        """A pasted browser address, tidied (a web app page on the end of its path taken off, never part of the host's
+        name)."""
         raise NotImplementedError
 
     # ------------------------------------------------------------ reads
