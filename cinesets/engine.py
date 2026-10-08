@@ -22,7 +22,7 @@ from .lists import fetch_list
 from .servers import ServerError, chunks
 from .store import load_json, save_json
 
-SAFE_ID = re.compile(r"^[A-Za-z0-9-]+$")
+SAFE_ID = re.compile(r"^[A-Za-z0-9-]+\Z")
 RANDOM_FROM = 25  # random artwork comes from the top titles of a collection, so posters show ones people know
 
 INDEX_MAX_AGE = 20 * 3600

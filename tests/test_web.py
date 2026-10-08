@@ -145,7 +145,7 @@ def test_wrong_keys_are_rate_limited(site, monkeypatch):
     call, cfg, srv, app, client = site
     monkeypatch.setattr(web.time, "sleep", lambda s: None)
     assert [client.sign_in(f"guess-{n}")[0] for n in range(6)] == [401] * 5 + [429]
-    assert client.sign_in(key_of(cfg))[0] == 429                     # even the right key waits it out
+    assert client.sign_in(key_of(cfg))[0] == 200                     # but the right key always works
 
 
 def test_password_sign_in_and_a_new_key_signs_everyone_out(site):
