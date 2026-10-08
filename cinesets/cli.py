@@ -124,8 +124,7 @@ def schedule(cfg, engine, path=None):
         if set(job) - JOB_KEYS:
             print(f"Note: schedule: CineSets doesn't know {', '.join(sorted(map(str, set(job) - JOB_KEYS)))} in {job}, "
                   "so it is ignored (a job takes every_hours, and only, group or all)")
-    times = os.path.join(cfg.path("data_dir"), "schedule.json")
-    last = load_json(times, {})
+    last = load_json(os.path.join(cfg.path("data_dir"), "schedule.json"), {})
     last = last if isinstance(last, dict) else {}
     flags = {"busy": False, "stop": False}
 
@@ -133,12 +132,13 @@ def schedule(cfg, engine, path=None):
         flags["stop"] = True
         if not flags["busy"]:  # waiting between jobs: stop now. In a job, the run stops after the collection it is on
             raise Stopped()
+    before = None
     try:
-        before = signal.signal(signal.SIGTERM, on_term)
-    except ValueError:  # not the main thread, so nothing to stop it but the process ending
-        before = None
-    print(f"CineSets {__version__} scheduler: {len(jobs)} jobs")
-    try:
+        try:
+            before = signal.signal(signal.SIGTERM, on_term)
+        except ValueError:  # not the main thread, so nothing to stop it but the process ending
+            pass
+        print(f"CineSets {__version__} scheduler: {len(jobs)} jobs")
         while True:
             for i, job in enumerate(jobs):
                 if not job_due(job, last.get(job_name(job)), time.time()):
