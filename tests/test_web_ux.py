@@ -113,3 +113,4 @@ def test_the_page_keeps_to_its_rules():
     for name in re.findall(r'\$\("([a-z0-9-]+)"\)', script):                # every element the script looks up exists
         assert name in ids, name
     assert "—" not in page + script + css                              # no em dashes
+    assert 'api("api/run?since=' in script and 'body.size = "small"' in script

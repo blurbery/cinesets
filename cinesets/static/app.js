@@ -7,7 +7,12 @@
 (() => {
   // ------------------------------------------------------------------ constants
   const SESSION_ENDED = "Your session ended. Sign in again to carry on; your unsaved changes are still here.";
-  const UNREACHABLE = "Can't reach CineSets. Is it still running in the terminal?";
+  const UNREACHABLE = "Can't reach CineSets. Is it still running? Look in the terminal where it started, or its log: "
+    + "docker compose logs cinesets-web on Docker, journalctl -u cinesets-web with systemd.";
+  const OFFLINE = "Can't reach CineSets, so the dashboard keeps trying by itself and your unsaved changes stay here. "
+    + "If it doesn't come back, check CineSets is running: the terminal where it started, docker compose logs "
+    + "cinesets-web on Docker, or journalctl -u cinesets-web with systemd.";
+  const OFFLINE_MS = [2000, 4000, 8000, 15000];
   const DEBOUNCE = 250;
   const GRID_DEBOUNCE = 350;
   const POLL_MS = 1500;
@@ -19,6 +24,11 @@
   const TABS = ["collections", "design", "lists", "grid"];
   const MDBLIST = "https://mdblist.com/lists/";
   const MAX_NEW_LISTS = 10;
+  const CACHE_MAX = 40;     // full-size previews kept for the editor
+  const TILE_MAX = 240;     // small previews kept for the strip and Preview all
+  const HISTORY_MAX = 100;  // design steps Undo can go back
+  const BURST_MS = 1000;    // changes to one setting this close together are one step to undo
+  const INTRO_KEY = "cinesets-intro-done";
 
   const LABELS = {
     artwork: { fixed: "Fixed", random: "Random" },
@@ -125,7 +135,7 @@
     lpSearch: "",
     lpOpen: new Set(),
     lpSearchClosed: new Set(),
-    nc: { checked: null, accent: null },
+    nc: { checked: null, accent: null, typeTouched: false },
     selected: null,
     mode: "section",
     editSec: null,
@@ -140,21 +150,29 @@
     listSearchClosed: new Set(),
     dirty: false,
     saving: false,
+    textDraft: null,
+    textBusy: false,
     artBusy: false,
     chooser: null,
     dragging: null,
     cache: new Map(),
+    tiles: new Map(),
     artRev: new Map(),
+    history: { undo: [], redo: [], base: null, tag: null, at: 0, replaying: false },
+    offline: { on: false, tries: 0, timer: null },
     preview: {
       seq: 0, applied: 0, boxesSeq: 0, timer: null, candidate: null,
       key: null, layout: null, boxes: { label: null, title: null }, draggable: true, streaming: false, art: null,
     },
     grid: { cards: new Map(), byEl: new Map(), order: [], observer: null, root: undefined, timer: null },
     strip: { sec: null, keys: [], cards: new Map(), hold: false, timer: null },
-    run: { running: false, command: null, timer: null, shown: 0, exit: null },
+    run: {
+      running: false, command: null, timer: null, shown: 0, exit: null,
+      id: null, problems: 0, summary: null, stopped: null, lost: false,
+    },
     ui: {
-      cards: new Map(), ccRows: new Map(), dsecs: new Map(), drows: new Map(), controls: {},
-      sizes: new Map(), secSizes: new Map(), lpSecs: new Map(), lpRows: new Map(),
+      cards: new Map(), ccRows: new Map(), dsecs: new Map(), drows: new Map(), dpicks: new Map(), dlistMode: null,
+      controls: {}, logoCtx: null, sizes: new Map(), secSizes: new Map(), lpSecs: new Map(), lpRows: new Map(),
     },
   };
   const lane = { busy: false, editor: null };
@@ -310,50 +328,127 @@
         return;
       }
     }
-    showSignIn(S.dirty ? "You're signed out. Your unsaved changes are kept here until you close the tab." : "You're signed out.");
+    showSignIn(unsaved() ? "You're signed out. Your unsaved changes are kept here until you close the tab." : "You're signed out.");
   }
 
-  function toast(msg, kind, ms) {
+  /**
+   * A message in the corner. Errors stay until they're dismissed; the rest go after a few seconds, or a little
+   * longer with an action button (like Undo), and wait while the pointer or focus is on them.
+   */
+  function toast(msg, kind, ms, action) {
     kind = kind || "info";
     const box = $("toasts");
     for (const t of box.children) {
       if (t.dataset.msg === msg && !t.classList.contains("is-leaving")) return;
     }
     const x = el("button", { class: "toast-x", type: "button", "aria-label": "Dismiss", html: ICON.x });
-    const t = el("div", { class: `toast toast-${kind}`, "data-msg": msg }, [el("span", { text: msg }), x]);
+    const t = el("div", { class: `toast toast-${kind}`, "data-msg": msg }, [el("span", { text: msg })]);
+    const sticky = kind === "error";
     let timer = null;
     const close = () => {
       clearTimeout(timer);
       t.classList.add("is-leaving");
       setTimeout(() => t.remove(), 220);
     };
+    const later = (wait) => {
+      clearTimeout(timer);
+      if (!sticky) timer = setTimeout(close, wait);
+    };
+    if (action) {
+      const act = el("button", { class: "toast-act", type: "button" }, action.label);
+      act.addEventListener("click", () => {
+        close();
+        action.run();
+      });
+      t.append(act);
+    }
+    t.append(x);
     x.addEventListener("click", close);
     t.addEventListener("mouseenter", () => clearTimeout(timer));
-    t.addEventListener("mouseleave", () => { timer = setTimeout(close, 2500); });
+    t.addEventListener("mouseleave", () => { if (!t.contains(document.activeElement)) later(2500); });
+    t.addEventListener("focusin", () => clearTimeout(timer));
+    t.addEventListener("focusout", (e) => { if (!t.contains(e.relatedTarget)) later(2500); });
     box.append(t);
     while (box.children.length > 4) box.firstElementChild.remove();
-    timer = setTimeout(close, ms || (kind === "error" ? 7000 : 4000));
+    later(ms || (action ? 10000 : 4000));
   }
 
   function fail(e, prefix) {
     if (!e || e.status === 401 || S.gated) return;
+    if (e.status === 0) {
+      goOffline();
+      return;
+    }
     const msg = e.message || String(e);
     toast(prefix ? `${prefix}: ${msg}` : msg, "error");
   }
 
-  function confirmDialog({ title, text, ok, danger }) {
+  // ---- when CineSets can't be reached: one banner that keeps trying by itself, instead of a toast each time
+  function goOffline() {
+    if (S.offline.on || S.gated || !S.loaded) return;
+    S.offline.on = true;
+    S.offline.tries = 0;
+    clearTimeout(S.run.timer);
+    $("offline-text").textContent = OFFLINE;
+    $("offline").hidden = false;
+    retryLater();
+  }
+
+  function retryLater() {
+    clearTimeout(S.offline.timer);
+    S.offline.timer = setTimeout(reconnect, OFFLINE_MS[Math.min(S.offline.tries, OFFLINE_MS.length - 1)]);
+  }
+
+  async function reconnect() {
+    clearTimeout(S.offline.timer);
+    if (!S.offline.on) return;
+    S.offline.tries++;
+    const btn = $("offline-retry");
+    btn.disabled = true;
+    try {
+      await api("api/session", { quiet401: true });
+    } catch (e) {
+      if (e.status === 0) {
+        retryLater();
+        return;
+      }
+    } finally {
+      btn.disabled = false;
+    }
+    S.offline.on = false;
+    $("offline").hidden = true;
+    toast("CineSets is back.", "ok");
+    // carry on: the run log, then any previews that didn't arrive
+    pollRun();
+    queueEditorJob();
+    gridKick(30);
+    if (stripActive()) stripKick(200);
+  }
+
+  /**
+   * A question with Cancel and OK. With `alt`, a third button as well, and it resolves to "ok", "alt" or ""
+   * (cancelled); without, to true or false.
+   */
+  function confirmDialog({ title, text, ok, alt, danger }) {
     const d = $("confirm");
-    if (typeof d.showModal !== "function") return Promise.resolve(window.confirm(`${title}\n\n${text}`));
+    if (typeof d.showModal !== "function") {
+      const yes = window.confirm(`${title}\n\n${text}`);
+      return Promise.resolve(alt ? (yes ? "ok" : "") : yes);
+    }
     return new Promise((resolve) => {
       $("confirm-title").textContent = title;
       $("confirm-text").textContent = text;
       const okBtn = $("confirm-ok");
       okBtn.textContent = ok || "OK";
       okBtn.className = "btn " + (danger ? "btn-danger" : "btn-primary");
+      const altBtn = $("confirm-alt");
+      altBtn.hidden = !alt;
+      altBtn.textContent = alt || "";
       d.returnValue = "";
       const onClose = () => {
         d.removeEventListener("close", onClose);
-        resolve(d.returnValue === "ok");
+        const v = d.returnValue;
+        resolve(alt ? (v === "ok" || v === "alt" ? v : "") : v === "ok");
       };
       d.addEventListener("close", onClose);
       d.showModal();
@@ -460,7 +555,7 @@
 
   function setSetting(name, value, opts) {
     applySetting(name, value);
-    settingsChanged(opts);
+    settingsChanged({ tag: name, ...opts });
   }
 
   /** Reset one setting: back to inheriting it for a section or poster, or back to the default for every poster. */
@@ -486,16 +581,95 @@
 
   function resetScope() {
     const l = scopeLayer();
+    let msg;
     if (!l) {
       const d = defaults();
       for (const k of Object.keys(d)) if (!LAYER_KEYS.has(k)) S.posters[k] = clone(d[k]);
-      settingsChanged({ delay: 0 });
-      announce("Every poster is back to the defaults. Sections and posters with their own settings keep them.");
-      return;
+      msg = "Every poster is back to the defaults. Sections and posters with their own settings keep them.";
+    } else {
+      delete S.posters[l.kind][l.id];
+      msg = l.kind === "sections" ? "This section's own design settings were cleared." : "This poster's own design settings were cleared.";
     }
-    delete S.posters[l.kind][l.id];
     settingsChanged({ delay: 0 });
-    announce(l.kind === "sections" ? "This section's own design settings were cleared." : "This poster's own design settings were cleared.");
+    undoToast(msg);
+  }
+
+  // ---- undo and redo for design edits: snapshots of the poster settings
+  /** Start the history again from the settings as they are now (after loading or reloading them). */
+  function historyReset() {
+    const h = S.history;
+    h.undo = [];
+    h.redo = [];
+    h.base = snapshot();
+    h.tag = null;
+    h.at = 0;
+    syncHistory();
+  }
+
+  /** After a design edit, keep the settings from before it. A burst of changes to one setting (a slider being
+      dragged, a colour being picked, arrow keys on a text box) is one step. */
+  function record(tag) {
+    const h = S.history;
+    if (h.replaying || !h.base || !S.posters) return;
+    const now = snapshot();
+    if (same(now, h.base)) return;
+    const t = Date.now();
+    if (!tag || tag !== h.tag || t - h.at > BURST_MS) {
+      h.undo.push(h.base);
+      if (h.undo.length > HISTORY_MAX) h.undo.shift();
+    }
+    h.redo = [];
+    h.base = now;
+    h.tag = tag || null;
+    h.at = t;
+    syncHistory();
+  }
+
+  function restorePosters(p, word) {
+    const h = S.history;
+    h.replaying = true;
+    try {
+      S.posters = clone(p);
+      h.base = snapshot();
+      h.tag = null;
+      S.preview.boxesSeq = S.preview.seq + 1;
+      settingsChanged({ delay: 0 });
+    } finally {
+      h.replaying = false;
+    }
+    syncHistory();
+    announce(word);
+  }
+
+  function undo() {
+    const h = S.history;
+    if (!h.undo.length || !S.posters) return;
+    h.redo.push(snapshot());
+    restorePosters(h.undo.pop(), "Undone.");
+  }
+
+  function redo() {
+    const h = S.history;
+    if (!h.redo.length || !S.posters) return;
+    h.undo.push(snapshot());
+    restorePosters(h.redo.pop(), "Redone.");
+  }
+
+  function syncHistory() {
+    $("undo-btn").disabled = !S.history.undo.length;
+    $("redo-btn").disabled = !S.history.redo.length;
+  }
+
+  /** A toast with Undo for a reset: it steps back only if nothing else has changed since. */
+  function undoToast(msg) {
+    const after = snapshot();
+    toast(msg, "info", 0, {
+      label: "Undo",
+      run: () => {
+        if (same(snapshot(), after)) undo();
+        else toast("Other changes came after that one. Use Undo at the top of the poster to step back through them.");
+      },
+    });
   }
 
   /** A narrower layer than the one being edited that sets this setting for the poster on show, if any. */
@@ -520,7 +694,8 @@
   }
 
   function settingsChanged(opts) {
-    const { delay = DEBOUNCE } = opts || {};
+    const { delay = DEBOUNCE, tag = null } = opts || {};
+    record(tag);
     refreshControls();
     refreshScopeUI();
     refreshPositionButtons();
@@ -751,10 +926,7 @@
       const sw = el("input", { class: "switch", type: "checkbox", role: "switch", "aria-label": `Every collection in ${sec.name}`, "aria-describedby": countId });
       sw.addEventListener("change", () => setPicked(sec.collections.map((c) => c.key), sw.checked));
       const design = el("button", { class: "btn btn-small sec-card-design", type: "button", "aria-label": `Design this section: ${sec.name}` }, "Design this section");
-      design.addEventListener("click", () => {
-        openSection(sec.key);
-        showTab("design");
-      });
+      design.addEventListener("click", () => goSection(sec.key, true));
       const ul = el("ul", { class: "sec-card-list", id: listId });
       for (const c of sec.collections) {
         const name = el("button", { class: "cc-name", type: "button", title: `Design ${c.name} (${c.key})` }, [
@@ -762,10 +934,7 @@
           c.streaming ? el("span", { class: "mini-tag", text: "Logo", title: "Streaming service poster" }) : null,
           el("span", { class: "cc-go", "aria-hidden": "true", text: "Design" }),
         ]);
-        name.addEventListener("click", () => {
-          openPoster(c.key);
-          showTab("design");
-        });
+        name.addEventListener("click", () => goPoster(c.key, true));
         const csw = el("input", { class: "switch", type: "checkbox", role: "switch", "aria-label": c.name });
         csw.addEventListener("change", () => setPicked([c.key], csw.checked));
         let size;
@@ -822,7 +991,7 @@
         const b = el("button", { class: "dl-pick" + (extraClass ? " " + extraClass : ""), type: "button" }, [
           el("span", { class: "dl-name", text: name }), dot, el("span", { class: "dl-count", text: String(count) }),
         ]);
-        b.addEventListener("click", () => openSection(secKey));
+        b.addEventListener("click", () => goSection(secKey));
         S.ui.dpicks.set(secKey || "", { btn: b, dot, name: name.toLowerCase() });
         return b;
       };
@@ -850,7 +1019,7 @@
         const cdot = ownDot("Has its own design settings");
         const off = el("span", { class: "vh", text: " (off)" });
         const b = el("button", { class: "dl-col", type: "button", title: c.key }, [el("span", { class: "dl-name", text: c.name }), off, cdot]);
-        b.addEventListener("click", () => openPoster(c.key));
+        b.addEventListener("click", () => goPoster(c.key));
         const li = el("li", {}, [b]);
         ul.append(li);
         S.ui.drows.set(c.key, { li, btn: b, dot: cdot, off });
@@ -954,17 +1123,27 @@
   const listUrl = (slug) => MDBLIST + String(slug).split("/").map(encodeURIComponent).join("/");
   const fileName = () => (S.info && S.info.custom_file) || "your custom collections file";
 
-  function describeCheck(r) {
+  const kindWord = (kind, n) => (kind === "show" ? (n === 1 ? "TV show" : "TV shows") : n === 1 ? "film" : "films");
+  /** The smallest collection a run makes: min_items, or the collection's own size when that's smaller. */
+  const minItems = () => Number(S.info && S.info.min_items) || 8;
+
+  /** How many of a checked list's films (or TV shows) are in the library, or null when that isn't known (demo). */
+  function inLibrary(r, kind) {
+    const n = r && r.in_library ? r.in_library[kind] : null;
+    return n === undefined || n === null ? null : Number(n) || 0;
+  }
+
+  /** One checked list, counting what's in the library of the given kind (the Type picked, or the collection's). */
+  function describeCheck(r, kind) {
     const titles = Number(r.titles) || 0;
     if (!titles) return "No titles in this list yet.";
     const movies = Number(r.movies) || 0;
     const shows = Number(r.shows) || 0;
-    const kind = shows > movies ? "TV shows" : "films";
-    let s = `${titles} ${titles === 1 ? "title" : "titles"}, ${movies && shows ? "mostly" : "all"} ${kind}.`;
-    if (r.in_library) {
-      const n = r.type === "show" ? r.in_library.show : r.in_library.movie;
-      if (n !== undefined && n !== null) s += ` ${n} ${n === 1 ? "is" : "are"} in your library.`;
-    }
+    const most = shows > movies ? "TV shows" : "films";
+    let s = `${titles} ${titles === 1 ? "title" : "titles"}, ${movies && shows ? "mostly" : "all"} ${most}.`;
+    kind = kind || r.type || "movie";
+    const n = inLibrary(r, kind);
+    if (n !== null) s += ` ${n} of its ${kindWord(kind, 2)} ${n === 1 ? "is" : "are"} in your library.`;
     return s;
   }
 
@@ -990,7 +1169,7 @@
       for (const c of sec.collections) {
         const li = listRow(c);
         ul.append(li);
-        S.ui.lpRows.set(c.key, { li });
+        S.ui.lpRows.set(c.key, { li, name: li.querySelector(".cc-name"), add: li.querySelector(".lr-add-btn") });
       }
       const card = el("article", { class: "sec-card" }, [el("div", { class: "sec-card-head" }, [toggle]), ul]);
       box.append(card);
@@ -1004,10 +1183,7 @@
       el("span", { class: "cc-label", text: c.name }),
       el("span", { class: "cc-go", "aria-hidden": "true", text: "Design" }),
     ]);
-    name.addEventListener("click", () => {
-      openPoster(c.key);
-      showTab("design");
-    });
+    name.addEventListener("click", () => goPoster(c.key, true));
     const main = el("div", { class: "lr-main" }, [name]);
     if (c.custom) {
       main.append(el("span", { class: "badge badge-yours", text: "Yours" }));
@@ -1036,7 +1212,7 @@
       }
       lists.append(chip);
     }
-    const addBtn = el("button", { class: "link-btn", type: "button", "aria-expanded": "false" }, "+ Add a list");
+    const addBtn = el("button", { class: "link-btn lr-add-btn", type: "button", "aria-expanded": "false", "aria-label": `Add a list to ${c.name}` }, "+ Add a list");
     lists.append(addBtn);
     const addBox = buildAddBox(c);
     addBox.hidden = true;
@@ -1078,7 +1254,8 @@
       msg.textContent = "Checking the list";
       try {
         checked = await api("api/lists/check", { method: "POST", body: { list: text } });
-        msg.textContent = `${checked.list}: ${describeCheck(checked)}`;
+        msg.textContent = `${checked.list}: ${describeCheck(checked, c.kind)}`;
+        if (inLibrary(checked, c.kind) === 0) msg.textContent += ` Adding it adds no ${kindWord(c.kind, 2)} to ${c.name} yet.`;
         add.disabled = false;
         add.focus();
       } catch (e) {
@@ -1098,6 +1275,7 @@
         await api("api/lists/add", { method: "POST", body: { key: c.key, lists: [checked.list] } });
         toast(`Added ${checked.list} to ${c.name}. Saved to ${fileName()}; it's used on the next apply.`, "ok", 6000);
         await reloadCollections();
+        focusListRow(c.key, "add");
       } catch (e) {
         msg.classList.add("is-bad");
         msg.textContent = e.message;
@@ -1112,11 +1290,31 @@
   async function removeList(c, slug) {
     try {
       await api("api/lists/remove", { method: "POST", body: { key: c.key, list: slug } });
-      toast(`Removed ${slug} from ${c.name}.`, "ok");
+      toast(`Removed ${slug} from ${c.name}.`, "ok", 0, { label: "Undo", run: () => putListBack(c, slug) });
       await reloadCollections();
+      focusListRow(c.key, "add");
     } catch (e) {
       fail(e, "List not removed");
     }
+  }
+
+  async function putListBack(c, slug) {
+    try {
+      await api("api/lists/add", { method: "POST", body: { key: c.key, lists: [slug] } });
+      toast(`${slug} is back in ${c.name}.`, "ok");
+      await reloadCollections();
+    } catch (e) {
+      fail(e, "List not put back");
+    }
+  }
+
+  /** After the Lists tab is drawn again: focus the row's "Add a list" (or its name), or the search if it's gone. */
+  function focusListRow(key, what) {
+    const r = key && S.ui.lpRows.get(key);
+    const target = r && ((what === "add" && r.add) || r.name);
+    if (S.tab !== "lists") return;
+    if (target && !target.closest("[hidden]")) target.focus();
+    else $("lists-search").focus();
   }
 
   async function removeCustom(c) {
@@ -1127,10 +1325,15 @@
       danger: true,
     });
     if (!ok) return;
+    // focus goes to the next collection in its section afterwards, or the one before
+    const keys = (S.secByKey.get(c.section) || { collections: [] }).collections.map((x) => x.key);
+    const at = keys.indexOf(c.key);
+    const next = keys[at + 1] || keys[at - 1] || null;
     try {
       const res = await api("api/lists/remove", { method: "POST", body: { key: c.key } });
       toast(res.message || `Removed ${c.name}.`, "ok", 9000);
       await reloadCollections();
+      focusListRow(next);
     } catch (e) {
       fail(e, "Not removed");
     }
@@ -1194,6 +1397,68 @@
     showNcResult([el("p", { text: "The lists changed. Check them again before you use them." })]);
     $("nc-create").disabled = true;
     $("nc-ex-add").disabled = true;
+    syncNcWarn();
+  }
+
+  const ncType = () => (document.querySelector('input[name="nc-type"]:checked') || {}).value || "movie";
+
+  /** The checked lists, counting what's in the library as the Type picked (or the chosen collection's type). */
+  function showNcChecked() {
+    const results = S.nc.checked || [];
+    const kind = ncMode() === "existing" ? (S.byKey.get($("nc-ex-select").value) || {}).kind || ncType() : ncType();
+    showNcResult(results.map((r) => el("div", { class: "nc-check-line" }, [
+      el("a", { href: r.url || listUrl(r.list), target: "_blank", rel: "noopener noreferrer", text: r.list }),
+      `: ${describeCheck(r, kind)}`,
+      r.sample && r.sample.length ? el("div", { class: "nc-sample" }, r.sample.slice(0, 6).map((s) => el("span", { class: "pill", text: s }))) : null,
+    ])));
+    syncNcWarn();
+  }
+
+  /**
+   * Under the check: how many of the lists' titles of the picked type are in the library, against the smallest
+   * collection a run makes. Create is turned off when none are, since the collection would be empty.
+   */
+  function syncNcWarn() {
+    const warn = $("nc-warn");
+    const results = S.nc.checked;
+    warn.hidden = true;
+    warn.classList.remove("is-bad");
+    if (!results || !results.length || $("nc-mode").hidden) return;
+    const existing = ncMode() === "existing";
+    const target = existing ? S.byKey.get($("nc-ex-select").value) : null;
+    const kind = existing ? (target ? target.kind : null) : ncType();
+    const counts = kind ? results.map((r) => inLibrary(r, kind)) : [];
+    const known = counts.length > 0 && counts.every((n) => n !== null);
+    $("nc-create").disabled = false;
+    if (!known) return;  // demo mode, or no collection picked yet
+    const n = counts.reduce((a, b) => a + b, 0);
+    const several = results.length > 1;
+    const what = kindWord(kind, 2);
+    const other = kind === "show" ? "movie" : "show";
+    const others = results.reduce((a, r) => a + (inLibrary(r, other) || 0), 0);
+    let text = "";
+    let bad = false;
+    if (existing) {
+      if (n === 0) text = `None of ${several ? "these lists'" : "this list's"} ${what} are in your library, so ${target.name} gets nothing new from ${several ? "them" : "it"} yet.`;
+    } else if (n === 0) {
+      text = `None of ${several ? "these lists'" : "this list's"} ${what} are in your library, so the collection would be empty.`
+        + (others ? ` ${others} ${others === 1 ? "is" : "are"} there as ${kindWord(other, 2)}: pick ${kindWord(other, 2)} above.` : "");
+      $("nc-create").disabled = true;
+      bad = true;
+    } else {
+      const size = Math.round(Number($("nc-limit").value));
+      const need = Math.min(minItems(), Number.isFinite(size) && size > 0 ? size : minItems());
+      if (n < need) {
+        text = `${several ? "At most " : "Only "}${n} ${kindWord(kind, n)} ${n === 1 ? "is" : "are"} in your library. A run skips `
+          + `collections with fewer than ${need} titles, so this one isn't made until more of ${several ? "them" : "it"} are there.`;
+        bad = true;
+      } else if (several) {
+        text = `Together, up to ${n} ${what} are in your library (a title on two lists is counted twice here).`;
+      }
+    }
+    warn.textContent = text;
+    warn.hidden = !text;
+    warn.classList.toggle("is-bad", bad);
   }
   function showNcResult(children) {
     const r = $("nc-result");
@@ -1231,6 +1496,7 @@
           if (e.status === 401) return;
           S.nc.checked = null;
           $("nc-create").disabled = true;
+          syncNcWarn();
           showNcResult([el("p", { class: "signin-error", text: `${t}: ${e.message}` })]);
           return;
         }
@@ -1240,11 +1506,6 @@
       btn.classList.remove("is-busy");
     }
     S.nc.checked = results;
-    showNcResult(results.map((r) => el("div", { class: "nc-check-line" }, [
-      el("a", { href: r.url || listUrl(r.list), target: "_blank", rel: "noopener noreferrer", text: r.list }),
-      `: ${describeCheck(r)}`,
-      r.sample && r.sample.length ? el("div", { class: "nc-sample" }, r.sample.slice(0, 6).map((s) => el("span", { class: "pill", text: s }))) : null,
-    ])));
     const movies = results.reduce((n, r) => n + (Number(r.movies) || 0), 0);
     const shows = results.reduce((n, r) => n + (Number(r.shows) || 0), 0);
     const type = shows > movies ? "show" : movies > shows ? "movie" : results[0].type || "movie";
@@ -1264,6 +1525,8 @@
     const shown = !$("nc-mode").hidden;
     $("nc-form").hidden = !shown || ncMode() !== "new";
     $("nc-existing").hidden = !shown || ncMode() !== "existing";
+    if (shown && S.nc.checked) showNcChecked();
+    else syncNcWarn();
   }
   function setExError(msg) {
     $("nc-ex-error").hidden = !msg;
@@ -1322,15 +1585,12 @@
     const again = el("button", { class: "btn btn-small", type: "button" }, againLabel);
     again.addEventListener("click", ncNext);
     const design = el("button", { class: "btn btn-small btn-primary", type: "button" }, "Design it");
-    design.addEventListener("click", () => {
-      if (!S.byKey.has(key)) return;
-      openPoster(key);
-      showTab("design");
-    });
+    design.addEventListener("click", () => goPoster(key, true));
     const done = $("nc-done");
     done.textContent = "";
     done.append(el("span", { text }), again, design);
     done.hidden = false;
+    design.focus();  // the button pressed has gone with the form
   }
 
   function ncNext() {
@@ -1878,11 +2138,40 @@
   }
 
   /** The mode switch: each mode comes back to what it was editing last. */
-  function setMode(mode) {
+  async function setMode(mode) {
     if (mode === S.mode) return;
+    if (mode === "section" && !(await leaveText())) {
+      refreshScopeUI();
+      return;
+    }
     if (mode === "poster") openPoster(S.posterKey && S.byKey.has(S.posterKey) ? S.posterKey : S.selected);
     else openSection(S.editSec);
     announce(bannerText());
+  }
+
+  /** Design one poster: from the list, or (fromElsewhere) from another tab, which then moves to the Design tab. */
+  async function goPoster(key, fromElsewhere) {
+    if (!S.byKey.has(key) || !(await leaveText(key))) return;
+    openPoster(key);
+    if (fromElsewhere) {
+      showTab("design");
+      focusEditor(`Design tab: ${S.byKey.get(key).name}, on its own.`);
+    }
+  }
+
+  async function goSection(secKey, fromElsewhere) {
+    if (!(await leaveText())) return;
+    openSection(secKey);
+    if (fromElsewhere) {
+      showTab("design");
+      focusEditor(`Design tab. ${bannerText()}`);
+    }
+  }
+
+  /** After a button on another tab opens the Design tab, which hid that button: carry on from the name at the top. */
+  function focusEditor(msg) {
+    $("ed-name").focus();
+    announce(msg);
   }
 
   /** Put the current mode back after a reload of the collections or settings. */
@@ -1953,10 +2242,12 @@
   }
 
   function paintStrip() {
+    let failed = false;
     for (const [k, card] of S.strip.cards) {
       const hash = hashFor(k);
-      const hit = S.cache.get(k);
-      if (hit && hit.hash === hash && card.shownHash !== hash) {
+      const hit = tileFor(k, hash);
+      if (card.failedHash === hash) failed = true;
+      if (hit && card.shownHash !== hash) {
         card.img.src = hit.image;
         card.shownHash = hash;
       }
@@ -1970,6 +2261,17 @@
       card.art.style.setProperty("--c1", stops[0]);
       card.art.style.setProperty("--c2", stops[1]);
     }
+    $("strip-retry").hidden = !failed;
+  }
+
+  /** Try the strip's posters that couldn't be drawn again. */
+  function retryStrip() {
+    for (const [k, card] of S.strip.cards) {
+      card.failedHash = null;
+      card.el.title = S.byKey.get(k).name;
+    }
+    paintStrip();
+    pump();
   }
 
   /** Hold strip renders until edits settle, so the big preview always goes first. */
@@ -1991,24 +2293,28 @@
       const card = S.strip.cards.get(k);
       if (!card) continue;
       const hash = hashFor(k);
-      const hit = S.cache.get(k);
-      if (hit && hit.hash === hash) {
+      if (tileFor(k, hash)) {
         if (card.shownHash !== hash) paintStrip();
         continue;
       }
       if (card.failedHash === hash) continue;
       card.el.classList.add("is-loading");
       return {
-        key: k, hash, posters: snapshot(),
-        done: (res) => {
-          storeCache(k, hash, res);
+        key: k, hash, posters: snapshot(), small: true,
+        done: (image) => {
+          storeTile(k, hash, image);
           card.el.classList.remove("is-loading");
           paintStrip();
         },
         fail: (e) => {
           card.el.classList.remove("is-loading");
+          if (e.status === 0 || e.status === 401) {
+            fail(e);  // drawn again once CineSets is back, or after signing in
+            return;
+          }
           card.failedHash = hash;
-          fail(e, "Preview failed");
+          card.el.title = `${S.byKey.get(k).name}: couldn't draw it (${e.message})`;
+          paintStrip();
         },
       };
     }
@@ -2023,6 +2329,7 @@
       closeChooser();
       S.preview.candidate = null;
       $("candidate-tag").hidden = true;
+      $("stage-fail").hidden = true;
     }
     S.selected = key;
     if (S.mode === "poster") {
@@ -2059,7 +2366,7 @@
       $("ed-section").textContent = `Showing ${c.name}`;
     } else {
       $("ed-name").textContent = c.name;
-      $("ed-kind").textContent = c.label || (c.kind === "show" ? "TV Shows" : "Movies");
+      $("ed-kind").textContent = c.label || (c.kind === "show" ? "TV shows" : "Films");
       $("ed-section").textContent = c.sectionName || "";
     }
     syncEditorPick();
@@ -2146,6 +2453,7 @@
       }
     }
     const job = { key, candidate, text, hash, seq, posters: snapshot() };
+    $("stage-fail").hidden = true;
     job.done = (res) => editorDone(job, res);
     job.fail = (e) => editorFail(job, e);
     lane.editor = job;
@@ -2154,7 +2462,7 @@
   }
 
   function pump() {
-    if (lane.busy || S.gated) return;
+    if (lane.busy || S.gated || S.offline.on) return;
     let job = null;
     if (lane.editor) {
       job = lane.editor;
@@ -2167,19 +2475,49 @@
     const body = { key: job.key, posters: job.posters };
     if (job.candidate) body.artwork = job.candidate;
     if (job.text) body.text = job.text;
-    api("api/preview", { method: "POST", body })
-      .then((res) => job.done(res), (e) => job.fail(e))
+    if (job.small) body.size = "small";
+    // a small poster comes as a plain picture, kept as a data: URL like the full-size ones
+    const call = job.small
+      ? api("api/preview", { method: "POST", body, raw: true }).then((res) => res.blob()).then(dataUrl)
+      : api("api/preview", { method: "POST", body });
+    call.then((res) => job.done(res), (e) => job.fail(e))
       .finally(() => {
         lane.busy = false;
         pump();
       });
   }
 
-  function storeCache(key, hash, res) {
-    S.cache.set(key, {
-      hash, image: res.image, layout: res.layout || {}, draggable: res.draggable, streaming: res.streaming, artwork: res.artwork || null,
-    });
+  /** Keep at most `most` entries, dropping the ones stored longest ago (a Map keeps the order they were set in). */
+  function keep(map, key, entry, most) {
+    map.delete(key);
+    map.set(key, entry);
+    while (map.size > most) map.delete(map.keys().next().value);
   }
+
+  function storeCache(key, hash, res) {
+    keep(S.cache, key, {
+      hash, image: res.image, layout: res.layout || {}, draggable: res.draggable, streaming: res.streaming, artwork: res.artwork || null,
+    }, CACHE_MAX);
+  }
+
+  function storeTile(key, hash, image) {
+    keep(S.tiles, key, { hash, image }, TILE_MAX);
+  }
+
+  /** A picture for a small poster: its own small render, or a full-size one of the same design. */
+  function tileFor(key, hash) {
+    const t = S.tiles.get(key);
+    if (t && t.hash === hash) return t;
+    const f = S.cache.get(key);
+    return f && f.hash === hash ? f : null;
+  }
+
+  const dataUrl = (blob) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result);
+    reader.onerror = () => reject(new Error("The preview couldn't be read."));
+    reader.readAsDataURL(blob);
+  });
 
   function editorDone(job, res) {
     if (!job.candidate && !job.text) {
@@ -2223,7 +2561,9 @@
     $("tx-subtitle-label").textContent = streaming ? "Bottom text" : "Subtitle";
     $("tx-subtitle-hint").textContent = streaming ? "The big line at the bottom, for example Popular." : "Can be empty.";
     if (force || !S.textDraft || S.textDraft.key !== c.key) {
+      const dropped = !!S.textDraft;
       S.textDraft = null;
+      if (dropped) syncDirty();
       const t = textOf(c);
       $("tx-label").value = t.label;
       $("tx-title").value = t.title;
@@ -2257,56 +2597,116 @@
     S.textDraft = same(text, textOf(c)) ? null : { key: c.key, text };
     setTextError("");
     syncTextButtons();
+    syncDirty();
     schedulePreview(350);
   }
 
+  /** A problem with the words: in the Text card, and as a toast too when the card isn't in view. */
+  function textProblem(msg) {
+    setTextError(msg);
+    if (S.tab !== "design" || $("text-panel").hidden) toast(`Words not saved: ${msg}`, "error");
+  }
+
+  /** Save the words typed in the Text card (for whichever poster they were typed for). Says whether they were saved. */
   async function saveText() {
-    const c = S.byKey.get(S.selected);
-    const d = activeTextDraft();
-    if (!c || !d) return;
-    const title = d.title.split("\n").map((s) => s.trim()).filter(Boolean).join("\n");
+    const d = S.textDraft;
+    const c = d && S.byKey.get(d.key);
+    if (!c) return true;
+    const t = d.text;
+    const title = t.title.split("\n").map((s) => s.trim()).filter(Boolean).join("\n");
     if (!title) {
-      setTextError(`The ${c.streaming ? "name" : "title"} can't be empty.`);
-      return;
+      textProblem(`The ${c.streaming ? "name" : "title"} can't be empty.`);
+      return false;
     }
     if (title.replace("\n", "").length > 60) {
-      setTextError(`The ${c.streaming ? "name" : "title"} can be up to 60 characters.`);
-      return;
+      textProblem(`The ${c.streaming ? "name" : "title"} can be up to 60 characters.`);
+      return false;
     }
     S.textBusy = true;
     syncTextButtons();
     $("tx-save").classList.add("is-busy");
     try {
-      const res = await api("api/text", { method: "POST", body: { key: c.key, label: d.label.trim(), title, subtitle: d.subtitle.trim() } });
+      const res = await api("api/text", { method: "POST", body: { key: c.key, label: t.label.trim(), title, subtitle: t.subtitle.trim() } });
       S.textDraft = null;
       toast(res.message || "Text saved.", "ok", 9000);
       await reloadCollections();
       refreshTextCard(true);
+      return true;
     } catch (e) {
-      setTextError(e.message);
+      if (e.status === 0 || e.status === 401) fail(e);
+      else textProblem(e.message);
+      return false;
     } finally {
       S.textBusy = false;
       $("tx-save").classList.remove("is-busy");
       syncTextButtons();
+      syncDirty();
     }
+  }
+
+  /**
+   * Before another poster (or Whole section) takes over the editor: words typed in the Text card and not saved
+   * are saved, dropped, or kept by staying here, as the person chooses. Resolves true when it's fine to move on.
+   */
+  async function leaveText(nextKey) {
+    const d = S.textDraft;
+    if (!d || (nextKey && d.key === nextKey)) return true;
+    const c = S.byKey.get(d.key);
+    if (!c) {
+      S.textDraft = null;
+      syncDirty();
+      return true;
+    }
+    const choice = await confirmDialog({
+      title: `Save the words for ${c.name}?`,
+      text: "You've changed its words in the Text card and haven't saved them yet.",
+      ok: "Save words",
+      alt: "Don't save",
+    });
+    if (choice === "ok") return saveText();
+    if (choice !== "alt") return false;
+    S.textDraft = null;
+    refreshTextCard(true);
+    syncDirty();
+    schedulePreview(0);
+    return true;
   }
 
   async function resetText() {
     const c = S.byKey.get(S.selected);
     if (!c) return;
+    const before = textOf(c);
+    const fields = (c.edited_text || []).filter((f) => has(before, f));
     S.textBusy = true;
     syncTextButtons();
     try {
       const res = await api("api/text", { method: "POST", body: { key: c.key, reset: true } });
       S.textDraft = null;
-      toast(res.message || "Back to the usual words.", "ok", 9000);
+      toast(res.message || "Back to the usual words.", "ok", 0,
+        fields.length ? { label: "Undo", run: () => putTextBack(c.key, before, fields) } : null);
       await reloadCollections();
       refreshTextCard(true);
     } catch (e) {
-      setTextError(e.message);
+      if (e.status === 0 || e.status === 401) fail(e);
+      else setTextError(e.message);
     } finally {
       S.textBusy = false;
       syncTextButtons();
+      syncDirty();
+    }
+  }
+
+  /** Undo "Use the usual words": send back only the words that had been changed, so the rest stay the usual ones. */
+  async function putTextBack(key, text, fields) {
+    const body = { key };
+    for (const f of fields) body[f] = text[f];
+    try {
+      const res = await api("api/text", { method: "POST", body });
+      toast(res.message || "Your words are back.", "ok");
+      await reloadCollections();
+      if (key === S.selected) refreshTextCard(true);
+    } catch (e) {
+      fail(e, "Words not put back");
     }
   }
 
@@ -2316,7 +2716,18 @@
       S.preview.candidate = null;
       $("candidate-tag").hidden = true;
     }
-    fail(e, "Preview failed");
+    if (e.status === 0 || e.status === 401) {
+      fail(e);  // drawn again once CineSets is back, or after signing in
+      return;
+    }
+    if (job.seq !== S.preview.seq || job.key !== S.selected) return;
+    $("stage-fail-text").textContent = `Couldn't draw this preview: ${e.message}`;
+    $("stage-fail").hidden = false;
+  }
+
+  function retryEditor() {
+    $("stage-fail").hidden = true;
+    queueEditorJob();
   }
 
   const toRect = (v) => (Array.isArray(v) && v.length === 4 ? v.map(Number) : null);
@@ -2327,7 +2738,9 @@
     if (img.getAttribute("src") !== res.image) img.src = res.image;
     img.alt = `Poster preview for ${c ? c.name : key}`;
     $("stage-empty").hidden = true;
+    $("stage-fail").hidden = true;
     $("stage").classList.remove("is-stale");
+    $("mini-img").src = res.image;
     S.preview.key = key;
     S.preview.layout = res.layout || {};
     S.preview.streaming = !!res.streaming;
@@ -2571,6 +2984,7 @@
       $(id).disabled = blocked || (id === "art-auto" && art.mode === "auto");
       $(id).title = why;
     }
+    $("chooser-use").disabled = blocked;
     $("art-shuffle").classList.toggle("is-busy", S.artBusy === "shuffle");
   }
 
@@ -2588,6 +3002,7 @@
       c.artwork = { mode: res.mode || (action === "auto" ? "auto" : "chosen"), item: res.item === undefined ? item || null : res.item };
       S.artRev.set(key, (S.artRev.get(key) || 0) + 1);
       S.cache.delete(key);
+      S.tiles.delete(key);
       if (action === "choose") toast(name ? `Artwork saved: ${name}.` : "Artwork saved.", "ok");
       else if (action === "shuffle") toast("New artwork picked and saved.", "ok");
       else toast("Back to automatic artwork. Saved.", "ok");
@@ -2618,12 +3033,30 @@
     schedulePreview(cand ? 300 : 120);
   }
 
+  /** On a touch screen a tap only previews a title (there's no hover), and Use this keeps it. */
+  function touchPick(cand, btn) {
+    const ch = S.chooser;
+    if (!ch) return;
+    ch.picked = cand;
+    for (const b of $("chooser-grid").querySelectorAll(".thumb.is-previewed")) b.classList.remove("is-previewed");
+    btn.classList.add("is-previewed");
+    const use = $("chooser-use");
+    use.hidden = false;
+    use.textContent = "Use this";
+    use.setAttribute("aria-label", `Use ${cand.name || cand.id}`);
+    previewCandidate(cand);
+    announce(`Previewing ${cand.name || cand.id} on the poster. Use this keeps it.`);
+  }
+
+  const canHover = () => window.matchMedia("(hover: hover) and (pointer: fine)").matches;
+
   async function openChooser() {
     const key = S.selected;
     if (!key) return;
     closeChooser();
-    const ch = { key, urls: new Map() };
+    const ch = { key, urls: new Map(), pointer: null, picked: null };
     S.chooser = ch;
+    $("chooser-use").hidden = true;
     $("chooser").hidden = false;
     $("art-choose").setAttribute("aria-expanded", "true");
     const grid = $("chooser-grid");
@@ -2655,7 +3088,9 @@
       msg.textContent = "No titles to choose from yet for this collection.";
       return;
     }
-    msg.textContent = "Hover over a title to preview it on the poster, click to use it.";
+    msg.textContent = canHover()
+      ? "Point at a title (or move to it with Tab) to preview it on the poster, and click it to use it."
+      : "Tap a title to preview it on the poster, then Use this to keep it.";
     const inUse = res.mode === "chosen" ? res.item : null;
     const jobs = [];
     for (const cand of cands) {
@@ -2667,9 +3102,16 @@
         class: "thumb", type: "button", "aria-pressed": String(cand.id === inUse),
         title: cand.name || cand.id, "aria-label": `Use ${cand.name || cand.id}${cand.year ? " (" + cand.year + ")" : ""}`,
       }, [imgBox, caption]);
-      btn.addEventListener("mouseenter", () => previewCandidate(cand));
-      btn.addEventListener("focus", () => previewCandidate(cand));
-      btn.addEventListener("click", () => artworkAction("choose", cand.id, cand.name));
+      // a mouse previews on hover; a touch (which fires hover and click together) only previews, for Use this
+      btn.addEventListener("pointerenter", (e) => { if (e.pointerType === "mouse") previewCandidate(cand); });
+      btn.addEventListener("pointerdown", (e) => { ch.pointer = e.pointerType; });
+      btn.addEventListener("focus", () => { if (ch.pointer !== "touch" && ch.pointer !== "pen") previewCandidate(cand); });
+      btn.addEventListener("click", () => {
+        const touch = ch.pointer === "touch" || ch.pointer === "pen";
+        ch.pointer = null;
+        if (touch) touchPick(cand, btn);
+        else artworkAction("choose", cand.id, cand.name);
+      });
       grid.append(btn);
       jobs.push({ id: cand.id, img, btn, imgBox });
     }
@@ -2704,6 +3146,7 @@
     S.chooser = null;
     for (const u of ch.urls.values()) URL.revokeObjectURL(u);
     $("chooser").hidden = true;
+    $("chooser-use").hidden = true;
     $("chooser-grid").textContent = "";
     $("art-choose").setAttribute("aria-expanded", "false");
     if (S.preview.candidate) {
@@ -2725,6 +3168,7 @@
       btn.tabIndex = on ? 0 : -1;
       $("panel-" + t).hidden = !on;
     }
+    $("mini").classList.toggle("is-on", tab === "design");
     if (focus) $("tab-" + tab).focus();
     refreshStrip();
     if (!changed) return;
@@ -2777,10 +3221,7 @@
     const ph = el("span", { class: "gcard-ph", "aria-hidden": "true", text: String(c.title || c.name).replace(/\n/g, " ") });
     const art = el("span", { class: "gcard-art" }, [img, ph, el("span", { class: "spinner", "aria-hidden": "true" })]);
     const btn = el("button", { class: "gcard", type: "button", title: `Design ${c.name}` }, [art, el("span", { class: "gcard-name", text: c.name })]);
-    btn.addEventListener("click", () => {
-      openPoster(key);
-      showTab("design");
-    });
+    btn.addEventListener("click", () => goPoster(key, true));
     return { key, el: btn, img, art, visible: false, shownHash: null, failedHash: null, fail: null };
   }
 
@@ -2822,10 +3263,14 @@
     if (card.img.getAttribute("src") !== entry.image) card.img.src = entry.image;
     card.el.classList.add("has-image");
     card.shownHash = hash;
-    if (card.fail) {
-      card.fail.remove();
-      card.fail = null;
-    }
+    clearCardFail(card);
+  }
+
+  function clearCardFail(card) {
+    if (!card.fail) return;
+    card.fail.remove();
+    card.fail = null;
+    card.el.removeAttribute("aria-describedby");
   }
 
   function refreshGrid() {
@@ -2834,8 +3279,8 @@
     for (const key of S.grid.order) {
       const card = S.grid.cards.get(key);
       const hash = hashFor(key);
-      const hit = S.cache.get(key);
-      if (hit && hit.hash === hash && card.shownHash !== hash) showCard(card, hit, hash);
+      const hit = tileFor(key, hash);
+      if (hit && card.shownHash !== hash) showCard(card, hit, hash);
       card.el.classList.toggle("is-stale", !!card.shownHash && card.shownHash !== hash);
       card.el.classList.toggle("is-selected", key === S.selected);
       if (card.shownHash === hash) fresh++;
@@ -2854,6 +3299,16 @@
     }
     const n = S.grid.order.length;
     $("grid-status").textContent = n ? `${fresh} of ${n} rendered${fresh < n ? ". Scroll to render the rest" : ""}` : "";
+    $("grid-retry").hidden = !S.grid.order.some((key) => S.grid.cards.get(key).fail);
+  }
+
+  /** Try the posters that couldn't be drawn again. */
+  function retryGrid() {
+    for (const card of S.grid.cards.values()) {
+      card.failedHash = null;
+      clearCardFail(card);
+    }
+    refreshGrid();
   }
 
   function nextGridJob() {
@@ -2862,15 +3317,15 @@
       const card = S.grid.cards.get(key);
       if (!card || !card.visible) continue;
       const hash = hashFor(key);
-      const hit = S.cache.get(key);
-      if (hit && hit.hash === hash) {
+      const hit = tileFor(key, hash);
+      if (hit) {
         if (card.shownHash !== hash) showCard(card, hit, hash);
         continue;
       }
       if (card.failedHash === hash) continue;
       card.el.classList.add("is-loading");
       return {
-        key, hash, posters: snapshot(),
+        key, hash, posters: snapshot(), small: true,
         done: (res) => gridDone(card, key, hash, res),
         fail: (e) => gridFail(card, hash, e),
       };
@@ -2878,23 +3333,29 @@
     return null;
   }
 
-  function gridDone(card, key, hash, res) {
-    storeCache(key, hash, res);
+  function gridDone(card, key, hash, image) {
+    storeTile(key, hash, image);
     card.el.classList.remove("is-loading");
     if (S.grid.cards.get(key) !== card) return;
-    showCard(card, S.cache.get(key), hash);
+    showCard(card, S.tiles.get(key), hash);
     card.el.classList.toggle("is-stale", hashFor(key) !== hash);
     updateGridStatus();
   }
 
   function gridFail(card, hash, e) {
     card.el.classList.remove("is-loading");
+    if (e.status === 0 || e.status === 401) {
+      fail(e);  // drawn again once CineSets is back, or after signing in
+      return;
+    }
     card.failedHash = hash;
     if (!card.fail) {
-      card.fail = el("span", { class: "gcard-fail", text: "Couldn't render" });
+      card.fail = el("span", { class: "gcard-fail", id: `gfail-${card.key}` });
       card.art.append(card.fail);
+      card.el.setAttribute("aria-describedby", card.fail.id);
     }
-    fail(e, "Preview failed");
+    card.fail.textContent = `Couldn't render: ${e.message}`;
+    updateGridStatus();
   }
 
   // ------------------------------------------------------------------ unsaved changes, save, discard, conflicts
@@ -2955,6 +3416,9 @@
     };
   }
 
+  /** Anything not saved yet: settings (S.dirty) or words typed in the Text card. */
+  const unsaved = () => S.dirty || !!S.textDraft;
+
   function syncDirty() {
     if (!S.posters) return;
     const d = dirtyState();
@@ -2965,15 +3429,23 @@
     if (d.picks) parts.push("collections on or off");
     if (d.limits) parts.push("collection sizes");
     S.dirty = parts.length > 0;
-    const ind = $("dirty");
-    ind.classList.toggle("is-dirty", S.dirty);
-    ind.textContent = "";
-    ind.append(el("span", { class: "dirty-text", text: S.dirty ? "Unsaved changes" : "All changes saved" }));
-    ind.title = S.dirty ? `Unsaved: ${listText(parts)}` : "Everything is saved";
-    ind.setAttribute("aria-label", S.dirty ? `Unsaved changes: ${listText(parts)}` : "All changes saved");
-    $("save-btn").disabled = !S.dirty || S.saving;
-    $("discard-btn").disabled = !S.dirty || S.saving;
-    document.title = S.dirty ? "CineSets (unsaved)" : "CineSets";
+    const draft = S.textDraft && S.byKey.get(S.textDraft.key);
+    if (draft) parts.push(`the words for ${draft.name}`);
+    const any = unsaved();
+    const busy = S.saving || S.textBusy;
+    for (const id of ["dirty", "m-dirty"]) {
+      const ind = $(id);
+      ind.classList.toggle("is-dirty", any);
+      ind.textContent = "";
+      // the short word shows where the topbar is narrow, so the state is never just a coloured dot
+      ind.append(el("span", { class: "dirty-text", text: any ? "Unsaved changes" : "All changes saved" }),
+        el("span", { class: "dirty-short", text: any ? "Unsaved" : "Saved" }));
+      ind.title = any ? `Unsaved: ${listText(parts)}` : "Everything is saved";
+    }
+    $("dirty").setAttribute("aria-label", any ? `Unsaved changes: ${listText(parts)}` : "All changes saved");
+    for (const id of ["save-btn", "m-save"]) $(id).disabled = !any || busy;
+    $("discard-btn").disabled = !any || busy;
+    document.title = any ? "CineSets (unsaved)" : "CineSets";
   }
 
   function afterBulkChange() {
@@ -2982,12 +3454,20 @@
     if (S.tab === "grid") buildGrid();
   }
 
+  /** Save everything that isn't saved: the settings, then any words typed in the Text card. Says whether it all saved. */
   async function save() {
-    if (S.saving || !S.posters || !S.dirty) return;
+    if (S.saving || S.textBusy || !S.posters) return false;
+    if (S.dirty && !(await saveSettings())) return false;
+    if (S.textDraft) return saveText();
+    return true;
+  }
+
+  async function saveSettings() {
     S.saving = true;
     syncDirty();
     const btn = $("save-btn");
     btn.classList.add("is-busy");
+    $("m-save").classList.add("is-busy");
     const sentPosters = normalisePosters(S.posters);
     const sentPicks = new Set(S.picks);
     const sentLimits = normaliseLimits(S.limits);
@@ -3002,7 +3482,7 @@
       const res = await api("api/save", { method: "POST", body });
       if (res.saved === false) {
         toast(res.message || "Nothing was saved.", "info", 6000);
-        return;
+        return true;
       }
       toast(res.message || "Saved.", "ok");
       hideConflict();
@@ -3019,24 +3499,29 @@
         S.posters = clone(S.saved.posters);
         S.picks = new Set(S.saved.picks);
         S.limits = clone(S.saved.limits);
+        S.history.base = snapshot();  // the server's tidy copy of the same design is not a step to undo
       }
       syncSizes();
       afterBulkChange();
+      return true;
     } catch (e) {
       if (e.status === 409) showConflict(e.message);
       else fail(e, "Not saved");
+      return false;
     } finally {
       S.saving = false;
       btn.classList.remove("is-busy");
+      $("m-save").classList.remove("is-busy");
       syncDirty();
     }
   }
 
   async function discard() {
-    if (!S.dirty || S.saving) return;
+    if (!unsaved() || S.saving || S.textBusy) return;
     const ok = await confirmDialog({
       title: "Discard unsaved changes?",
-      text: "Designs and which collections are on go back to your last save. Artwork choices are already saved and stay as they are.",
+      text: "Designs, which collections are on, sizes and words typed in the Text card go back to your last save. "
+        + "Artwork choices are already kept and stay as they are. Undo can bring back the designs.",
       ok: "Discard",
       danger: true,
     });
@@ -3044,19 +3529,29 @@
     S.posters = clone(S.saved.posters);
     S.picks = new Set(S.saved.picks);
     S.limits = clone(S.saved.limits);
+    if (S.textDraft) {
+      S.textDraft = null;
+      refreshTextCard(true);
+    }
     afterBulkChange();
     syncSizes();
     toast("Changes discarded.");
   }
 
   // ------------------------------------------------------------------ running CineSets
+  /** The media server, for messages: "your Emby server", so it's never confused with CineSets itself. */
+  function serverName() {
+    const kind = S.info && S.info.server;
+    return kind && kind !== "demo" ? `your ${cap(kind)} server` : "your media server";
+  }
+
   function syncRunButtons() {
     const can = !!S.info && S.info.can_apply !== false;
     const running = S.run.running;
     const why = !can ? "Demo mode: running CineSets is switched off" : running ? "A run is in progress" : "";
-    for (const id of ["plan-btn", "apply-btn"]) {
+    for (const id of ["plan-btn", "apply-btn", "m-apply"]) {
       $(id).disabled = !can || running;
-      $(id).title = why || (id === "apply-btn" ? "Create and update collections on your server" : "See what would change, without changing anything");
+      $(id).title = why || (id === "plan-btn" ? "See what would change, without changing anything" : `Create and update collections on ${serverName()}`);
     }
     $("run-wrap").title = why;
     refreshArtworkPanel();
@@ -3064,6 +3559,7 @@
 
   function showLog(show) {
     $("runlog").hidden = !show;
+    $("app").classList.toggle("has-log", show);
     $("log-btn").setAttribute("aria-expanded", String(show));
     $("log-btn").setAttribute("aria-label", show ? "Hide the run log" : "Show the run log");
     if (show) {
@@ -3075,50 +3571,108 @@
   function resetLog() {
     $("runlog-text").textContent = "";
     S.run.shown = 0;
+    S.run.lost = false;
   }
 
-  function applyRun(r) {
+  function appendLog(lines) {
     const pre = $("runlog-text");
-    const lines = Array.isArray(r.lines) ? r.lines : [];
-    if (lines.length < S.run.shown) resetLog();
-    if (lines.length > S.run.shown) {
-      const stick = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 48;
-      pre.append(document.createTextNode(lines.slice(S.run.shown).join("\n") + "\n"));
-      S.run.shown = lines.length;
-      if (stick || $("runlog").hidden) pre.scrollTop = pre.scrollHeight;
+    const stick = pre.scrollHeight - pre.scrollTop - pre.clientHeight < 48;
+    pre.append(document.createTextNode(lines.join("\n") + "\n"));
+    if (stick || $("runlog").hidden) pre.scrollTop = pre.scrollHeight;
+  }
+
+  /**
+   * How the last run went, from what it said: its Summary line, its lines starting with !! and whether it stopped
+   * early. Any of those, or an exit code other than 0, means it finished with problems. Output from before runs
+   * had a Summary line simply leaves that part out.
+   */
+  function runOutcome() {
+    const r = S.run;
+    const what = r.command === "apply" ? "Apply" : "Dry run";
+    if (r.lost) {
+      return {
+        bad: true,
+        text: `The dashboard restarted during the ${what.toLowerCase()}, so how it ended isn't known. Look at the end of `
+          + "the CineSets log (the terminal, docker compose logs cinesets-web or journalctl -u cinesets-web), or run it again.",
+      };
     }
-    const was = S.run.running;
-    S.run.running = !!r.running;
-    S.run.command = r.command || S.run.command;
-    S.run.exit = r.exit === undefined ? null : r.exit;
+    const bad = r.exit !== 0 || r.problems > 0 || !!r.stopped;
+    const parts = [];
+    if (r.summary) parts.push(r.summary);
+    if (r.stopped) parts.push(`stopped early: ${r.stopped}`);
+    if (r.problems) parts.push(`${r.problems} ${r.problems === 1 ? "problem" : "problems"} in the log (the lines starting with !!)`);
+    if (bad && !r.problems && !r.stopped) parts.push(`it ended with error code ${r.exit}`);
+    const head = bad ? `${what} finished with problems` : `${what} finished`;
+    return { bad, text: parts.length ? `${head}: ${parts.join("; ")}.` : `${head}.` };
+  }
+
+  function showRunStatus() {
     const status = $("run-status");
     status.className = "run-status";
     status.textContent = "";
-    const what = S.run.command === "apply" ? "Apply" : "Dry run";
     if (S.run.running) {
       status.classList.add("is-running");
-      status.append(el("span", { class: "spinner", "aria-hidden": "true" }), S.run.command === "apply" ? "Applying to your server" : "Dry run in progress");
-    } else if (S.run.exit === 0) {
-      status.classList.add("is-ok");
-      status.textContent = `${what} finished`;
-    } else if (S.run.exit !== null) {
-      status.classList.add("is-bad");
-      status.textContent = `${what} stopped with an error (exit ${S.run.exit})`;
+      status.append(el("span", { class: "spinner", "aria-hidden": "true" }), S.run.command === "apply" ? `Applying to ${serverName()}` : "Dry run in progress");
+      return;
     }
+    if (S.run.exit === null && !S.run.lost) return;
+    const out = runOutcome();
+    status.classList.add(out.bad ? "is-bad" : "is-ok");
+    status.textContent = out.text;
+  }
+
+  /** The dashboard restarted while a run was on show: it has no record of that run, so keep its log and say so. */
+  function runLost() {
+    S.run.lost = true;
+    S.run.running = false;
+    appendLog(["", "(The dashboard restarted here, so the rest of this run's output isn't shown.)"]);
+    showRunStatus();
+    syncRunButtons();
+    toast(runOutcome().text, "error", 0, { label: "Show the log", run: () => showLog(true) });
+  }
+
+  /** New lines and the state of the run, from api/run?since=(the lines already shown). */
+  function applyRun(r) {
+    const was = S.run.running;
+    if (r.run && r.run !== S.run.id) {  // a run the page didn't know: started in another tab, or after a restart
+      resetLog();
+      S.run.id = r.run;
+    } else if (!r.run && (S.run.id || was)) {
+      if (was) runLost();
+      return;
+    }
+    const lines = Array.isArray(r.lines) ? r.lines : [];
+    if (r.skipped) appendLog([`(${r.skipped} earlier ${r.skipped === 1 ? "line isn't" : "lines aren't"} kept)`]);
+    if (lines.length) appendLog(lines);
+    S.run.shown = Number.isFinite(r.total) ? r.total : S.run.shown + lines.length;
+    S.run.running = !!r.running;
+    S.run.command = r.command || S.run.command;
+    S.run.exit = r.exit === undefined ? null : r.exit;
+    S.run.problems = Number(r.problems) || 0;
+    S.run.summary = r.summary || null;
+    S.run.stopped = r.stopped || null;
+    showRunStatus();
     if (was && !S.run.running) {
-      if (S.run.exit === 0) toast(S.run.command === "apply" ? "Applied to your server." : "Dry run finished. See the log for what would change.", "ok");
-      else toast("The run stopped with an error. See the log.", "error");
+      const out = runOutcome();
+      const said = S.run.summary ? `: ${S.run.summary}` : "";
+      if (out.bad) toast(out.text, "error", 0, { label: "Show the log", run: () => showLog(true) });
+      else if (S.run.command === "apply") toast(`Applied to ${serverName()}${said}.`, "ok", 8000);
+      else toast(`Dry run finished${said}. See the log for what would change.`, "ok", 8000);
     }
     syncRunButtons();
   }
 
   async function pollRun() {
     clearTimeout(S.run.timer);
-    if (S.gated) return;
+    if (S.gated || S.offline.on) return;
     try {
-      applyRun(await api("api/run"));
+      let r = await api("api/run?since=" + S.run.shown);
+      // a different run from the one on show: read it from its first line
+      if (r.run && r.run !== S.run.id && S.run.shown) r = await api("api/run?since=0");
+      applyRun(r);
     } catch (e) {
       fail(e, "Couldn't read the run log");
+      if (e.status === 0) return;  // the offline banner reads it again when CineSets is back
     }
     if (S.run.running && !S.gated) S.run.timer = setTimeout(pollRun, POLL_MS);
   }
@@ -3126,22 +3680,32 @@
   async function startRun(command) {
     if (S.run.running) return;
     if (command === "apply") {
-      const ok = await confirmDialog({
-        title: "Apply to your server?",
-        text: "This creates and updates collections on your server. Save first if you have unsaved changes.",
-        ok: "Apply",
-      });
-      if (!ok) return;
-    } else if (S.dirty) {
+      if (unsaved()) {
+        const choice = await confirmDialog({
+          title: "Save, then apply?",
+          text: "Apply uses your saved settings, and you have unsaved changes. Save them first to include them, or apply "
+            + `what's saved now. Either way, this creates and updates collections on ${serverName()}.`,
+          ok: "Save and apply",
+          alt: "Apply without saving",
+        });
+        if (!choice || (choice === "ok" && !(await save()))) return;
+      } else {
+        const ok = await confirmDialog({
+          title: `Apply to ${serverName()}?`,
+          text: `This creates and updates collections on ${serverName()} with your saved settings.`,
+          ok: "Apply",
+        });
+        if (!ok) return;
+      }
+    } else if (unsaved()) {
       toast("The dry run uses your saved settings. Unsaved changes aren't included.");
     }
     try {
       await api("api/run", { method: "POST", body: { command } });
       resetLog();
-      S.run.running = true;
-      S.run.command = command;
-      S.run.exit = null;
-      applyRun({ running: true, command, lines: [], exit: null });
+      Object.assign(S.run, { id: null, running: true, command, exit: null, problems: 0, summary: null, stopped: null });
+      showRunStatus();
+      syncRunButtons();
       showLog(true);
       S.run.timer = setTimeout(pollRun, 400);
     } catch (e) {
@@ -3217,6 +3781,7 @@
     S.picks = new Set(S.saved.picks);
     S.limits = clone(S.saved.limits);
     S.cache.clear();
+    S.tiles.clear();
     if (S.grid.observer) S.grid.observer.disconnect();
     S.grid.observer = null;
     S.grid.cards.clear();
@@ -3249,7 +3814,40 @@
     syncLists();
     syncDirty();
     refreshScopeUI();
+    historyReset();
     if (S.tab === "grid") buildGrid();
+  }
+
+  // ---- first run: three steps, until they're dismissed (remembered in this browser when it lets us)
+  function showIntro() {
+    let done = false;
+    try {
+      done = window.localStorage.getItem(INTRO_KEY) === "1";
+    } catch (_) { /* storage blocked: show it */ }
+    $("intro-server").textContent = serverName();
+    $("intro").hidden = done;
+  }
+
+  function closeIntro() {
+    $("intro").hidden = true;
+    try {
+      window.localStorage.setItem(INTRO_KEY, "1");
+    } catch (_) { /* not remembered, so it shows again next time */ }
+  }
+
+  // ---- phones: a small copy of the poster while it's scrolled out of view on the Design tab
+  function watchStage() {
+    if (typeof IntersectionObserver !== "function") return;
+    new IntersectionObserver((entries) => {
+      for (const en of entries) $("mini").classList.toggle("is-away", !en.isIntersecting);
+    }, { threshold: 0.15 }).observe($("stage"));
+  }
+
+  /** True when focus is somewhere that has its own undo (a text field), so Ctrl or Cmd + Z is left to it. */
+  function typing(t) {
+    if (!t || !t.tagName) return false;
+    if (t.isContentEditable || t.tagName === "TEXTAREA" || t.tagName === "SELECT") return true;
+    return t.tagName === "INPUT" && !["range", "radio", "checkbox", "color", "button", "submit"].includes(t.type);
   }
 
   async function startApp() {
@@ -3274,8 +3872,9 @@
     $("boot").hidden = true;
     $("app").hidden = false;
     syncRunButtons();
+    showIntro();
     try {
-      const r = await api("api/run");
+      const r = await api("api/run?since=0");
       applyRun(r);
       if (r.running) {
         showLog(true);
@@ -3298,6 +3897,21 @@
     $("runlog-close").addEventListener("click", () => showLog(false));
     $("conflict-reload").addEventListener("click", reloadSettings);
     $("conflict-keep").addEventListener("click", hideConflict);
+    $("offline-retry").addEventListener("click", reconnect);
+    $("intro-close").addEventListener("click", closeIntro);
+    $("intro-collections").addEventListener("click", () => showTab("collections", true));
+    $("undo-btn").addEventListener("click", undo);
+    $("redo-btn").addEventListener("click", redo);
+    $("stage-retry").addEventListener("click", retryEditor);
+    $("strip-retry").addEventListener("click", retryStrip);
+    $("grid-retry").addEventListener("click", retryGrid);
+    $("m-save").addEventListener("click", save);
+    $("m-apply").addEventListener("click", () => startRun("apply"));
+    $("mini").addEventListener("click", () => {
+      $("stage").scrollIntoView({ block: "center" });
+      $("ed-name").focus({ preventScroll: true });
+    });
+    watchStage();
 
     for (const t of TABS) {
       const btn = $("tab-" + t);
@@ -3346,7 +3960,14 @@
       }
     });
     for (const r of document.querySelectorAll('input[name="nc-mode"]')) r.addEventListener("change", syncNcMode);
-    for (const r of document.querySelectorAll('input[name="nc-type"]')) r.addEventListener("change", () => { S.nc.typeTouched = true; });
+    for (const r of document.querySelectorAll('input[name="nc-type"]')) {
+      r.addEventListener("change", () => {
+        S.nc.typeTouched = true;
+        if (S.nc.checked) showNcChecked();
+      });
+    }
+    $("nc-limit").addEventListener("input", syncNcWarn);
+    $("nc-ex-select").addEventListener("change", () => { if (S.nc.checked) showNcChecked(); });
     $("nc-ex-search").addEventListener("input", fillExisting);
     $("nc-ex-add").addEventListener("click", ncAddExisting);
     $("nc-ex-select").addEventListener("dblclick", ncAddExisting);
@@ -3356,6 +3977,7 @@
     $("tx-revert").addEventListener("click", () => {
       S.textDraft = null;
       refreshTextCard(true);
+      syncDirty();
       schedulePreview(0);
     });
     $("nc-add-list").addEventListener("click", () => ncRow().focus());
@@ -3397,35 +4019,44 @@
       $("art-choose").focus();
     });
     const cgrid = $("chooser-grid");
-    cgrid.addEventListener("mouseleave", () => {
-      if (!cgrid.contains(document.activeElement)) previewCandidate(null);
+    cgrid.addEventListener("pointerleave", (e) => {
+      if (e.pointerType === "mouse" && !cgrid.contains(document.activeElement)) previewCandidate(null);
     });
     cgrid.addEventListener("focusout", (e) => {
-      if (!cgrid.contains(e.relatedTarget) && !cgrid.matches(":hover")) previewCandidate(null);
+      const touchPicked = S.chooser && S.chooser.picked;
+      if (!$("chooser").contains(e.relatedTarget) && !touchPicked && !cgrid.matches(":hover")) previewCandidate(null);
+    });
+    $("chooser-use").addEventListener("click", () => {
+      const cand = S.chooser && S.chooser.picked;
+      if (cand) artworkAction("choose", cand.id, cand.name);
     });
 
     document.addEventListener("keydown", (e) => {
-      if ((e.metaKey || e.ctrlKey) && !e.altKey && e.key.toLowerCase() === "s") {
+      const key = (e.key || "").toLowerCase();
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && key === "s") {
         if ($("app").hidden) return;
         e.preventDefault();
         save();
+      } else if ((e.metaKey || e.ctrlKey) && !e.altKey && (key === "z" || (key === "y" && !e.shiftKey))) {
+        // design edits on the Design and Preview all tabs; text fields keep their own undo
+        if ($("app").hidden || $("confirm").open || typing(e.target) || (S.tab !== "design" && S.tab !== "grid")) return;
+        e.preventDefault();
+        if (key === "z" && !e.shiftKey) undo();
+        else redo();
       } else if (e.key === "Escape" && S.chooser && $("chooser").contains(document.activeElement)) {
         closeChooser();
         $("art-choose").focus();
       }
     });
     window.addEventListener("beforeunload", (e) => {
-      if (S.dirty) {
+      if (unsaved()) {
         e.preventDefault();
         e.returnValue = "";
       }
     });
     window.addEventListener("hashchange", () => {
       const key = keyFromHash();
-      if (key && S.loaded && !(S.mode === "poster" && key === S.selected)) {
-        openPoster(key);
-        showTab("design");
-      }
+      if (key && S.loaded && !(S.mode === "poster" && key === S.selected)) goPoster(key, true);
     });
     const mq = window.matchMedia("(min-width: 1000px)");
     const onMq = () => { if (S.tab === "grid") ensureObserver(); };
