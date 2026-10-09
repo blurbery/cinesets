@@ -271,11 +271,11 @@ def test_a_poster_that_cannot_be_fetched_gives_its_place_to_another(make_cfg, ca
 
 def test_when_the_posters_cannot_be_fetched_the_mosaic_is_tried_again_next_run(make_cfg, capsys):
     cfg, srv, eng = setup(make_cfg)
-    real = srv.poster_image
-    srv.poster_image = lambda item, width=400, quality=90: b""
+    real, asked = srv.poster_image, []
+    srv.poster_image = lambda item, width=400, quality=90: asked.append(item) or b""
     run(eng, cfg)
     assert "not enough of its posters could be fetched for a mosaic" in capsys.readouterr().out
-    assert len(poster_reads(srv)) == 0 and design(cfg)[-1] == "artwork:mosaic:3x3:not fetched"
+    assert len(asked) == mosaic.TRIES and design(cfg)[-1] == "artwork:mosaic:3x3:not fetched"   # a few tries, no more
     assert len(uploads(srv)) == 1                                                 # one artwork meanwhile
     srv.poster_image = real
     srv.calls.clear()
