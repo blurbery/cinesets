@@ -12,6 +12,9 @@ import os
 import requests
 
 from . import __version__
+from .store import load_json, save_json
+
+SOURCES = "sources.json"  # which Commons file each logo here came from (see download)
 
 FILES = {
     "netflix": "File:Netflix 2015 logo.svg",
@@ -19,9 +22,9 @@ FILES = {
     "disney": "File:Disney+ logo.svg",
     "hbomax": "File:HBO Max May 2025 (Horizontal).svg",
     "apple": "File:Apple TV Plus Logo.svg",
-    "hulu": "File:Hulu Logo.svg",
+    "hulu": "File:Hulu logo (2018).svg",
     "paramount": "File:Paramount+ logo.svg",
-    "peacock": "File:NBCUniversal Peacock Logo.svg",
+    "peacock": "File:NBCUniversal Peacock Logo (2026).svg",
     "stan": "File:Stan logo.svg",
     "binge": "File:Binge logo.svg",
     "iplayer": "File:BBC iPlayer 2021 (Alt).svg",
@@ -31,13 +34,13 @@ FILES = {
 }
 # other logos a streaming poster can use instead: "alt" (another version of the logo) and "icon" (the mark alone)
 VARIANTS = {
-    "netflix": {"icon": ("Netflix N", "File:Netflix 2015 N logo.svg")},
+    "netflix": {"icon": ("Netflix N", "File:Netflix 2016 N logo.svg")},
     "prime": {"alt": ("Prime Video 2024", "File:Prime Video logo (2024).svg"),
               "icon": ("Prime Video icon", "File:Amazon Prime Video logo (2024).svg")},
     "disney": {"alt": ("Disney+ alternative", "File:Disney Plus logo.svg")},
     "hbomax": {"alt": ("Max 2023", "File:Max logo.svg")},
     "apple": {"alt": ("Apple TV", "File:Apple TV logo.svg")},
-    "hulu": {"alt": ("Hulu 2018", "File:Hulu logo (2018).svg")},
+    "peacock": {"alt": ("Peacock 2020", "File:NBCUniversal Peacock Logo (2020–2026).svg")},
     "paramount": {"alt": ("Paramount+ stacked", "File:Paramount Plus.svg")},
     "iplayer": {"alt": ("iPlayer symbol and wordmark", "File:BBC iPlayer (2021).svg"),
                 "icon": ("iPlayer symbol", "File:BBC iPlayer 2021 (symbol).svg")},
@@ -75,7 +78,13 @@ def download(logos_dir, force=False):
                                f"posters) python-requests/{requests.__version__}")
     every = {file_name(k): t for k, t in FILES.items()}
     every.update({file_name(k, v): t for k, versions in VARIANTS.items() for v, (_, t) in versions.items()})
-    want = {name: t for name, t in every.items() if force or not os.path.exists(os.path.join(logos_dir, name))}
+    # a logo is fetched when it isn't here, or when it came from another Commons file than the one listed now (a
+    # service's new logo, say), or when nothing says where it came from (logos from before this was noted)
+    record_path = os.path.join(logos_dir, SOURCES)
+    record = load_json(record_path, {})
+    record = record if isinstance(record, dict) else {}
+    want = {name: t for name, t in every.items()
+            if force or not os.path.exists(os.path.join(logos_dir, name)) or record.get(name) != t}
     if not want:
         print("All logos already downloaded.")
         return
@@ -86,9 +95,9 @@ def download(logos_dir, force=False):
     norm = {n["from"]: n["to"] for n in q.get("normalized", [])}
     moved = {r["from"]: r["to"] for r in q.get("redirects", [])}
     urls = {p["title"]: p["imageinfo"][0].get("thumburl") for p in q.get("pages", {}).values() if p.get("imageinfo")}
-    for name, title in want.items():
+    for name, listed in want.items():
         key = name[:-4]
-        title = norm.get(title, title)
+        title = norm.get(listed, listed)
         url = urls.get(moved.get(title, title))
         if not url:
             print(f"  {key}: not found on Wikimedia Commons, posters will show the service name instead")
@@ -100,6 +109,8 @@ def download(logos_dir, force=False):
             continue
         if r.ok and r.headers.get("Content-Type", "").startswith("image/png"):
             _save(os.path.join(logos_dir, name), r.content)
+            record[name] = listed
+            save_json(record_path, record)
             print(f"  {key}: {len(r.content) // 1024} KB")
         else:
             print(f"  {key}: download failed ({r.status_code})")

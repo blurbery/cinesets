@@ -65,7 +65,7 @@ def test_logos_follow_renamed_files_and_one_bad_answer_stops_nothing(tmp_path, m
     agent = commons.headers["User-Agent"]
     assert agent.startswith(f"CineSets/{__version__} (") and "https://github.com/blurbery/cinesets" in agent
     assert commons.asked[0][1]["redirects"] == 1
-    assert sorted(os.listdir(tmp_path)) == ["disney.png", "netflix.png"]           # nothing half written left behind
+    assert sorted(os.listdir(tmp_path)) == ["disney.png", "netflix.png", logos.SOURCES]   # nothing half written
     out = capsys.readouterr().out
     assert "prime: not found" in out and "hulu: download failed (ConnectionError)" in out and "stan: not found" in out
 
