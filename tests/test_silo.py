@@ -98,6 +98,7 @@ class FakeSilo:
         self.next_id = 500
         self.rate_limit = 0
         self.not_admin = False
+        self.no_poster = {"movie-imdb-tt0133093"}   # a title Silo has no poster for
 
     def add_collection(self, title, lib, kind="manual"):
         cid = str(self.next_id)
@@ -138,16 +139,18 @@ class FakeSilo:
             assert headers.get("X-Profile-Id") == "77", "the catalogue needs the profile header"
             typ = "movie" if q["type"] == "movie" else "series"
             rows = [{"content_id": cid, "type": typ, "title": it["title"], "year": it["year"], "genres": it["genres"],
-                     "backdrop_thumbhash": "x"} for cid, it in self.items.items()
-                    if it["lib"] == q["library_id"] and cid.startswith(typ)]
+                     "backdrop_thumbhash": "x", **({"poster_thumbhash": "p"} if cid not in self.no_poster else {})}
+                    for cid, it in self.items.items() if it["lib"] == q["library_id"] and cid.startswith(typ)]
             return Resp(data=self.page(rows, q))
         if parts[:2] == ["catalog", "items"]:
             it = self.items.get(parts[2])
             if not it:
                 return problem(404, "not found")
             cid = parts[2]
+            poster = {} if cid in self.no_poster else {"poster_url": f"https://storage.example.com/art/{cid}-poster.jpg?"
+                                                                     f"size={q.get('image_size')}&signature=abc"}
             return Resp(data={"content_id": cid, "title": it["title"], "genres": it["genres"],
-                              "backdrop_url": f"https://storage.example.com/art/{cid}.jpg?signature=abc",
+                              "backdrop_url": f"https://storage.example.com/art/{cid}.jpg?signature=abc", **poster,
                               **{f"{k}_id": v for k, v in silo.content_ids(cid).items()}, **it["ids"]})
         if parts[0] != "admin" or parts[1] != "collections":
             return problem(404, f"no route {method} {path}")

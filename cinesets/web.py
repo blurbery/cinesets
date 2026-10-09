@@ -48,7 +48,7 @@ from urllib.parse import parse_qs, urlparse
 import yaml
 from PIL import Image
 
-from . import __version__, catalog, config, posters, scenes
+from . import __version__, catalog, config, mosaic, posters, scenes
 from .engine import SAFE_ID, Busy, Engine
 from .lists import fetch_list, slug_of
 from .servers import ServerError, connect
@@ -228,6 +228,7 @@ class Dashboard:
         self.fetch_lock = threading.Lock()    # one artwork download at a time
         self.loaded = (None, None)            # (file times, catalogue) so previews don't re-read the files each time
         self.ids, self.provisional, self.scene_files = {}, {}, {}
+        self.provisional_tiles = {}           # collection key -> mosaic tiles held for this session, as with random picks
         self.rng = random.Random()
         self.run_state = {"running": False, "command": None, "lines": collections.deque(maxlen=500), "exit": None,
                           "id": None, "total": 0, "problems": 0, "summary": None, "stopped": None}
@@ -330,7 +331,10 @@ class Dashboard:
     def artwork_of(coll, state):
         st = state.get(coll["key"]) or {}
         chosen = st.get("artwork") == "chosen" and not coll.get("logo")
-        return {"mode": "chosen" if chosen else "auto", "item": st.get("backdrop_item") if chosen else None}
+        out = {"mode": "chosen" if chosen else "auto", "item": st.get("backdrop_item") if chosen else None}
+        if st.get("tiles_chosen") and not coll.get("logo"):
+            out["tiles"] = "chosen"  # mosaic tiles picked here with Shuffle, kept until set back to automatic
+        return out
 
     # ------------------------------------------------------------ artwork
     def matched(self, coll):
@@ -368,9 +372,10 @@ class Dashboard:
             raise Problem("That title is not in your library, or has no artwork", 404)
         return item
 
-    def pick_for(self, coll, state):
+    def pick_for(self, coll, state, style):
         """The artwork a preview shows: the dashboard's choice, then whatever the poster on the server uses now, then
-        what the next run would pick (a random pick is held for this session so previews don't flicker)."""
+        what the next run would pick with these settings (a random pick is held for this session so previews don't
+        flicker)."""
         st = state.get(coll["key"]) or {}
         if st.get("artwork") == "chosen" and not coll.get("logo"):
             return st.get("backdrop_item")
@@ -381,15 +386,69 @@ class Dashboard:
             return st["backdrop_item"]
         if coll.get("backdrop_item"):
             return coll["backdrop_item"]
-        if coll["key"] not in self.provisional:
+        random_art = style["artwork"] == "random" and not coll.get("logo")
+        if (self.provisional.get(coll["key"]) or (None,))[0] is not random_art:
             ids = self.matched(coll)
             top = self.engine.candidates(ids, self.index)
             items = self.index["items"]
             pick = next((i for i in ids if items[i]["n"] == coll.get("backdrop_title") and items[i]["b"]), None)
-            if self.cfg["posters"]["artwork"] == "random" and not coll.get("logo"):
+            if random_art:
                 pick = self.rng.choice(top) if top else None
-            self.provisional[coll["key"]] = pick or (top[0] if top else None)
-        return self.provisional[coll["key"]]
+            self.provisional[coll["key"]] = (random_art, pick or (top[0] if top else None))
+        return self.provisional[coll["key"]][1]
+
+    # ------------------------------------------------------------ mosaic posters
+    @staticmethod
+    def is_mosaic(coll, style, state):
+        """Whether a poster is a mosaic, as a run would draw it: artwork mosaic, but not a streaming poster, and not
+        when one artwork is pinned (backdrop_item) or chosen here, which come first."""
+        st = state.get(coll["key"]) or {}
+        return (style["artwork"] == "mosaic" and not coll.get("logo") and not coll.get("backdrop_item")
+                and st.get("artwork") != "chosen")
+
+    def has_poster(self, item):
+        return self.demo or mosaic.has_poster(self.index, item)
+
+    def tile(self, item):
+        """A tile's poster file for a preview: a made-up film in demo mode, or the one runs keep in data/tiles,
+        downloaded now (one at a time) if it isn't there yet."""
+        if self.demo:
+            name = item.split("-", 1)[1]
+            path = os.path.join(self.work, f"tile-{name}.jpg")
+            with self.fetch_lock:
+                if not os.path.exists(path):
+                    mosaic.demo_poster(name).save(path, quality=90)
+            return path
+        with self.fetch_lock:
+            return mosaic.tile_file(self.engine.srv, os.path.join(self.engine.data, "tiles"), item)
+
+    def tile_name(self, item):
+        if self.demo:
+            return mosaic.DEMO_FILMS.get(item.split("-", 1)[1], item)
+        return self.index["items"].get(item, {}).get("n") or item
+
+    def mosaic_art(self, coll, style, state):
+        """A preview's mosaic: (the grid as a picture, its tiles, None), from the tiles kept in state.json or else a
+        pick held for this session so previews don't flicker; or (None, None, why it has one artwork instead)."""
+        key, n = coll["key"], mosaic.size(style)
+        st = state.get(key) or {}
+        kept = st.get("tiles") or self.provisional_tiles.get(key)
+        tiles, spares = mosaic.pick(self.matched(coll), self.has_poster, kept, n * n, self.rng)
+        if not tiles:
+            return None, None, f"Too few of its titles have posters for a {style['mosaic']} mosaic, so it has one artwork"
+        if not st.get("tiles"):
+            self.provisional_tiles[key] = tiles
+        got = mosaic.fetch(tiles, spares, self.tile)
+        if not got:
+            return None, None, "Not enough of its posters could be fetched for a mosaic, so the preview shows one artwork"
+        ids = [i for i, _ in got]
+        name = hashlib.sha1(json.dumps([n, ids]).encode()).hexdigest()[:16]
+        path = os.path.join(self.work, f"grid-{name}.jpg")
+        if not os.path.exists(path):
+            part = f"{path}.{threading.get_ident()}.part"
+            mosaic.compose([p for _, p in got], n, part)
+            os.replace(part, path)
+        return path, ids, None
 
     def backdrop(self, item):
         """Artwork for a preview: what CineSets already downloaded, or a smaller copy kept only while the dashboard
@@ -444,15 +503,22 @@ class Dashboard:
             return f.read()
 
     def choose(self, body):
+        """Shuffle, choose or go back to automatic artwork, kept in state.json straight away. On a mosaic poster (by
+        the page's settings, saved or not) Shuffle picks new tiles instead, kept like a choice: --reshuffle leaves
+        them alone until Automatic."""
         coll = self.coll(body.get("key"))
         if coll.get("logo"):
             raise Problem("Streaming posters keep their own artwork")
         action = body.get("action")
         if action not in ("shuffle", "choose", "auto"):
             raise Problem("action must be shuffle, choose or auto")
+        settings = self.checked(body["posters"]) if isinstance(body.get("posters"), dict) else self.settings_now()["posters"]
+        style = posters.style_for(settings, coll["key"], coll["group"])
+        if action == "shuffle" and style["artwork"] == "mosaic" and not coll.get("backdrop_item"):
+            return self.shuffle_tiles(coll, style)
         item = self.known_item(body.get("item")) if action == "choose" else None
         if action == "shuffle":
-            now = self.pick_for(coll, self.read_state())
+            now = self.pick_for(coll, self.read_state(), style)
             pool = [c["id"] for c in self.candidates(coll)]
             pool = [i for i in pool if i != now] or pool
             if not pool:
@@ -463,9 +529,28 @@ class Dashboard:
             if action == "auto":
                 if st.get("artwork") == "chosen":
                     st.pop("artwork")
+                if st.pop("tiles_chosen", None):
+                    st.pop("tiles", None)
                 self.provisional.pop(coll["key"], None)
+                self.provisional_tiles.pop(coll["key"], None)
             else:
                 st["backdrop_item"], st["artwork"] = item, "chosen"
+        return self.artwork_of(coll, state)
+
+    def shuffle_tiles(self, coll, style):
+        """New tiles for a mosaic poster, away from the ones it has now where there are others, kept in state.json.
+        A single artwork chosen here gives way to the mosaic."""
+        key = coll["key"]
+        now = (self.read_state().get(key) or {}).get("tiles") or self.provisional_tiles.get(key)
+        tiles = mosaic.pick(self.matched(coll), self.has_poster, now, mosaic.size(style) ** 2, self.rng, fresh=True)[0]
+        if not tiles:
+            raise Problem(f"Too few of this collection's titles have posters for a {style['mosaic']} mosaic")
+        with self.lock, self.changing_state() as state:
+            st = state.setdefault(key, {})
+            if st.get("artwork") == "chosen":
+                st.pop("artwork")
+            st["tiles"], st["tiles_chosen"] = tiles, True
+        self.provisional_tiles.pop(key, None)
         return self.artwork_of(coll, state)
 
     @contextlib.contextmanager
@@ -564,8 +649,13 @@ class Dashboard:
             draft = self.checked_text(body["text"])
             coll = {**coll, **{k: (v or None) if k == "subtitle" else v for k, v in draft.items()}}
         style = posters.style_for(self.checked(body.get("posters")), coll["key"], coll["group"])
-        item = self.known_item(body["artwork"]) if body.get("artwork") else self.pick_for(coll, self.read_state())
-        art = self.backdrop(item)
+        state = self.read_state()
+        grid = tiles = note = item = None
+        if not body.get("artwork") and self.is_mosaic(coll, style, state):
+            grid, tiles, note = self.mosaic_art(coll, style, state)
+        if not grid:
+            item = self.known_item(body["artwork"]) if body.get("artwork") else self.pick_for(coll, state, style)
+        art = grid or self.backdrop(item)
         with self.render_lock:
             if coll.get("logo"):
                 img, layout = posters.logo_poster_image(coll["label"], coll["logo"], self.logos_dir(),
@@ -581,9 +671,14 @@ class Dashboard:
             name = self.index["items"].get(item, {}).get("n")
         elif item:
             name = item.split("-", 1)[1].capitalize()
+        artwork = {"item": item, "name": name}
+        if tiles:
+            artwork["tiles"] = [self.tile_name(i) for i in tiles]
+        if note:
+            artwork["note"] = note
         return {"image": "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode(), "width": PREVIEW[0],
                 "height": PREVIEW[1], "layout": layout, "draggable": not coll.get("logo"),
-                "streaming": bool(coll.get("logo")), "artwork": {"item": item, "name": name}}
+                "streaming": bool(coll.get("logo")), "artwork": artwork}
 
     def logos_dir(self):
         return os.path.join(self.work, "no-logos") if self.demo else self.engine.logos

@@ -387,7 +387,8 @@ def main():
     ap.add_argument("--force", action="store_true", help="logos: download again even if present")
     ap.add_argument("--all", action="store_true", help="adopt/remove: every collection in the catalogue")
     ap.add_argument("--unpicked", action="store_true", help="remove: the ones CineSets made that config.yml no longer picks")
-    ap.add_argument("--reshuffle", action="store_true", help="posters/apply: new random artwork (posters: artwork: random)")
+    ap.add_argument("--reshuffle", action="store_true",
+                    help="posters/apply: new random artwork or mosaic tiles (posters: artwork: random or mosaic)")
     ap.add_argument("--yes", action="store_true", help="remove: do not ask for confirmation")
     ap.add_argument("--host", help="web: address to listen on (default from config.yml, else 127.0.0.1; 0.0.0.0 for "
                                    "other computers too)")
@@ -466,14 +467,22 @@ def command(args):
     elif args.cmd == "schedule":
         schedule(cfg, engine, args.config)
     else:
-        if args.reshuffle and cfg["posters"]["artwork"] != "random":
-            print("Note: --reshuffle only changes posters when config.yml has posters: artwork: random")
+        if args.reshuffle and not shuffles(cfg["posters"]):
+            print("Note: --reshuffle only changes posters when config.yml has posters: artwork: random or mosaic (for "
+                  "every poster, a section or one collection)")
         engine.reshuffle = args.reshuffle
         picked = select(chosen, args.only, args.group, unpicked)
         if not (args.only or args.group):
             note_unpicked(engine, chosen)  # first, so the run's Summary line is the last one
         result = engine.run(args.cmd, picked, args.min if args.min is not None else cfg["defaults"]["min_items"])
         return not result.ok
+
+
+def shuffles(style):
+    """Whether --reshuffle can change any poster: random artwork or a mosaic, for every poster, a section or one
+    collection."""
+    layers = [style] + [own for layer in ("sections", "overrides") for own in (style.get(layer) or {}).values()]
+    return any(own.get("artwork") in ("random", "mosaic") for own in layers)
 
 
 def remove(args, engine, colls, chosen):

@@ -17,7 +17,7 @@ import time
 
 import requests
 
-from . import lists, posters
+from . import lists, mosaic, posters
 from .lists import fetch_list
 from .servers import ServerError, chunks
 from .store import load_json, save_json
@@ -74,7 +74,7 @@ class Engine:
         self.cfg, self.srv = cfg, server
         self.style = cfg["posters"]
         self.rng = rng or random.Random()
-        self.reshuffle = False  # pick new random artwork this run (posters.artwork: random)
+        self.reshuffle = False  # pick new random artwork or mosaic tiles this run (posters.artwork: random, mosaic)
         self.data = cfg.path("data_dir")
         self.index_file = os.path.join(self.data, "index.json")
         self.state_file = os.path.join(self.data, "state.json")
@@ -100,7 +100,8 @@ class Engine:
                 for key in index[kind]:
                     if it["ids"].get(key):
                         index[kind][key].setdefault(it["ids"][key], it["id"])
-                index["items"][it["id"]] = {"n": it["name"], "y": it["year"], "b": it["backdrop"], "k": kind}
+                index["items"][it["id"]] = {"n": it["name"], "y": it["year"], "b": it["backdrop"], "p": it["poster"],
+                                            "k": kind}
                 if "genres" in it:  # a server that lists genres with the titles (Silo) needs no more requests for them
                     index["items"][it["id"]]["g"] = [g.lower() for g in it["genres"]]
             print(f"  indexed {name}: {len(items)}")
@@ -203,7 +204,8 @@ class Engine:
         With posters.artwork set to random, each install picks its own artwork from the top titles in the collection
         (ignoring backdrop_title, so no two servers look alike) and keeps it until --reshuffle. Streaming service
         posters, and collections pinned to one item with backdrop_item, are left as they are. Artwork chosen in the
-        dashboard (state "artwork": "chosen") comes before all of that and stays until it is set back to automatic."""
+        dashboard (state "artwork": "chosen") comes before all of that and stays until it is set back to automatic.
+        With artwork set to mosaic, the artwork is a grid of the collection's own posters instead (see mosaic.py)."""
         os.makedirs(self.posters, exist_ok=True)
         os.makedirs(self.backdrops, exist_ok=True)
         out = os.path.join(self.posters, coll["key"] + ".jpg")
@@ -215,7 +217,7 @@ class Engine:
             print(f"   {coll['key']}: the artwork chosen in the dashboard is no longer in your library, using the default")
             st.pop("artwork", None)
             chosen = None
-        random_art = self.style["artwork"] == "random" and not logo and not coll.get("backdrop_item") and not chosen
+        random_art = style["artwork"] == "random" and not logo and not coll.get("backdrop_item") and not chosen
         parts = [coll["label"], coll["title"], coll.get("subtitle"), coll["accent"], coll.get("backdrop_item"), coll.get("backdrop_title")]
         if logo:
             parts.append("logo:" + logo)
@@ -227,10 +229,20 @@ class Engine:
             parts.append("artwork:random")
         if chosen:
             parts.append("artwork:chosen:" + chosen)
+        grid = None
+        if style["artwork"] == "mosaic" and not logo and not coll.get("backdrop_item") and not chosen:
+            grid = mosaic.Grid(self, ids, index, st, style)  # its tiles, from the index: nothing is downloaded yet
+            parts.append(grid.part())
         design = json.dumps(parts)
         if os.path.exists(out) and st.get("design") == design and not (random_art and self.reshuffle):
             used.add(st.get("backdrop_item"))
             return out
+        if grid:  # a mosaic: the grid of posters is the artwork, drawn on like any other
+            drawn = grid.draw(out, coll)
+            design = json.dumps(parts[:-1] + [grid.part()])  # the tiles it has now, or why it has one artwork instead
+            if drawn:
+                st["design"], st["tiles"] = design, grid.tiles
+                return out
         pick = chosen or coll.get("backdrop_item")
         if not pick and coll.get("backdrop_title") and not random_art:
             pick = next((i for i in ids if index["items"][i]["n"] == coll["backdrop_title"] and index["items"][i]["b"]), None)
