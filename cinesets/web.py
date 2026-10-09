@@ -48,7 +48,7 @@ from urllib.parse import parse_qs, urlparse
 import yaml
 from PIL import Image
 
-from . import __version__, catalog, config, mosaic, posters, scenes
+from . import __version__, catalog, config, fonts, mosaic, posters, scenes
 from .engine import SAFE_ID, Busy, Engine
 from .lists import fetch_list, slug_of
 from .servers import ServerError, connect
@@ -649,6 +649,12 @@ class Dashboard:
             draft = self.checked_text(body["text"])
             coll = {**coll, **{k: (v or None) if k == "subtitle" else v for k, v in draft.items()}}
         style = posters.style_for(self.checked(body.get("posters")), coll["key"], coll["group"])
+        # Japanese, Chinese or Korean text whose font isn't here yet: the editor's preview starts its download in the
+        # background and says so, and meanwhile the poster is drawn as it was without it, rather than keeping the page
+        # waiting. The small posters leave the download to it, and the page draws them all again once it's here
+        font = None
+        if not small and not self.demo and fonts.wanted(coll["label"], coll["title"], coll.get("subtitle")):
+            font = fonts.start(self.engine.fonts)
         state = self.read_state()
         grid = tiles = note = item = None
         if not body.get("artwork") and self.is_mosaic(coll, style, state):
@@ -676,9 +682,20 @@ class Dashboard:
             artwork["tiles"] = [self.tile_name(i) for i in tiles]
         if note:
             artwork["note"] = note
-        return {"image": "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode(), "width": PREVIEW[0],
-                "height": PREVIEW[1], "layout": layout, "draggable": not coll.get("logo"),
-                "streaming": bool(coll.get("logo")), "artwork": artwork}
+        out = {"image": "data:image/jpeg;base64," + base64.b64encode(buf.getvalue()).decode(), "width": PREVIEW[0],
+               "height": PREVIEW[1], "layout": layout, "draggable": not coll.get("logo"),
+               "streaming": bool(coll.get("logo")), "artwork": artwork}
+        if font in ("downloading", "failed"):
+            out["font"] = font
+        return out
+
+    def font(self):
+        """The Japanese, Chinese and Korean font, which the page asks after while it downloads: {"font": "ready",
+        "downloading", "failed" or "missing", "message": why it failed, or None}."""
+        if self.demo:
+            return {"font": "missing", "message": None}
+        now, why = fonts.state(self.engine.fonts)
+        return {"font": now, "message": why}
 
     def logos_dir(self):
         return os.path.join(self.work, "no-logos") if self.demo else self.engine.logos
@@ -910,6 +927,7 @@ ROUTES = {
     ("GET", "/api/artwork"): lambda app, q, body: app.artwork(q),
     ("GET", "/api/thumb"): lambda app, q, body: ("image/jpeg", app.thumb(q)),
     ("GET", "/api/run"): lambda app, q, body: app.run_status(q),
+    ("GET", "/api/font"): lambda app, q, body: app.font(),
     ("POST", "/api/preview"): lambda app, q, body: app.preview(body),
     ("POST", "/api/artwork"): lambda app, q, body: app.choose(body),
     ("POST", "/api/save"): lambda app, q, body: app.save(body),

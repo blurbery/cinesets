@@ -9,6 +9,7 @@
   cinesets posters [--only KEYS] [--group GROUPS] [--reshuffle]   build posters and contact sheets, no server writes
   cinesets apply   [--only KEYS] [--group GROUPS] [--reshuffle]   create or update collections
   cinesets logos   [--force]              download streaming service logos from Wikimedia Commons
+  cinesets fonts   [--force]              download the Japanese, Chinese and Korean font now, not when first needed
   cinesets list                           show every section and collection, and which are picked
   cinesets pick                           choose sections or single collections to make (writes config.yml)
   cinesets web     [--host H] [--port P] [--demo]   the dashboard: pick, style and preview in a web page
@@ -35,7 +36,7 @@ from urllib.parse import urlparse
 import requests
 import yaml
 
-from . import __version__, catalog, config, logos, servers
+from . import __version__, catalog, config, fonts, logos, servers
 from .engine import Engine
 from .servers import ServerError
 from .store import load_json, save_json
@@ -377,14 +378,14 @@ def main():
     supported = list(servers.names().values())
     ap = argparse.ArgumentParser(prog="cinesets", description=f"Automatic, beautiful collections for "
                                  f"{', '.join(supported[:-1])} and {supported[-1]}. By blurbery.")
-    ap.add_argument("cmd", choices=["index", "plan", "posters", "apply", "logos", "list", "pick", "web", "schedule", "setup",
+    ap.add_argument("cmd", choices=["index", "plan", "posters", "apply", "logos", "fonts", "list", "pick", "web", "schedule", "setup",
                                     "adopt", "remove", "forget", "version"])
     ap.add_argument("keys", nargs="?", help="forget: comma-separated collection keys")
     ap.add_argument("--only", help="comma-separated collection keys")
     ap.add_argument("--group", help="comma-separated groups")
     ap.add_argument("--min", type=int, help="skip collections with fewer matches than this")
     ap.add_argument("--config", help="path to config.yml")
-    ap.add_argument("--force", action="store_true", help="logos: download again even if present")
+    ap.add_argument("--force", action="store_true", help="logos, fonts: download again even if present")
     ap.add_argument("--all", action="store_true", help="adopt/remove: every collection in the catalogue")
     ap.add_argument("--unpicked", action="store_true", help="remove: the ones CineSets made that config.yml no longer picks")
     ap.add_argument("--reshuffle", action="store_true",
@@ -443,6 +444,13 @@ def command(args):
             logos.download(os.path.join(cfg.path("data_dir"), "logos"), force=args.force)
         except (requests.RequestException, KeyError, ValueError) as e:
             raise SystemExit(f"Could not download logos ({e}). Posters will show service names until you run this again.")
+        return
+    if args.cmd == "fonts":
+        try:
+            fonts.download(os.path.join(cfg.path("data_dir"), "fonts"), force=args.force)
+        except (fonts.FontError, OSError) as e:
+            raise SystemExit(f"Could not download {fonts.NAME} ({e}). Japanese, Chinese and Korean letters are drawn "
+                             "as boxes until you run this again, or a run downloads it when a poster needs it.")
         return
     colls = catalog.load(cfg)
     chosen = catalog.picked(cfg, colls)

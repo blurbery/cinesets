@@ -17,7 +17,7 @@ import time
 
 import requests
 
-from . import lists, mosaic, posters
+from . import fonts, lists, mosaic, posters
 from .lists import fetch_list
 from .servers import ServerError, chunks
 from .store import load_json, save_json
@@ -80,6 +80,9 @@ class Engine:
         self.state_file = os.path.join(self.data, "state.json")
         self.backdrops = os.path.join(self.data, "backdrops")
         self.logos = os.path.join(self.data, "logos")
+        self.fonts = os.path.join(self.data, "fonts")  # the Japanese, Chinese and Korean font, once it's needed
+        fonts.use(self.fonts)
+        self.font_tried = False
         self.posters = os.path.join(self.data, "posters")
         self._titles = None  # (index, {kind: titles_in table}) for the index a run or the dashboard is using
         self.halt = lambda: False  # the scheduler swaps this for one that says when it has been asked to stop
@@ -218,6 +221,12 @@ class Engine:
             st.pop("artwork", None)
             chosen = None
         random_art = style["artwork"] == "random" and not logo and not coll.get("backdrop_item") and not chosen
+        # Japanese, Chinese or Korean text: its font, downloaded the first time a poster needs it and before the design
+        # record below is made, so a poster drawn without it is drawn again once it's here. A run that can't download
+        # it tries once and says so once
+        if not self.font_tried and fonts.wanted(coll["label"], coll["title"], coll.get("subtitle")):
+            self.font_tried = True
+            fonts.ensure(self.fonts, again=True)
         parts = [coll["label"], coll["title"], coll.get("subtitle"), coll["accent"], coll.get("backdrop_item"), coll.get("backdrop_title")]
         if logo:
             parts.append("logo:" + logo)
@@ -550,6 +559,7 @@ class Engine:
         """Run plan, posters or apply for these collections. Returns a Result, whose `ok` is False when something
         failed or the run stopped early."""
         with self.lock():
+            self.font_tried = False  # each run tries once to download a font a poster needs (see poster_for)
             try:
                 return self._run(cmd, colls, min_items)
             finally:

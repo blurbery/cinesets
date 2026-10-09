@@ -487,7 +487,15 @@ posters:
 The font's name works too, like `font: Bebas Neue`. A few fonts don't have every accented letter (Creepster and
 Rye have no ō or č, for example), so a poster whose text has one is drawn in Poppins instead. Text with Greek,
 Cyrillic or Vietnamese letters that Poppins doesn't have either is drawn in Noto Sans, which comes with CineSets
-for just that. Japanese, Chinese and Korean aren't covered yet, so their letters still come out as boxes.
+for just that.
+
+Japanese, Chinese and Korean text is drawn in Noto Sans CJK. It's too big to come with CineSets (about 38 MB), so
+the first time a poster has that text, CineSets downloads it from the Noto project on GitHub into `data/fonts`, just
+once; `./run.sh fonts` downloads it ahead of time. A poster with kana is drawn the Japanese way and one with hangul
+the Korean way. Han characters alone are drawn the Simplified Chinese way: Chinese is written in them alone, while
+Japanese and Korean text nearly always has kana or hangul too (so a title written only in kanji, like 東京物語, takes
+the Chinese shapes where the two differ). Until the font is downloaded, or if it can't be, those letters come out as
+boxes, as they used to, and the posters are drawn again once it's there.
 
 Each font has a size of its own that evens out how big it looks, and long titles still shrink to fit. A title too
 long for one line goes onto two at its best space, and long labels and subtitles shrink too, so text always stays

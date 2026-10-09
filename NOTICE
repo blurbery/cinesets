@@ -37,6 +37,10 @@ Third-party material:
   licence in assets/fonts/noto-sans/OFL.txt: an unmodified copy from the Noto fonts repository
   (github.com/notofonts/latin-greek-cyrillic). It isn't one of the poster fonts; it only draws letters the chosen
   font and Poppins don't have.
+- Noto Sans CJK (Copyright 2014-2021 Adobe), licensed under the SIL Open Font License 1.1, is not included. When a
+  poster first has Japanese, Chinese or Korean text, or with `cinesets fonts`, CineSets downloads an unmodified copy
+  from the Noto CJK repository (github.com/notofonts/noto-cjk, commit f8d1575) onto your own server, checked against
+  its SHA-256. It only draws the text the other fonts can't.
 - Streaming service logos are not included. `cinesets logos` downloads them from Wikimedia Commons onto your
   own server; they remain trade marks of their owners.
 - Collection lists are read from public lists on mdblist.com and are not redistributed here.

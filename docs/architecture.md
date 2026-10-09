@@ -21,6 +21,7 @@ it sits on the page, without knowing which server it's talking to.
 | `posters.py` | Draws the posters |
 | `mosaic.py` | Mosaic posters: picks and keeps each one's tiles and lays out the grid of the collection's own posters |
 | `logos.py` | Downloads the streaming logos onto your server |
+| `fonts.py` | Downloads the Japanese, Chinese and Korean font onto your server, the first time a poster needs it |
 | `scenes.py` | Made-up artwork for the docs and the dashboard's demo mode |
 | `web.py`, `static/` | The dashboard |
 | `cli.py`, `config.py`, `store.py` | Commands, settings and the record of what CineSets owns |
