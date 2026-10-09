@@ -158,6 +158,7 @@
     cache: new Map(),
     tiles: new Map(),
     artRev: new Map(),
+    font: { rev: 0, waiting: false, told: false, timer: null },  // the Japanese, Chinese and Korean font
     history: { undo: [], redo: [], base: null, tag: null, at: 0, replaying: false },
     offline: { on: false, tries: 0, timer: null },
     preview: {
@@ -721,7 +722,7 @@
 
   function hashFor(key) {
     const c = S.byKey.get(key);
-    return stable([effective(key), c ? c.artwork : null, c ? c.text || null : null, S.artRev.get(key) || 0]);
+    return stable([effective(key), c ? c.artwork : null, c ? c.text || null : null, S.artRev.get(key) || 0, S.font.rev]);
   }
   const snapshot = () => normalisePosters(S.posters);
 
@@ -1897,7 +1898,7 @@
 
   /** The font for all the text: a wrapping row of font names, which the server sends with their keys. */
   function fontControl(values) {
-    const hint = "For the label, title and subtitle. Text with a letter the font doesn't have is drawn in Poppins, or in Noto Sans for Greek, Cyrillic and Vietnamese letters Poppins lacks too.";
+    const hint = "For the label, title and subtitle. Text with a letter the font doesn't have is drawn in Poppins, or in Noto Sans for Greek, Cyrillic and Vietnamese letters Poppins lacks too. Japanese, Chinese and Korean text is drawn in Noto Sans CJK, which CineSets downloads the first time a poster needs it.";
     const row = segControl("font", "Font", values, hint, (S.info && S.info.fonts) || {});
     row.querySelector(".seg").classList.add("seg-wrap");
     return row;
@@ -2525,7 +2526,57 @@
     reader.readAsDataURL(blob);
   });
 
+  /**
+   * The Japanese, Chinese and Korean font: the editor's preview says when it started downloading it (the poster is
+   * drawn without it meanwhile) or couldn't. While it downloads, ask after it every few seconds, and once it's here
+   * draw every poster again, with it.
+   */
+  function fontNews(state) {
+    if (state === "downloading" && !S.font.waiting) {
+      S.font.waiting = true;
+      toast("Downloading the Japanese, Chinese and Korean font (about 38 MB, just this once). Posters with that text "
+        + "are drawn again when it's here.", "info", 8000);
+      S.font.timer = setTimeout(checkFont, 3000);
+    } else if (state === "failed") {
+      fontFailed(null);
+    }
+  }
+
+  function fontFailed(message) {
+    if (S.font.told) return;
+    S.font.told = true;
+    toast(message || "Couldn't download the Japanese, Chinese and Korean font, so its letters are drawn as boxes for now. "
+      + "Later runs try again.", "error");
+  }
+
+  async function checkFont() {
+    S.font.timer = null;
+    let res;
+    try {
+      res = await api("api/font");
+    } catch (e) {
+      if (e.status === 401) S.font.waiting = false;  // signed out: the next preview asks again
+      else S.font.timer = setTimeout(checkFont, 6000);
+      return;
+    }
+    if (res.font === "downloading") {
+      S.font.timer = setTimeout(checkFont, 3000);
+      return;
+    }
+    S.font.waiting = false;
+    if (res.font === "ready") {
+      S.font.rev += 1;  // every poster's hash changes, so they're all drawn again
+      toast("The Japanese, Chinese and Korean font is downloaded.", "ok");
+      schedulePreview(0);
+      gridKick(50);
+      if (stripActive()) stripKick();
+    } else if (res.font === "failed") {
+      fontFailed(res.message);
+    }
+  }
+
   function editorDone(job, res) {
+    if (res && res.font) fontNews(res.font);
     if (!job.candidate && !job.text) {
       storeCache(job.key, job.hash, res);
       if (stripActive()) paintStrip();

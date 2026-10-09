@@ -43,6 +43,10 @@ The installer does the rest:
 4. It offers to create the collections, and to keep them updated: trending every 6 hours, charts and seasonal
    daily, and everything on Sundays.
 
+Posters with Japanese, Chinese or Korean text need one more download, the font that draws it (Noto Sans CJK, about
+38 MB, from GitHub). CineSets gets it by itself the first time a poster needs it, or `./run.sh fonts` gets it now
+(`docker compose run --rm cinesets fonts` on Docker).
+
 Then open the dashboard with `./run.sh web` to change collections and posters. Every setting is also explained
 in `config.example.yml`.
 

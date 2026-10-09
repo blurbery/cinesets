@@ -15,6 +15,7 @@ import sys
 
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont, ImageOps
 
+from . import fonts
 from .config import ROOT
 
 try:  # colour profiles: part of nearly every Pillow, but a build can leave them out
@@ -40,10 +41,24 @@ FONTS = {
     "titan-one": ("Titan One", "TitanOne-Regular.ttf", "TitanOne-Regular.ttf", 0.9, 1.05),
     "courier-prime": ("Courier Prime", "CourierPrime-Bold.ttf", "CourierPrime-Regular.ttf", 1.1, 1.05),
 }
-# the last font to fall back on, for letters the chosen font and Poppins don't have (Greek, Cyrillic and the rest of
-# Vietnamese), in assets/fonts/noto-sans. It isn't one of the choices. Japanese, Chinese and Korean aren't covered.
+# the font to fall back on for letters the chosen font and Poppins don't have (Greek, Cyrillic and the rest of
+# Vietnamese), in assets/fonts/noto-sans. It isn't one of the choices. Japanese, Chinese and Korean are in CJK.
 FALLBACK = "noto-sans"
 FACES = {**FONTS, FALLBACK: ("Noto Sans", "NotoSans-SemiBold.ttf", "NotoSans-Regular.ttf", 1.0, 1.12)}
+# the last fallback, for Japanese, Chinese and Korean text: Noto Sans CJK, which fonts.py downloads into data/fonts the
+# first time a poster needs it. Its files hold the same letters drawn the way each place writes them, a face each, and
+# a poster's text picks one for all of it: kana make it Japanese and hangul Korean. Han characters with neither are
+# drawn the Simplified Chinese way. Chinese is written in Han characters alone, so every Chinese poster comes to the
+# default, while Japanese text nearly always has kana in it somewhere (and Korean hangul); Simplified is the form most
+# Chinese readers use, and its face draws Traditional characters too. The faces' places in the files were read from
+# the files: 0 JP, 1 KR, 2 SC, 3 TC, 4 HK, then the same five monospaced.
+# face -> (name, file for the label and title, file for the subtitle, size, line height, its place in the files)
+CJK = {
+    "noto-sans-cjk-jp": ("Noto Sans CJK JP", fonts.BOLD, fonts.REGULAR, 0.9, 1.15, 0),
+    "noto-sans-cjk-kr": ("Noto Sans CJK KR", fonts.BOLD, fonts.REGULAR, 0.9, 1.15, 1),
+    "noto-sans-cjk-sc": ("Noto Sans CJK SC", fonts.BOLD, fonts.REGULAR, 0.9, 1.15, 2),
+}
+CJK_DEFAULT = "noto-sans-cjk-sc"
 W, H = 1000, 1500
 PAD = 78
 LABEL_COLOUR = (240, 196, 92)
@@ -234,10 +249,19 @@ def _text_colour(value, accent):
     return TEXT_COLOURS.get(value) or _hex(value)
 
 
+def _face(face):
+    """A face's entry: (name, file for the label and title, file for the subtitle, size, line height), from FACES or
+    CJK."""
+    return FACES.get(face) or CJK[face]
+
+
 @functools.lru_cache(maxsize=256)
 def _font(face, size, subtitle=False):
-    """One of FONTS (or the fallback) at a size: its file for the label and title, or for the subtitle. Each one is
+    """One of FONTS (or a fallback) at a size: its file for the label and title, or for the subtitle. Each one is
     kept once loaded, as fitting text tries a font at many sizes."""
+    if face in CJK:  # downloaded into data/fonts, its faces all in one file
+        entry = CJK[face]
+        return ImageFont.truetype(fonts.path(entry[2] if subtitle else entry[1]), size, index=entry[5])
     entry = FACES[face]
     return ImageFont.truetype(os.path.join(FONT_DIR, face, entry[2] if subtitle else entry[1]), size)
 
@@ -272,10 +296,20 @@ def _draws(face, text):
     return not _missing(face, text)
 
 
+def _cjk_face(text):
+    """The Noto Sans CJK face for the text (see CJK), or None when it has no Japanese, Chinese or Korean letters or
+    the font isn't downloaded."""
+    if not fonts.wanted(text) or not fonts.ready():
+        return None
+    return "noto-sans-cjk-jp" if fonts.KANA.search(text) else "noto-sans-cjk-kr" if fonts.HANGUL.search(text) \
+        else CJK_DEFAULT
+
+
 def _with_font(style, *texts):
     """The style, switched to Poppins when its font is missing a character in any of the texts, or to Noto Sans
-    when Poppins is missing one too. When neither has them all (Japanese, say) it's whichever is missing fewer,
-    Poppins on a tie, so a star sign alone doesn't change the font."""
+    when Poppins is missing one too. When neither has them all it's whichever is missing fewer, Poppins on a tie, so a
+    star sign alone doesn't change the font. Japanese, Chinese or Korean text goes on to Noto Sans CJK once it's
+    downloaded, when that's missing fewer still; without it, the text comes out as it did before."""
     face = style.get("font", "poppins")
     text = "".join(t for t in texts if t)
     if style.get("case") == "upper":
@@ -283,6 +317,9 @@ def _with_font(style, *texts):
     if _draws(face, text):
         return style
     better = min(("poppins", FALLBACK), key=lambda f: len(_missing(f, text)))
+    cjk = _cjk_face(text)
+    if cjk and len(_missing(cjk, text)) < len(_missing(better, text)):
+        better = cjk
     return style if better == face else {**style, "font": better}
 
 
@@ -460,11 +497,36 @@ def _squeeze(face, lines, f, max_w, subtitle=False):
     return f, [cut(t) for t in lines]
 
 
+# Japanese, Chinese and Korean lines can break between almost any two characters, but by their rules (kinsoku) a line
+# never starts with closing punctuation, a small kana or the prolonged sound mark, and never ends with an opening bracket
+NO_START = set("、。，．・：；！？‼⁇⁈⁉）」』】〉》〕］｝〙〗〞〟’”ー〜～…‥゛゜ゝゞヽヾ々〻ぁぃぅぇぉっゃゅょゎゕゖァィゥェォッャュョヮヵヶ"
+               "ｧｨｩｪｫｬｭｮｯｰﾞﾟ｡｣､･)]},.!?:;%") | {chr(c) for c in range(0x31F0, 0x3200)}  # and the small Ainu katakana
+NO_END = set("「『【〈《（〔［｛〘〖〝‘“｢([{")
+
+
+def _wrap_letters(f, line):
+    """Japanese, Chinese or Korean text with no space to split at, split onto two lines between the two characters
+    that leave the narrower widest line, as the rules above allow. A run of Latin letters or digits stays whole."""
+    latin = lambda c: c.isalnum() and not fonts.wanted(c)
+    best = None
+    for i in range(1, len(line)):
+        before, after = line[i - 1], line[i]
+        if after in NO_START or before in NO_END or (latin(before) and latin(after)):
+            continue
+        widest = max(f.getlength(line[:i]), f.getlength(line[i:]))
+        if best is None or widest < best[0]:
+            best = (widest, [line[:i], line[i:]])
+    return best[1] if best else [line]
+
+
 def _wrap(face, line, size):
     """A one-line title too long for the poster, split onto two lines at the space that leaves the narrower widest
-    line."""
+    line. Japanese, Chinese or Korean text drawn in Noto Sans CJK with no space in it splits between two characters
+    instead (Korean, written with spaces, still splits at one)."""
     f = _font(face, size)
     words = line.split()
+    if len(words) < 2 and face in CJK and fonts.wanted(line):
+        return _wrap_letters(f, line.strip())
     widths, space = [f.getlength(w) for w in words], f.getlength(" ")
     best = None
     for i in range(1, len(words)):
@@ -491,7 +553,7 @@ def _title_text(style, title, subtitle):
     lines). The title and subtitle are already in their case."""
     face = style.get("font", "poppins")
     max_w = W - 2 * PAD
-    size = style.get("title_size", 1.0) * FACES[face][3]
+    size = style.get("title_size", 1.0) * _face(face)[3]
     tf, title_lines = _fit_title(face, title.split("\n"), round(150 * size), max_w)
     sub_lines = subtitle.split("\n") if subtitle else []
     sf = None
@@ -508,7 +570,7 @@ def _service_text(style, subtitle, name):
     """A streaming poster's subtitle and the service's name (drawn when there's no logo), fitted: (subtitle font,
     subtitle, name font, name). The subtitle is already in its case."""
     face = style.get("font", "poppins")
-    max_w, scale = W - 2 * PAD, FACES[face][3]
+    max_w, scale = W - 2 * PAD, _face(face)[3]
     start = round(150 * scale)
     f = _fit(face, [subtitle], start, max_w, least=start, smallest=SMALLEST["title"])
     f, (subtitle,) = _squeeze(face, [subtitle], f, max_w)
@@ -519,9 +581,10 @@ def _service_text(style, subtitle, name):
 
 def text_fixes(label, title, subtitle=None, style=None, logo=None):
     """How this poster's text comes out differently from posters drawn before these fixes, for its design record, so
-    one drawn then is drawn again: "letters" when it's now in Noto Sans (some letters were boxes) and "fits" when
-    it's now wrapped or shrunk further (it ran off the poster). Empty when it comes out as it always has. logo: for
-    a streaming poster, whether its logo is drawn (rather than the service's name); None for any other poster."""
+    one drawn then is drawn again: "letters" when it's now in Noto Sans (some letters were boxes), "cjk" when it's in
+    Noto Sans CJK (Japanese, Chinese or Korean letters were boxes until it was downloaded) and "fits" when it's now
+    wrapped or shrunk further (it ran off the poster). Empty when it comes out as it always has. logo: for a streaming
+    poster, whether its logo is drawn (rather than the service's name); None for any other poster."""
     style = style or STYLE
     upper = (lambda t: t.upper() if t else t) if style.get("case") == "upper" else (lambda t: t)
     name = title.replace("\n", " ")
@@ -534,13 +597,15 @@ def text_fixes(label, title, subtitle=None, style=None, logo=None):
     else:
         style = _with_font({k: v for k, v in style.items() if k not in LAYOUT}, label, subtitle, name)
         f, sub, nf, fitted = _service_text(style, upper(subtitle), name)
-        fits = f.size < round(150 * FACES[style.get("font", "poppins")][3]) or sub != upper(subtitle) or \
+        fits = f.size < round(150 * _face(style.get("font", "poppins"))[3]) or sub != upper(subtitle) or \
             (not logo and (nf.size < 60 or fitted != name))
     face = style.get("font", "poppins")
     if face == FALLBACK:
         fixes.append("letters")
+    elif face in CJK:
+        fixes.append("cjk")
     place = _label_place(style, label)
-    if fits or (place and (place[1].size < round(66 * style.get("label_size", 1.0) * FACES[face][3])
+    if fits or (place and (place[1].size < round(66 * style.get("label_size", 1.0) * _face(face)[3])
                            or place[0] != upper(label))):
         fixes.append("fits")
     return fixes
@@ -566,7 +631,7 @@ def _label_place(style, label):
         return None
     face = style.get("font", "poppins")
     label = label.upper() if style["case"] == "upper" else label
-    start = round(66 * style.get("label_size", 1.0) * FACES[face][3])
+    start = round(66 * style.get("label_size", 1.0) * _face(face)[3])
     f = _fit(face, [label], start, W - 2 * PAD, least=start, smallest=SMALLEST["label"])
     f, (label,) = _squeeze(face, [label], f, W - 2 * PAD)
     box = f.getbbox(label)
@@ -689,7 +754,7 @@ def poster_image(label, title, subtitle=None, accent="purple", backdrop=None, st
     c1, c2, tint = accent_colours(accent if style["accent"] == "auto" else style["accent"])
     if style["case"] == "upper":
         title, subtitle = title.upper(), subtitle.upper() if subtitle else subtitle
-    leading = FACES[style.get("font", "poppins")][4]
+    leading = _face(style.get("font", "poppins"))[4]
     tf, title_lines, sf, sub_lines = _title_text(style, title, subtitle)
     line_h = lambda f: int(f.size * leading)
     total = len(title_lines) * line_h(tf) + (len(sub_lines) * line_h(sf) if sf else 0)
@@ -827,7 +892,7 @@ def logo_poster_image(label, logo_key, logos_dir, subtitle="Popular", backdrop=N
     """The service poster as an image, plus where its text sits (see poster_image). Text cannot be moved here."""
     style = _with_font({k: v for k, v in (style or STYLE).items() if k not in LAYOUT}, label, subtitle,
                        (fallback_title or logo_key).replace("\n", " "))
-    leading = FACES[style.get("font", "poppins")][4]
+    leading = _face(style.get("font", "poppins"))[4]
     colour, tint = SERVICES.get(logo_key, ((255, 255, 255), (16, 14, 22)))
     if backdrop:
         img = _cover(_artwork(backdrop), W, H).filter(ImageFilter.GaussianBlur(18))

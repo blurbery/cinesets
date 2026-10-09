@@ -30,8 +30,9 @@ universes), from what's already in your library. Each one gets a matching poster
 they update on a schedule.
 
 It only ever touches collections it made itself. Your films, shows, libraries, users and settings are left
-alone. It talks to your server, public [mdblist](https://mdblist.com) lists and Wikimedia Commons (for the
-streaming logos), and that's it. No account, no tracking.
+alone. It talks to your server, public [mdblist](https://mdblist.com) lists, Wikimedia Commons (for the
+streaming logos) and, only if a poster has Japanese, Chinese or Korean text, GitHub (once, for the font that draws
+it), and that's it. No account, no tracking.
 
 > [!NOTE]
 > Emby is fully supported. Jellyfin and Silo work and are tested on every change, but they're beta until more
@@ -65,6 +66,7 @@ Synology.
 | `./run.sh web` | Opens the dashboard: pick collections, style the posters and choose their artwork |
 | `./run.sh pick` | Asks which sections or collections you want and saves it in `config.yml` |
 | `./run.sh list` | Lists every section and collection with its key, and what's picked |
+| `./run.sh fonts` | Downloads the Japanese, Chinese and Korean font now, rather than the first time a poster needs it |
 | `./run.sh apply --reshuffle` | Picks new random artwork, or new mosaic tiles, for the posters (with `artwork: random` or `mosaic`) |
 | `./run.sh adopt --all` | Takes your collections back after a reinstall |
 | `./run.sh remove --only KEY` | Deletes a collection CineSets made (`--unpicked` for the ones you unpicked, `--all` for all of them) |
@@ -124,7 +126,8 @@ posters:
 Every setting, `artwork` included, works for every poster, a whole section or a single collection (see
 `sections` and `overrides` in `config.example.yml`). Twelve fonts come with CineSets. Here's each one on a
 collection it suits; the [preview](docs/preview.md#fonts) lists them all. Noto Sans comes along too, not as a
-choice but to draw Greek, Cyrillic and Vietnamese letters the chosen font and Poppins don't have.
+choice but to draw Greek, Cyrillic and Vietnamese letters the chosen font and Poppins don't have, and Noto Sans CJK,
+downloaded the first time a poster needs it, draws Japanese, Chinese and Korean.
 
 ![Every font, each on a collection it suits](docs/images/style-fonts.jpg)
 
@@ -199,5 +202,6 @@ PR.
 
 [AGPL-3.0-or-later](LICENSE) with a few extra terms in [NOTICE](NOTICE): keep the "CineSets by blurbery"
 credit, mark your changes if you share a modified version, and the licence doesn't cover the CineSets name or
-logo. The poster fonts in `assets/fonts`, Noto Sans included, are under the SIL Open Font License. Streaming
-logos belong to their owners and are downloaded to your own server, not shipped with CineSets.
+logo. The poster fonts in `assets/fonts`, Noto Sans included, are under the SIL Open Font License, and so is Noto
+Sans CJK, which is downloaded to your own server when a poster first needs it rather than shipped. Streaming logos
+belong to their owners and are downloaded to your own server, not shipped with CineSets.
