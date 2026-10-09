@@ -31,9 +31,14 @@ your CineSets version, your server, how you installed CineSets, what you ran and
 
 ```bash
 git clone https://github.com/<your-user>/cinesets.git && cd cinesets
-python3 -m venv venv && venv/bin/pip install -r requirements-dev.txt
+python3 -m venv venv && venv/bin/pip install -r requirements-dev.txt -c constraints.txt
 venv/bin/python -m pytest tests --ignore=tests/e2e
+venv/bin/ruff check . && shellcheck install.sh run.sh docker-entrypoint.sh
 ```
+
+`constraints.txt` holds the dependency versions CineSets is tested with, and install.sh, the Docker image and CI all
+install those. `requirements.txt` keeps the oldest versions it works with. Dependabot proposes newer versions every
+week. The **Lint** check runs ruff (the rules in `ruff.toml`) and shellcheck, as above.
 
 The unit tests use fake servers (`tests/conftest.py` for Emby and Jellyfin, `tests/test_silo.py` for Silo), so
 you don't need a real server to run them. To work on the dashboard, `venv/bin/python -m cinesets web --demo` runs
@@ -49,7 +54,8 @@ I approve them.
 > struggling. Anything that weakens that won't get merged.
 
 - Add tests for what you change.
-- Keep it working on Python 3.9 and on Emby, Jellyfin and Silo. Ask before adding a dependency.
+- Keep it working on Python 3.9 and on Emby, Jellyfin and Silo. Ask before adding a dependency (it goes in
+  `requirements.txt`, with its tested version in `constraints.txt`).
 - Each media server has its own module in `cinesets/servers/` (`emby.py`, `jellyfin.py`, `silo.py`), and each
   answers every question in `cinesets/servers/base.py` itself. The collections, matching, posters and dashboard
   only ask those questions, so anything server-specific goes in that server's module, where it can't change what
@@ -148,8 +154,10 @@ and so do PRs with AI use that wasn't disclosed.
 ## Releases
 
 Releases are automatic and follow [semantic versioning](https://semver.org). Each merge updates a release PR
-that bumps the version and adds to [CHANGELOG.md](CHANGELOG.md). When I merge that, the version gets tagged
-and the notes go up on [Releases](https://github.com/blurbery/cinesets/releases).
+that bumps the version and adds to [CHANGELOG.md](CHANGELOG.md). When I merge that, the version gets tagged,
+the notes go up on [Releases](https://github.com/blurbery/cinesets/releases), and the Docker image
+`ghcr.io/blurbery/cinesets` is built from the tag for amd64 and arm64 and published as `1.5.0`, `1.5`, `1` and
+`latest` (for version 1.5.0).
 
 > [!NOTE]
 > You don't need to touch the version number or the changelog.
@@ -174,6 +182,15 @@ back.
 
 To change the notes of a PR that's merged but not released yet, edit its release notes box, then run the **Release**
 workflow by hand (Actions, Release, Run workflow) so the release PR catches up.
+
+The first release that publishes the Docker image creates the `cinesets` package on ghcr.io, and GitHub may make
+it private. If so, make it public once: on GitHub, Your profile, Packages, cinesets, Package settings, Change
+visibility. Later releases keep that setting.
+
+Every Monday, **Newest servers** tests CineSets against the newest Jellyfin, Emby (release and beta) and Silo, and
+**MDBList lists** checks every list in `collections.yml`. GitHub emails you when a scheduled run fails. Dependabot's
+PRs are titled `deps: ...` (pip and Docker) or `ci: ...` (actions), so each title works as its release notes line
+as it is. The title check skips them, as it does the release PR.
 
 </details>
 
