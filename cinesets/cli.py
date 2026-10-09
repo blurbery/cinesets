@@ -279,20 +279,54 @@ def pick(path):
               "deletes them.")
 
 
+SETUP = {"verify": True}  # server.verify, as setup's questions leave it when the server's certificate isn't trusted
+
+
 def detect_server(url):
     """(server type, address, note) for the server at `url`, from its public information (no API key needed), or None
     if no server module recognises it."""
-    return servers.detect(url)
+    return servers.detect(url, SETUP["verify"])
+
+
+def detect_or_ask(url):
+    """detect_server, and when the server's https certificate isn't trusted, ask what to do (at a terminal) and try
+    again with the answer."""
+    try:
+        return detect_server(url)
+    except servers.UntrustedCertificate as e:
+        if not sys.stdin.isatty() or SETUP["verify"] is not True:
+            raise
+        SETUP["verify"] = ask_verify(e.url)
+        return detect_server(url)
+
+
+def ask_verify(url):
+    """server.verify for a server whose certificate isn't trusted: a CA certificate file, or False to skip the check."""
+    where = "{0.scheme}://{0.netloc}".format(urlparse(url))
+    print(f"\nThe certificate at {where} isn't trusted (it may be self-signed, expired or made for another name).\n"
+          "  1  Use the CA certificate file that signed it (the safe choice)\n"
+          "  2  Don't check the certificate (only wise on your own network)\n"
+          "  3  Stop")
+    choice = input("Choose 1, 2 or 3 [1]: ").strip() or "1"
+    if choice == "1":
+        path = os.path.abspath(os.path.expanduser(input("Path of the CA certificate file: ").strip()))
+        if not os.path.isfile(path):
+            raise SystemExit(f"There's no file at {path}. Run setup again with the right path.")
+        return path
+    if choice == "2":
+        print("CineSets won't check the certificate, so it can't tell your server from something pretending to be it.")
+        return False
+    raise SystemExit("Stopped. See docs/setup.md (A self-signed certificate) for the choices.")
 
 
 def find_server(url):
     """(address, server type or None) for the address typed at setup. A browser address with a page on the end works
     too, and a server module can point setup to the server's own address (Silo does, from its Jellyfin-compatible
     port) or ask for it."""
-    found = detect_server(url)
+    found = detect_or_ask(url)
     origin = "{0.scheme}://{0.netloc}".format(urlparse(url))
     if not found and origin != url:
-        found = detect_server(origin)
+        found = detect_or_ask(origin)
     if not found:
         return url, None
     kind, where, note = found
@@ -301,7 +335,7 @@ def find_server(url):
     if not where:
         name = servers.names()[kind]
         typed = clean_address(input(f"{name}'s address, as you open it in a browser: "))
-        again = detect_server(typed)
+        again = detect_or_ask(typed)
         if not again or again[0] != kind or not again[1]:
             raise SystemExit(f"{name} did not answer at {typed}. Check the address its web app opens on.")
         where = again[1]
@@ -320,6 +354,7 @@ def setup(path):
     path = config.config_path(path)
     if os.path.exists(path) and input(f"{path} exists. Overwrite it? [y/N] ").strip().lower() != "y":
         return
+    SETUP["verify"] = True
     url = clean_address(input("Server address, as you open it in a browser [http://127.0.0.1:8096]: ").strip()
                         or "http://127.0.0.1:8096")
     url, kind = find_server(url)
@@ -336,7 +371,9 @@ def setup(path):
     if module.SETUP_NOTE:
         print(module.SETUP_NOTE)
     key = getpass.getpass(f"API key ({where} on your server; typing is hidden): ").strip()
-    cfg = config.Config(config._merge(config.DEFAULTS, {"server": {"type": kind, "url": url, "api_key": key}}))
+    verify = SETUP["verify"]
+    cfg = config.Config(config._merge(config.DEFAULTS, {"server": {"type": kind, "url": url, "api_key": key,
+                                                                    "verify": verify}}))
     cfg["base_dir"] = os.path.dirname(os.path.abspath(path))
     try:
         libs = servers.connect(cfg).media_libraries()
@@ -358,6 +395,8 @@ def setup(path):
     text = re.sub(r"(?m)^(  type: )\S+", lambda m: m.group(1) + kind, text, count=1)  # the example's server type
     text = text.replace("url: http://127.0.0.1:8096", f"url: {json.dumps(url)}", 1)
     text = text.replace('api_key: ""', f"api_key: {json.dumps(key)}", 1)
+    if verify is not True:  # what setup's questions about the certificate decided
+        text = re.sub(r"(?m)^(  verify: )true", lambda m: m.group(1) + json.dumps(verify), text, count=1)
     lib_lines = "\n".join(f"  - {{name: {json.dumps(n)}, type: {t}}}" for n, t in libs)
     text = text.replace("  - {name: Movies, type: movie}\n  - {name: TV Shows, type: show}", lib_lines, 1)
     os.makedirs(os.path.dirname(os.path.abspath(path)), exist_ok=True)

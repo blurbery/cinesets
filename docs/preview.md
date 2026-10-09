@@ -140,13 +140,13 @@ Section key `streaming`, 29 collections.
 | `s-binge` | TV Shows - Binge Now Streaming |
 | `m-iplayer` | Movies - BBC iPlayer Popular |
 | `s-iplayer` | TV Shows - BBC iPlayer Latest |
-| `m-itvx` | Movies - ITVX Popular |
-| `s-itvx` | TV Shows - ITVX Now Streaming |
 | `s-channel4` | TV Shows - Channel 4 Now Streaming |
 | `m-crunchyroll` | Movies - Crunchyroll Top 100 |
 | `s-crunchyroll` | TV Shows - Crunchyroll Top 100 |
 | `m-shudder` | Movies - Shudder Popular |
 | `s-shudder` | TV Shows - Shudder Popular |
+| `m-itvx` | Movies - ITVX Popular |
+| `s-itvx` | TV Shows - ITVX Now Streaming |
 
 </details>
 
