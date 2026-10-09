@@ -19,7 +19,6 @@
   const CENTRE_X = 0.5;
   const LEFT_X = 0.078;
   const SNAP = 0.02;
-  const NOT_LAYERED = new Set(["artwork"]);
   const LAYER_KEYS = new Set(["sections", "overrides"]);
   const TABS = ["collections", "design", "lists", "grid"];
   const MDBLIST = "https://mdblist.com/lists/";
@@ -31,7 +30,8 @@
   const INTRO_KEY = "cinesets-intro-done";
 
   const LABELS = {
-    artwork: { fixed: "Fixed", random: "Random" },
+    artwork: { fixed: "Fixed", random: "Random", mosaic: "Mosaic" },
+    mosaic: { "2x2": "2 x 2", "3x3": "3 x 3" },
     shade: { light: "Light", medium: "Medium", dark: "Dark" },
     tint: { strong: "Strong", normal: "Normal", subtle: "Subtle", none: "None" },
     title: { gradient: "Gradient", solid: "Solid", white: "White" },
@@ -46,7 +46,7 @@
     accent: "accent colour", shade: "shade", tint: "tint", title: "title style", font: "font", align: "alignment", case: "capitals",
     label: "label", label_colour: "label colour", subtitle_colour: "subtitle colour",
     label_position: "label position", title_position: "title position", title_size: "title size", label_size: "label size",
-    text_shadow: "text shadow", artwork: "artwork on each run", logo: "logo", logo_colour: "logo colours",
+    text_shadow: "text shadow", artwork: "artwork", mosaic: "mosaic grid", logo: "logo", logo_colour: "logo colours",
   };
   const LOGO_HINT = "Uses the alternative or icon where the service has one, otherwise its standard logo.";
   const LOGO_MISSING = "Downloaded by ./run.sh logos. Until then the poster shows the service's name.";
@@ -480,13 +480,13 @@
     for (const [id, o] of Object.entries(map || {})) {
       if (!o || typeof o !== "object" || Array.isArray(o)) continue;
       const clean = {};
-      for (const [k, v] of Object.entries(o)) if (!NOT_LAYERED.has(k)) clean[k] = normValue(k, v);
+      for (const [k, v] of Object.entries(o)) clean[k] = normValue(k, v);
       if (Object.keys(clean).length) out[id] = clean;
     }
     return out;
   }
 
-  /** A clean copy: rounded numbers, lower-case colours, no artwork or empty objects in the layers. */
+  /** A clean copy: rounded numbers, lower-case colours, no empty objects in the layers. */
   function normalisePosters(p) {
     const out = {};
     for (const k of Object.keys(p)) if (!LAYER_KEYS.has(k)) out[k] = normValue(k, p[k]);
@@ -528,7 +528,7 @@
     return l ? S.posters[l.kind][l.id] || {} : null;
   }
   function shown(setting) {
-    return NOT_LAYERED.has(setting) ? S.posters[setting] : scopeValues()[setting];
+    return scopeValues()[setting];
   }
   const defaults = () => (S.info && S.info.defaults) || {};
   /** Every section: the settings for every poster that differ from the defaults. */
@@ -540,7 +540,7 @@
   function applySetting(name, value) {
     value = normValue(name, value);
     const l = scopeLayer();
-    if (l && !NOT_LAYERED.has(name)) {
+    if (l) {
       const store = S.posters[l.kind];
       const own = { ...(store[l.id] || {}) };
       // a value that matches what this layer inherits is not kept as its own
@@ -562,7 +562,7 @@
   function inherit(name) {
     const l = scopeLayer();
     const label = cap(SETTING_NAMES[name] || name);
-    if (!l || NOT_LAYERED.has(name)) {
+    if (!l) {
       const d = defaults();
       if (!has(d, name)) return;
       S.posters[name] = clone(d[name]);
@@ -1961,8 +1961,13 @@
       colourControl("subtitle_colour", "Subtitle colour"),
     ]);
     if (ch.artwork) {
-      group("Artwork", [segControl("artwork", "Artwork on each run", ch.artwork,
-        "Fixed keeps the same artwork every run. Random picks again from the top titles each run. This applies to every poster.")]);
+      group("Artwork", [
+        segControl("artwork", "Artwork", ch.artwork,
+          "Fixed uses the same title's artwork everywhere. Random picks one of the top titles for this server and keeps it. "
+          + "Mosaic lays out a grid of the collection's own posters. Streaming posters keep their own look."),
+        ch.mosaic && segControl("mosaic", "Mosaic grid", ch.mosaic,
+          "A collection with too few titles that have posters gets one artwork instead."),
+      ]);
     }
   }
 
@@ -1971,14 +1976,13 @@
     const vals = scopeValues();
     const own = ownAtScope();
     const changed = own ? null : new Set(changedGlobals());
-    const everySection = S.mode === "section" && !S.editSec;
     for (const [setting, c] of Object.entries(S.ui.controls)) {
       c.set(shown(setting), vals);
       const isSet = !!own && has(own, setting);
       c.mark.hidden = !isSet;
       c.reset.hidden = own ? !isSet : !changed.has(setting);
-      // artwork on each run is for every poster, so it shows only at Every section
-      if (setting === "artwork") c.row.hidden = !everySection;
+      // the grid size only matters where the artwork is a mosaic
+      if (setting === "mosaic") c.row.hidden = vals.artwork !== "mosaic";
       const dis = (setting === "label_colour" || setting === "label_size") && !shown("label");
       c.disable(dis);
       c.row.classList.toggle("is-disabled", dis);
@@ -2057,7 +2061,7 @@
     const sec = S.secByKey.get(S.editSec);
     if (!sec) return "";
     const n = sec.collections.length;
-    const what = allStreaming(sec) ? "the text and logo" : "the text and the poster colour, shade and tint";
+    const what = allStreaming(sec) ? "the text and logo" : "the text and the poster artwork, colour, shade and tint";
     return n === 1 ? `You're editing the whole ${sec.name} section: ${what} of its only poster.`
       : `You're editing the whole ${sec.name} section: ${what} of all ${n} posters.`;
   }
@@ -2969,23 +2973,35 @@
     const c = S.byKey.get(S.selected);
     if (!c) return;
     const art = c.artwork || { mode: "auto", item: null };
+    // a mosaic poster: Shuffle picks new tiles, and Choose (one artwork) is off
+    const isMosaic = effective(c.key).artwork === "mosaic";
     const status = $("art-status");
     status.textContent = "";
-    const used = S.preview.key === c.key && S.preview.art && S.preview.art.name;
+    const seen = S.preview.key === c.key && S.preview.art ? S.preview.art : null;
+    const used = seen && seen.name;
+    const tiles = seen && Array.isArray(seen.tiles) ? seen.tiles : null;
     if (art.mode === "chosen") {
       status.append("Chosen");
       if (used) status.append(": ", el("strong", { text: used }));
+    } else if (tiles) {
+      status.append(art.tiles === "chosen" ? "Shuffled, " : "Automatic, ", el("strong", { text: `a mosaic of ${tiles.length} posters` }));
+      status.title = tiles.join(", ");
     } else {
       status.append("Automatic");
       if (used) status.append(", currently ", el("strong", { text: used }));
     }
+    if (!tiles) status.removeAttribute("title");
+    if (seen && seen.note && art.mode !== "chosen") status.append(` (${seen.note})`);
+    $("art-mosaic-hint").hidden = !isMosaic;
     const running = S.run.running;
     const blocked = S.artBusy || running;
     const why = running ? "Wait for the run to finish" : "";
+    const automatic = art.mode === "auto" && !(isMosaic && art.tiles === "chosen");
     for (const id of ["art-shuffle", "art-choose", "art-auto"]) {
-      $(id).disabled = blocked || (id === "art-auto" && art.mode === "auto");
+      $(id).disabled = blocked || (id === "art-auto" && automatic) || (id === "art-choose" && isMosaic);
       $(id).title = why;
     }
+    if (isMosaic && S.chooser) closeChooser();
     $("chooser-use").disabled = blocked;
     $("art-shuffle").classList.toggle("is-busy", S.artBusy === "shuffle");
   }
@@ -2997,16 +3013,19 @@
     refreshArtworkPanel();
     for (const b of $("chooser-grid").querySelectorAll("button")) b.disabled = true;
     try {
-      const body = { key, action };
+      // the page's settings go too, saved or not, so Shuffle on a poster just made a mosaic picks tiles
+      const body = { key, action, posters: snapshot() };
       if (item) body.item = item;
       const res = await api("api/artwork", { method: "POST", body });
       const c = S.byKey.get(key);
+      const tilesPicked = res.tiles === "chosen";
       c.artwork = { mode: res.mode || (action === "auto" ? "auto" : "chosen"), item: res.item === undefined ? item || null : res.item };
+      if (tilesPicked) c.artwork.tiles = "chosen";
       S.artRev.set(key, (S.artRev.get(key) || 0) + 1);
       S.cache.delete(key);
       S.tiles.delete(key);
       if (action === "choose") toast(name ? `Artwork saved: ${name}.` : "Artwork saved.", "ok");
-      else if (action === "shuffle") toast("New artwork picked and saved.", "ok");
+      else if (action === "shuffle") toast(tilesPicked ? "New mosaic tiles picked and saved." : "New artwork picked and saved.", "ok");
       else toast("Back to automatic artwork. Saved.", "ok");
       if (action === "choose") closeChooser();
       if (key === S.selected) {
@@ -3078,6 +3097,7 @@
     const c = S.byKey.get(key);
     if (c && res.mode && (c.artwork.mode !== res.mode || c.artwork.item !== res.item)) {
       c.artwork = { mode: res.mode, item: res.item || null };
+      if (res.tiles) c.artwork.tiles = res.tiles;
       refreshArtworkPanel();
       schedulePreview(0);
     }
