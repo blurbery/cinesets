@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.6.0](https://github.com/blurbery/cinesets/compare/v1.5.0...v1.6.0) (2026-10-09)
+
+
+### Features
+
+* **cli:** a fonts command that downloads the Japanese, Chinese and Korean font ahead of time ([#48](https://github.com/blurbery/cinesets/issues/48)) ([5192663](https://github.com/blurbery/cinesets/commit/51926631372af3f06e2dfd747369446f50ad4786))
+* **collections:** fixed franchise lists can give each film's TMDB id, so a film a server names another way, like Zootropolis, still matches ([#46](https://github.com/blurbery/cinesets/issues/46)) ([10cfba2](https://github.com/blurbery/cinesets/commit/10cfba28c3b2a609a6d095f3124f30fb5e92dfad))
+* **collections:** TMDB ids for 405 of the 407 films in the built-in franchises ([#46](https://github.com/blurbery/cinesets/issues/46)) ([10cfba2](https://github.com/blurbery/cinesets/commit/10cfba28c3b2a609a6d095f3124f30fb5e92dfad))
+* **posters:** Japanese, Chinese and Korean text drawn in Noto Sans CJK, downloaded when first needed ([#48](https://github.com/blurbery/cinesets/issues/48)) ([5192663](https://github.com/blurbery/cinesets/commit/51926631372af3f06e2dfd747369446f50ad4786))
+* **posters:** long Japanese, Chinese and Korean titles wrap between characters ([#48](https://github.com/blurbery/cinesets/issues/48)) ([5192663](https://github.com/blurbery/cinesets/commit/51926631372af3f06e2dfd747369446f50ad4786))
+* **setup:** asks what to do about a server certificate it doesn't trust, and saves the answer as server.verify ([#45](https://github.com/blurbery/cinesets/issues/45)) ([b7b95af](https://github.com/blurbery/cinesets/commit/b7b95af4392cceeb3715713bd7d29a45e36d0e2b))
+* **web:** the dashboard downloads the Japanese, Chinese and Korean font in the background and redraws the posters when it arrives ([#48](https://github.com/blurbery/cinesets/issues/48)) ([5192663](https://github.com/blurbery/cinesets/commit/51926631372af3f06e2dfd747369446f50ad4786))
+
+
+### Bug fixes
+
+* **logos:** a service's new logo now reaches servers that downloaded the old one ([#45](https://github.com/blurbery/cinesets/issues/45)) ([b7b95af](https://github.com/blurbery/cinesets/commit/b7b95af4392cceeb3715713bd7d29a45e36d0e2b))
+* **logos:** Hulu has one logo instead of two copies of the same one ([#45](https://github.com/blurbery/cinesets/issues/45)) ([b7b95af](https://github.com/blurbery/cinesets/commit/b7b95af4392cceeb3715713bd7d29a45e36d0e2b))
+* **logos:** Peacock's 2026 logo, with the 2020 one as its alternative ([#45](https://github.com/blurbery/cinesets/issues/45)) ([b7b95af](https://github.com/blurbery/cinesets/commit/b7b95af4392cceeb3715713bd7d29a45e36d0e2b))
+
+
+### Documentation
+
+* **preview:** pictures of the sections that gained collections, and the seasonal dates note kept when they're redrawn ([#45](https://github.com/blurbery/cinesets/issues/45)) ([b7b95af](https://github.com/blurbery/cinesets/commit/b7b95af4392cceeb3715713bd7d29a45e36d0e2b))
+
 ## [1.5.0](https://github.com/blurbery/cinesets/compare/v1.4.0...v1.5.0) (2026-10-09)
 
 
