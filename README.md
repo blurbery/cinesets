@@ -42,14 +42,18 @@ streaming logos), and that's it. No account, no tracking.
 You need Python 3.9 or newer, git and an API key from your server, made by an administrator.
 
 ```bash
-sudo git clone https://github.com/blurbery/cinesets.git /opt/cinesets
-sudo chown -R "$(id -un)" /opt/cinesets
+sudo install -d -o "$(id -un)" /opt/cinesets
+git clone https://github.com/blurbery/cinesets.git /opt/cinesets
 cd /opt/cinesets && ./install.sh
 ```
 
 The installer works out whether your server is Emby, Jellyfin or Silo, finds your libraries, asks which
 collections you want, does a dry run and offers to make them and keep them updated. The
-[setup guide](docs/setup.md) has each server's details, Docker, updating and uninstalling.
+[setup guide](docs/setup.md) has each server's details, updating and uninstalling.
+
+Prefer Docker? The image `ghcr.io/blurbery/cinesets` comes ready for amd64 and arm64, with a compose file and an
+Unraid template: see [Docker](docs/setup.md#docker) in the setup guide, which also covers TrueNAS SCALE and
+Synology.
 
 ## Commands
 
@@ -169,7 +173,8 @@ A franchise from a fixed list of films. It needs `min` because there are only th
 
 ## Docs
 
-- [Setup guide](docs/setup.md): installing, each server's address and API key, Docker, updating and uninstalling
+- [Setup guide](docs/setup.md): installing, each server's address and API key, Docker (and Unraid, TrueNAS SCALE and
+  Synology), updating and uninstalling
 - [Preview](docs/preview.md): every section and poster style
 - [Dashboard tour](docs/screenshots.md): every tab of the dashboard, in pictures
 - [Dashboard guide](docs/dashboard.md): signing in, [reaching it from another computer](docs/dashboard.md#reaching-it-from-another-computer)

@@ -10,8 +10,9 @@ LABEL org.opencontainers.image.title="CineSets" \
       org.opencontainers.image.licenses="AGPL-3.0-or-later"
 
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+# the tested versions in constraints.txt; a change to either file builds this layer again
+COPY requirements.txt constraints.txt ./
+RUN pip install --no-cache-dir -r requirements.txt -c constraints.txt
 COPY cinesets ./cinesets
 COPY assets ./assets
 COPY collections.yml config.example.yml LICENSE NOTICE docker-entrypoint.sh ./

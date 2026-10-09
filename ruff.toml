@@ -1,0 +1,10 @@
+# CineSets by blurbery (https://github.com/blurbery/cinesets). SPDX-License-Identifier: AGPL-3.0-or-later
+# Additional terms under AGPL-3.0 section 7 apply: see NOTICE.
+#
+# ruff (pinned in requirements-dev.txt): venv/bin/ruff check .
+# Only the rules that catch real breakage for now: syntax errors (E9), comparisons that are always wrong (F63),
+# statements in the wrong place, like return outside a function (F7), and undefined names (F82).
+target-version = "py39"
+
+[lint]
+select = ["E9", "F63", "F7", "F82"]

@@ -1,5 +1,8 @@
 # CineSets by blurbery (https://github.com/blurbery/cinesets). SPDX-License-Identifier: AGPL-3.0-or-later
 # Additional terms under AGPL-3.0 section 7 apply: see NOTICE.
+#
+# Every pull request and every push to main. The newest server releases are checked each week by newest.yml, and
+# the MDBList lists by lists.yml. Dependencies come from constraints.txt, the versions CineSets is tested with.
 name: CI
 
 on:
@@ -7,14 +10,12 @@ on:
     branches: [main, dev]
   pull_request:
   workflow_dispatch:
-  schedule:
-    - cron: "17 3 * * 1"   # weekly check against the newest server releases
 
 permissions:
   contents: read
 
-# A new push to a pull request replaces its older run. Every push to main, and every scheduled run, gets a run of
-# its own, so a merge straight after another can't cancel the first one's tests.
+# A new push to a pull request replaces its older run. Every push to main gets a run of its own, so a merge straight
+# after another can't cancel the first one's tests.
 concurrency:
   group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
@@ -27,28 +28,48 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        python: ["3.9", "3.12", "3.13"]
+        # 3.9, 3.12 and 3.13 are required checks; 3.10, 3.11 and 3.14 run as extras
+        python: ["3.9", "3.10", "3.11", "3.12", "3.13", "3.14"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: ${{ matrix.python }}
-      - run: pip install -r requirements-dev.txt
+      - run: pip install -r requirements-dev.txt -c constraints.txt
       - run: python -m pytest -q tests --ignore=tests/e2e
       - name: Shell scripts parse
         run: for f in install.sh run.sh docker-entrypoint.sh; do sh -n "$f"; done
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements-dev.txt -c constraints.txt
+      - name: ruff (syntax errors and undefined names, see ruff.toml)
+        run: ruff check --output-format=github .
+      - name: shellcheck
+        run: |
+          shellcheck --version
+          shellcheck install.sh run.sh docker-entrypoint.sh
 
   docker:
     name: Docker image
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: docker build -t cinesets:ci .
+      - run: docker build --pull -t cinesets:ci .
       - name: Runs and drops root
         run: |
           mkdir -p config/data
@@ -65,98 +86,68 @@ jobs:
     name: End to end (${{ matrix.server.name }})
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    continue-on-error: ${{ matrix.server.newest }}
     strategy:
       fail-fast: false
       matrix:
         server:
-          - {name: "Jellyfin 10.10", kind: jellyfin, image: "jellyfin/jellyfin:10.10.7", newest: false}
-          - {name: "Jellyfin 10.11", kind: jellyfin, image: "jellyfin/jellyfin:10.11.11", newest: false}
-          - {name: "Jellyfin 12.2", kind: jellyfin, image: "jellyfin/jellyfin:12.2", newest: false}
-          - {name: "Emby 4.9", kind: emby, image: "emby/embyserver:4.9.5.0", newest: false}
-          - {name: "Emby 4.10", kind: emby, image: "emby/embyserver:4.10.1.0", newest: false}
-          - {name: "Jellyfin latest", kind: jellyfin, image: "jellyfin/jellyfin:latest", newest: true}
-          - {name: "Emby latest", kind: emby, image: "emby/embyserver:latest", newest: true}
-          - {name: "Emby beta", kind: emby, image: "emby/embyserver:beta", newest: true}
+          - {name: "Jellyfin 10.10", kind: jellyfin, image: "jellyfin/jellyfin:10.10.7"}
+          - {name: "Jellyfin 10.11", kind: jellyfin, image: "jellyfin/jellyfin:10.11.11"}
+          - {name: "Jellyfin 12.2", kind: jellyfin, image: "jellyfin/jellyfin:12.2"}
+          - {name: "Emby 4.9", kind: emby, image: "emby/embyserver:4.9.5.0"}
+          - {name: "Emby 4.10", kind: emby, image: "emby/embyserver:4.10.1.0"}
     steps:
-      - name: Newest releases are checked weekly and on request
-        id: gate
-        run: |
-          if [ "${{ matrix.server.newest }}" = "true" ] && [ "${{ github.event_name }}" != "schedule" ] && [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          fi
-      - uses: actions/checkout@v4
-        if: steps.gate.outputs.skip != 'true'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v5
-        if: steps.gate.outputs.skip != 'true'
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
-      - if: steps.gate.outputs.skip != 'true'
-        run: pip install -r requirements.txt
+      - run: pip install -r requirements.txt -c constraints.txt
       - name: Make tiny test films and shows
-        if: steps.gate.outputs.skip != 'true'
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg > /dev/null
           python tests/e2e/run_e2e.py --make-media media
       - name: Start a throwaway ${{ matrix.server.name }}
-        if: steps.gate.outputs.skip != 'true'
         run: docker run -d --name media -p 127.0.0.1:8096:8096 -v "$PWD/media:/media:ro" ${{ matrix.server.image }}
       - name: CineSets against the real server
-        if: steps.gate.outputs.skip != 'true'
         run: python tests/e2e/run_e2e.py --kind ${{ matrix.server.kind }} --url http://127.0.0.1:8096 --media /media
       - name: Server log on failure
-        if: failure() && steps.gate.outputs.skip != 'true'
+        if: failure()
         run: docker logs media 2>&1 | tail -n 150
 
   end-to-end-silo:
     name: End to end (Silo ${{ matrix.silo.name }})
     runs-on: ubuntu-latest
     timeout-minutes: 30
-    continue-on-error: ${{ matrix.silo.newest }}
     strategy:
       fail-fast: false
       matrix:
         silo:
-          - {name: "build 1144", image: "ghcr.io/silo-server/silo-server:build-1144", newest: false}
-          - {name: "latest", image: "ghcr.io/silo-server/silo-server:latest", newest: true}
+          - {name: "build 1144", image: "ghcr.io/silo-server/silo-server:build-1144"}
     steps:
-      - name: Newest releases are checked weekly and on request
-        id: gate
-        run: |
-          if [ "${{ matrix.silo.newest }}" = "true" ] && [ "${{ github.event_name }}" != "schedule" ] && [ "${{ github.event_name }}" != "workflow_dispatch" ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-          fi
-      - uses: actions/checkout@v4
-        if: steps.gate.outputs.skip != 'true'
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v5
-        if: steps.gate.outputs.skip != 'true'
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
-      - if: steps.gate.outputs.skip != 'true'
-        run: pip install -r requirements.txt
+      - run: pip install -r requirements.txt -c constraints.txt
       - name: Make tiny test films and shows
-        if: steps.gate.outputs.skip != 'true'
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq ffmpeg > /dev/null
           python tests/e2e/run_silo_e2e.py --make-media media
       - name: Start a throwaway Silo (${{ matrix.silo.name }}) and its database
-        if: steps.gate.outputs.skip != 'true'
         run: |
           docker network create silo
           docker run -d --name silo-db --network silo -e POSTGRES_USER=silo -e POSTGRES_PASSWORD=silo -e POSTGRES_DB=silo pgvector/pgvector:pg18
-          for i in $(seq 60); do docker exec silo-db pg_isready -U silo -d silo > /dev/null 2>&1 && break; sleep 2; done
+          for _ in $(seq 60); do docker exec silo-db pg_isready -U silo -d silo > /dev/null 2>&1 && break; sleep 2; done
           docker run -d --name silo --network silo --restart on-failure -p 127.0.0.1:8080:8080 -p 127.0.0.1:8096:8096 \
             -e DATABASE_URL="postgres://silo:silo@silo-db:5432/silo?sslmode=disable" -e SECRET_KEY="$(openssl rand -base64 48)" \
             -v "$PWD/media:/mnt/media:ro" ${{ matrix.silo.image }}
       - name: CineSets against the real server
-        if: steps.gate.outputs.skip != 'true'
         run: python tests/e2e/run_silo_e2e.py --url http://127.0.0.1:8080 --media /mnt/media
       - name: Server log on failure
-        if: failure() && steps.gate.outputs.skip != 'true'
+        if: failure()
         run: docker logs silo 2>&1 | tail -n 200
 
   end-to-end-proxies:
@@ -164,13 +155,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
         with:
           python-version: "3.12"
-      - run: pip install -r requirements.txt
+      - run: pip install -r requirements.txt -c constraints.txt
       - name: Pull Caddy and nginx
         run: |
           docker pull -q caddy:2

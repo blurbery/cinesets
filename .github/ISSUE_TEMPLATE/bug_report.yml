@@ -47,9 +47,30 @@ body:
       label: How did you install CineSets?
       options:
         - git and install.sh
-        - Docker
+        - Docker, the published image (ghcr.io/blurbery/cinesets)
+        - Docker, an image I built
     validations:
       required: true
+  - type: dropdown
+    id: platform
+    attributes:
+      label: Where does CineSets run?
+      options:
+        - Linux
+        - macOS
+        - Docker on Linux
+        - Unraid
+        - Synology
+        - TrueNAS
+        - Other (say which under What happened)
+    validations:
+      required: true
+  - type: input
+    id: python
+    attributes:
+      label: Python version
+      description: "Not needed for Docker. The output of `venv/bin/python --version` in CineSets' folder."
+      placeholder: "Python 3.12.3"
   - type: textarea
     id: output
     attributes:

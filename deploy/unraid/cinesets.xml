@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<!-- CineSets by blurbery (https://github.com/blurbery/cinesets). SPDX-License-Identifier: AGPL-3.0-or-later
+     Additional terms under AGPL-3.0 section 7 apply: see NOTICE.
+     Unraid template for the CineSets image: docs/setup.md, Unraid, TrueNAS SCALE and Synology. -->
+<Container version="2">
+  <Name>CineSets</Name>
+  <Repository>ghcr.io/blurbery/cinesets:1</Repository>
+  <Registry>https://github.com/blurbery/cinesets/pkgs/container/cinesets</Registry>
+  <Network>bridge</Network>
+  <MyIP/>
+  <Shell>sh</Shell>
+  <Privileged>false</Privileged>
+  <Support>https://github.com/blurbery/cinesets/issues</Support>
+  <Project>https://github.com/blurbery/cinesets</Project>
+  <Overview>Automatic, beautiful collections for Emby, Jellyfin and Silo: trending, streaming, genre, best of, kids and seasonal collections and movie franchises from what's already in your library, each with a matching poster, kept updated on a schedule. It only ever touches collections it made itself. Before the first start, run setup once in Unraid's terminal, which asks for your server's LAN address and API key: docker run --rm -it -e PUID=99 -e PGID=100 -v /mnt/user/appdata/cinesets:/config ghcr.io/blurbery/cinesets:1 setup. The same command with logos in place of setup downloads the streaming logos. Then start the container: it makes the collections and keeps them updated on the schedule in config.yml. The setup guide has the rest: https://github.com/blurbery/cinesets/blob/main/docs/setup.md</Overview>
+  <Category>MediaApp:Video Tools:</Category>
+  <WebUI/>
+  <TemplateURL>https://raw.githubusercontent.com/blurbery/cinesets/main/deploy/unraid/cinesets.xml</TemplateURL>
+  <Icon>https://raw.githubusercontent.com/blurbery/cinesets/main/branding/cinesets-icon-256.png</Icon>
+  <ExtraParams/>
+  <PostArgs/>
+  <CPUset/>
+  <DonateText>Sponsor blurbery on GitHub</DonateText>
+  <DonateLink>https://github.com/sponsors/blurbery</DonateLink>
+  <Requires>An Emby, Jellyfin or Silo server and an API key from it, made by an administrator. Run setup once before the first start (see the overview).</Requires>
+  <Config Name="Config and data" Target="/config" Default="/mnt/user/appdata/cinesets" Mode="rw" Description="config.yml, CineSets' records, posters and logos. Keep it: it's how CineSets knows which collections are its own." Type="Path" Display="always" Required="true" Mask="false">/mnt/user/appdata/cinesets</Config>
+  <Config Name="PUID" Target="PUID" Default="99" Mode="" Description="CineSets runs as this user, never root (99 is Unraid's nobody). The config folder is handed to it." Type="Variable" Display="advanced" Required="true" Mask="false">99</Config>
+  <Config Name="PGID" Target="PGID" Default="100" Mode="" Description="CineSets runs as this group (100 is Unraid's users)." Type="Variable" Display="advanced" Required="true" Mask="false">100</Config>
+</Container>

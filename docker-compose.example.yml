@@ -3,23 +3,30 @@
 # Additional terms under AGPL-3.0 section 7 apply: see NOTICE.
 #
 #   cp docker-compose.example.yml docker-compose.yml
-#   docker compose build
+#   docker compose pull
 #   docker compose run --rm cinesets setup    # your server's address and API key, and which collections
 #   docker compose run --rm cinesets logos
 #   docker compose up -d                       # creates the collections, then keeps them updated
 #   docker compose run --rm -p 127.0.0.1:8095:8095 cinesets web --host 0.0.0.0   # the dashboard, while you need it
 #                                                    (or keep it running with the cinesets-web service below)
 #
+# Updating: docker compose pull && docker compose up -d. The image's :1 tag follows every 1.x release.
+#
 # The server address must be reachable from inside the container: use your server's LAN address (for
 # example http://192.0.2.10:8096, or http://192.0.2.10:8080 for Silo) or its container name on a shared
 # Docker network (http://emby:8096), not 127.0.0.1. Data, posters and logos are kept in ./config/data.
 # To customise collections, copy collections.yml to ./config/my-collections.yml and set
 # collections_file: my-collections.yml in ./config/config.yml (see the README).
+#
+# One install per server: give each its own folder (named differently, like cinesets-emby and cinesets-jellyfin, as
+# Compose names the project after the folder) and, for the dashboard, its own host port (see cinesets-web below).
 services:
   cinesets:
-    build: .
-    image: cinesets:local
-    container_name: cinesets
+    image: ghcr.io/blurbery/cinesets:1
+    # Or build the image from this folder (a git clone) instead: swap the image line above for these two, and
+    # update with git pull && docker compose build --pull && docker compose up -d
+    # build: .
+    # image: cinesets:local
     restart: unless-stopped
     volumes:
       - ./config:/config
@@ -33,15 +40,19 @@ services:
   # use Tailscale (tailscale serve --bg 8095) or a reverse proxy with HTTPS on the host to reach it from elsewhere.
   # Get the sign-in link with: docker compose run --rm cinesets web --link
   # cinesets-web:
-  #   image: cinesets:local
-  #   pull_policy: never
-  #   container_name: cinesets-web
+  #   image: ghcr.io/blurbery/cinesets:1    # or, if you build it: image: cinesets:local and pull_policy: never
   #   restart: unless-stopped
   #   command: ["web", "--host", "0.0.0.0"]
   #   ports:
-  #     - "127.0.0.1:8095:8095"
+  #     - "127.0.0.1:8095:8095"    # a second install needs its own host port: change the first 8095, like 8097
   #   volumes:
   #     - ./config:/config
   #   environment:
   #     PUID: 1000
   #     PGID: 1000
+  #   healthcheck:    # the sign-in page answers without signing in
+  #     test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8095/', timeout=5)"]
+  #     interval: 1m
+  #     timeout: 10s
+  #     start_period: 30s
+  #     retries: 3
