@@ -63,13 +63,15 @@ class JellyfinCalls(Server):
         return {f["Name"]: f["ItemId"] for f in self.get("/Library/VirtualFolders")}
 
     def library_items(self, folder, kind, name):
-        """Every movie or show in a library: id, name, year, provider ids and whether it has a backdrop."""
+        """Every movie or show in a library: id, name, year, provider ids and whether it has a backdrop and a poster
+        (Jellyfin lists its image tags with every title, so that costs no extra requests)."""
         item_type = "Movie" if kind == "movie" else "Series"
         # without CollapseBoxSetItems=false, Jellyfin 12 lists a collection in place of the titles in it
         def title(it):
             ids = {k.lower(): str(v) for k, v in (it.get("ProviderIds") or {}).items() if v}
             return {"id": it["Id"], "name": it.get("Name"), "year": it.get("ProductionYear"), "ids": ids,
-                    "backdrop": bool(it.get("BackdropImageTags"))}
+                    "backdrop": bool(it.get("BackdropImageTags")),
+                    "poster": bool((it.get("ImageTags") or {}).get("Primary"))}
         return self.all_items(f"Recursive=true&IncludeItemTypes={item_type}&Fields=ProviderIds,ProductionYear"
                               f"&CollapseBoxSetItems=false&ParentId={folder}", f"library {name!r}", pause=0.5, keep=title)
 
@@ -87,6 +89,10 @@ class JellyfinCalls(Server):
         by height (1600 for 1920), and thumbnails, which are shown wide, by width."""
         size = f"maxHeight={width * 5 // 6}" if width > 800 else f"maxWidth={width}"
         return self.call("GET", f"/Items/{item_id}/Images/Backdrop?{size}&quality={quality}").content
+
+    def poster_image(self, item_id, width=400, quality=90):
+        """A title's own poster, Jellyfin's primary image, scaled down to `width` for a mosaic's tile."""
+        return self.call("GET", f"/Items/{item_id}/Images/Primary?maxWidth={width}&quality={quality}").content
 
     # ------------------------------------------------------------ collections
     def list_collections(self):

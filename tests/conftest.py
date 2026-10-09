@@ -64,7 +64,8 @@ class FakeBase:
         fid = f"lib-{len(self.libraries) + 1}"
         self.libraries[name] = fid
         for iid, title, year, kind, ids in items:
-            self.items[iid] = {"Id": iid, "Name": title, "Type": kind, "ProductionYear": year, "ProviderIds": ids, "lib": fid}
+            self.items[iid] = {"Id": iid, "Name": title, "Type": kind, "ProductionYear": year, "ProviderIds": ids, "lib": fid,
+                               "ImageTags": {"Primary": f"tag-{iid}"}}
         return fid
 
     def page(self, items, q):
