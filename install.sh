@@ -101,6 +101,7 @@ if [ "$(id -u)" != 0 ] && [ "$uid" != 0 ]; then
   if [ -n "$stray" ]; then
     echo "Some files here belong to root (like $stray), left by running CineSets with sudo or as root from cron."
     echo "Give them back to $(id -un), then run ./install.sh again:  sudo chown -R $(id -un) \"$here\""
+    echo "If you ran the installer with sudo before, take root's schedule off too:  sudo ./install.sh --uninstall"
     exit 1
   fi
 fi
