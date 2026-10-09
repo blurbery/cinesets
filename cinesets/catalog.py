@@ -12,9 +12,14 @@ Each group is a section people can pick as a whole, or collection by collection,
 
 custom-collections.yml (made by the dashboard, next to config.yml) is read as well: new collections in the same
 format, and `{key, add_lists}` entries that add lists to an existing collection. Updates to CineSets never touch it.
+
+A collection with `active: ["MM-DD", "MM-DD"]` belongs to part of the year only (see in_season), for example a
+seasonal one.
 """
+import datetime
 import os
 import re
+import unicodedata
 
 import yaml
 
@@ -35,6 +40,49 @@ SECTIONS = {
     "regional": "Regional",
     "universes": "Franchises and studios",
 }
+
+
+MONTH_DAY = re.compile(r"^(\d{2})-(\d{2})$")
+
+
+def _month_day(text):
+    """(month, day) from "MM-DD", or None if it is not a real day of the year (29 February counts)."""
+    m = MONTH_DAY.match(text) if isinstance(text, str) else None
+    if not m:
+        return None
+    try:
+        datetime.date(2000, int(m.group(1)), int(m.group(2)))
+    except ValueError:
+        return None
+    return int(m.group(1)), int(m.group(2))
+
+
+def _active(value, key):
+    """`active` checked: two "MM-DD" days, from and to."""
+    if not (isinstance(value, (list, tuple)) and len(value) == 2 and all(_month_day(x) for x in value)):
+        raise SystemExit(f"collections.yml: {key}: active must be two days of the year in quotes, from and to, like "
+                         f"[\"10-01\", \"11-01\"] or [\"11-20\", \"01-06\"] (month-day), not {value!r}")
+    return [str(x) for x in value]
+
+
+def in_season(coll, today=None):
+    """True when today (a datetime.date, by default the real one) is inside the collection's `active` window, or the
+    collection has none. Both ends count, and a window can run past new year, like ["11-20", "01-06"]."""
+    window = coll.get("active")
+    if not window:
+        return True
+    today = today or datetime.date.today()
+    now, start, end = (today.month, today.day), _month_day(window[0]), _month_day(window[1])
+    return start <= now <= end if start <= end else (now >= start or now <= end)
+
+
+def loose_title(name):
+    """A title reduced to its letters and digits for a second try at matching a fixed list: no case, accents,
+    punctuation, spaces or leading "The", "&" read as "and" and "³" as "3", so "Alien³" and "Alien 3" are the same."""
+    text = unicodedata.normalize("NFKD", str(name or ""))
+    text = "".join(ch for ch in text if not unicodedata.combining(ch)).lower().replace("&", " and ")
+    text = re.sub(r"^\W*the\b", "", text)
+    return re.sub(r"[\W_]+", "", text)
 
 
 def _blocks(order):
@@ -73,9 +121,10 @@ def _merge_custom(spec, custom, where):
                 print(f"Note: {where}: {key!r} is not a collection any more, so the changes to it are skipped")
                 continue
             base = dict(out[at[key]])
-            if raw.get("add_lists"):
-                if base.get("titles"):
-                    raise SystemExit(f"{where}: {key} is a fixed list of titles, lists can't be added to it")
+            if raw.get("add_lists") and base.get("titles"):
+                # a collection that has become a fixed list of titles since: the rest of the file still loads
+                print(f"Note: {where}: {key} is a fixed list of titles, so the lists added to it are skipped")
+            elif raw.get("add_lists"):
                 added = [x for x in raw["add_lists"] if x not in (base.get("lists") or [])]
                 base["lists"], base["added_lists"] = list(base.get("lists") or []) + added, added
             base["built_in_text"] = {f: base.get(f) for f in TEXT}
@@ -117,6 +166,8 @@ def load(cfg):
         bad = [x for x in c.get("lists") or [] if not (isinstance(x, str) and SLUG.match(x) and ".." not in x)]
         if bad:
             raise SystemExit(f"collections.yml: {c['key']}: {bad[0]!r} is not an mdblist list (like user/list-name)")
+        if c.get("active") is not None:
+            c["active"] = _active(c["active"], c["key"])
         c["subtitle"] = c.get("subtitle") or None
         c.setdefault("accent", "purple")
         c.setdefault("lists", [])
@@ -157,6 +208,16 @@ def load(cfg):
     dupes = {k for k in keys if keys.count(k) > 1}
     if dupes:
         raise SystemExit(f"collections.yml has duplicate keys: {sorted(dupes)}")
+    # two collections with one name would be mixed up on the server; a note rather than an error, so a custom
+    # collections file that does this still loads
+    named = {}
+    for c in out:
+        named.setdefault(c["name"], []).append(c["key"])
+    for name, same in named.items():
+        if len(same) > 1:
+            print(f"Note: collections.yml: {', '.join(same[:-1])} and {same[-1]} are "
+                  f"{'both' if len(same) == 2 else 'all'} called {name!r}; give each its own title or "
+                  f"subtitle so they are not mixed up on the server")
     return out
 
 

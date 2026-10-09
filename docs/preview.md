@@ -109,7 +109,7 @@ Section key `genres`, 18 collections.
 
 ### Streaming services
 
-Section key `streaming`, 18 collections.
+Section key `streaming`, 32 collections.
 
 ![Streaming services](images/section-streaming.jpg)
 
@@ -134,14 +134,28 @@ Section key `streaming`, 18 collections.
 | `s-paramount` | TV Shows - Paramount+ Popular |
 | `m-peacock` | Movies - Peacock Popular |
 | `s-peacock` | TV Shows - Peacock Popular |
-| `m-stan` | Movies - Stan Popular |
-| `s-stan` | TV Shows - Stan Popular |
+| `m-stan` | Movies - Stan Now Streaming |
+| `s-stan` | TV Shows - Stan Now Streaming |
+| `m-binge` | Movies - Binge Now Streaming |
+| `s-binge` | TV Shows - Binge Now Streaming |
+| `s-iview` | TV Shows - ABC iview Latest |
+| `m-sbs` | Movies - SBS Now Streaming |
+| `s-sbs` | TV Shows - SBS Now Streaming |
+| `m-iplayer` | Movies - BBC iPlayer Popular |
+| `s-iplayer` | TV Shows - BBC iPlayer Latest |
+| `m-itvx` | Movies - ITVX Popular |
+| `s-itvx` | TV Shows - ITVX Now Streaming |
+| `s-channel4` | TV Shows - Channel 4 Now Streaming |
+| `m-crunchyroll` | Movies - Crunchyroll Top 100 |
+| `s-crunchyroll` | TV Shows - Crunchyroll Top 100 |
+| `m-shudder` | Movies - Shudder Popular |
+| `s-shudder` | TV Shows - Shudder Popular |
 
 </details>
 
 ### Best of
 
-Section key `bestof`, 17 collections.
+Section key `bestof`, 18 collections.
 
 ![Best of](images/section-bestof.jpg)
 
@@ -167,6 +181,7 @@ Section key `bestof`, 17 collections.
 | `m-truestory` | Movies - True Stories |
 | `m-anime` | Movies - Anime Top Rated |
 | `s-anime` | TV Shows - Anime Trending |
+| `m-criterion` | Movies - Criterion Collection |
 
 </details>
 
@@ -192,7 +207,10 @@ Section key `kids`, 6 collections.
 
 ### Seasonal
 
-Section key `seasonal`, 3 collections.
+Section key `seasonal`, 6 collections.
+
+Each one is only there around its holiday: Halloween from 1 October to 1 November, Christmas from 20 November
+to 6 January. Outside those dates CineSets takes down the copy it made, and makes it again next season.
 
 ![Seasonal](images/section-seasonal.jpg)
 
@@ -204,12 +222,15 @@ Section key `seasonal`, 3 collections.
 | `m-halloween` | Movies - Halloween |
 | `s-halloween` | TV Shows - Halloween |
 | `m-halloween-kids` | Movies - Halloween For Kids |
+| `m-christmas` | Movies - Christmas |
+| `s-christmas` | TV Shows - Christmas |
+| `m-christmas-kids` | Movies - Christmas For Kids |
 
 </details>
 
 ### Regional
 
-Section key `regional`, 2 collections.
+Section key `regional`, 8 collections.
 
 ![Regional](images/section-regional.jpg)
 
@@ -220,12 +241,18 @@ Section key `regional`, 2 collections.
 |---|---|
 | `m-turkish` | Movies - Turkish Movies |
 | `s-turkish` | TV Shows - Turkish Series |
+| `m-korean` | Movies - Korean Movies |
+| `s-korean` | TV Shows - Korean Series |
+| `m-japanese` | Movies - Japanese Movies |
+| `m-indian` | Movies - Indian Movies |
+| `s-british` | TV Shows - British Series |
+| `s-australian` | TV Shows - Australian Series |
 
 </details>
 
 ### Franchises and studios
 
-Section key `universes`, 92 collections. A sample of 24 of its 92 collections.
+Section key `universes`, 114 collections. A sample of 24 of its 114 collections.
 
 ![Franchises and studios](images/section-universes.jpg)
 
@@ -234,14 +261,18 @@ Section key `universes`, 92 collections. A sample of 24 of its 92 collections.
 
 | Key | Collection |
 |---|---|
+| `m-28dayslater` | Movies - 28 Days Later |
+| `m-anightmareonelmstreet` | Movies - A Nightmare on Elm Street |
 | `m-aquietplace` | Movies - A Quiet Place |
 | `m-a24` | Movies - A24 |
 | `m-alien` | Movies - Alien |
 | `m-americanpie` | Movies - American Pie |
+| `m-austinpowers` | Movies - Austin Powers |
 | `m-avatar` | Movies - Avatar |
 | `m-backtothefuture` | Movies - Back to the Future |
 | `m-badboys` | Movies - Bad Boys |
 | `m-batman` | Movies - Batman |
+| `m-beetlejuice` | Movies - Beetlejuice |
 | `m-beverlyhillscop` | Movies - Beverly Hills Cop |
 | `m-bourne` | Movies - Bourne |
 | `m-cars` | Movies - Cars |
@@ -254,14 +285,20 @@ Section key `universes`, 92 collections. A sample of 24 of its 92 collections.
 | `m-diehard` | Movies - Die Hard |
 | `m-disneyanim` | Movies - Disney Classics |
 | `m-dreamworks` | Movies - DreamWorks |
+| `m-dune` | Movies - Dune |
 | `m-theequalizer` | Movies - The Equalizer |
 | `m-evildead` | Movies - Evil Dead |
 | `m-theexpendables` | Movies - The Expendables |
 | `m-fast` | Movies - Fast & Furious |
 | `m-fiftyshades` | Movies - Fifty Shades |
+| `m-finaldestination` | Movies - Final Destination |
+| `m-fridaythe13th` | Movies - Friday the 13th |
+| `m-frozen` | Movies - Frozen |
 | `m-ghostbusters` | Movies - Ghostbusters |
+| `m-gladiator` | Movies - Gladiator |
 | `m-thegodfather` | Movies - The Godfather |
 | `m-halloweensaga` | Movies - Halloween Saga |
+| `m-thehangover` | Movies - The Hangover |
 | `m-homealone` | Movies - Home Alone |
 | `m-hoteltransylvania` | Movies - Hotel Transylvania |
 | `m-howtotrainyourdragon` | Movies - How to Train Your Dragon |
@@ -291,11 +328,17 @@ Section key `universes`, 92 collections. A sample of 24 of its 92 collections.
 | `m-meninblack` | Movies - Men in Black |
 | `m-middleearth` | Movies - Middle-earth |
 | `m-mission` | Movies - Mission: Impossible |
-| `m-monsterverse` | Movies - Monster Verse |
+| `m-moana` | Movies - Moana |
+| `m-monsterverse` | Movies - MonsterVerse |
+| `m-mortalkombat` | Movies - Mortal Kombat |
 | `m-themummy` | Movies - The Mummy |
+| `m-nightatthemuseum` | Movies - Night at the Museum |
+| `m-nowyouseeme` | Movies - Now You See Me |
 | `m-oceans` | Movies - Ocean's Trilogy |
 | `m-paddington` | Movies - Paddington |
+| `m-paranormalactivity` | Movies - Paranormal Activity |
 | `m-pirates` | Movies - Pirates of the Caribbean |
+| `m-pitchperfect` | Movies - Pitch Perfect |
 | `m-pixar` | Movies - Pixar |
 | `m-apes` | Movies - Planet of the Apes |
 | `m-predator` | Movies - Predator |
@@ -316,16 +359,22 @@ Section key `universes`, 92 collections. A sample of 24 of its 92 collections.
 | `m-starwars` | Movies - Star Wars |
 | `s-starwars` | TV Shows - Star Wars |
 | `m-ghibli` | Movies - Studio Ghibli |
+| `m-supermario` | Movies - Super Mario |
 | `m-taken` | Movies - Taken |
 | `m-terminator` | Movies - Terminator |
+| `m-terrifier` | Movies - Terrifier |
+| `m-texaschainsaw` | Movies - Texas Chainsaw Massacre |
+| `m-topgun` | Movies - Top Gun |
 | `m-toystory` | Movies - Toy Story |
 | `m-transformers` | Movies - Transformers |
 | `m-tron` | Movies - Tron |
 | `m-twilight` | Movies - Twilight |
 | `m-underworld` | Movies - Underworld |
 | `m-venom` | Movies - Venom |
+| `m-wicked` | Movies - Wicked |
 | `m-wizarding` | Movies - Wizarding World |
 | `m-xmen` | Movies - X-Men |
+| `m-zootopia` | Movies - Zootopia |
 
 </details>
 

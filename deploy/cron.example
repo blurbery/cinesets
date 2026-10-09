@@ -3,6 +3,10 @@
 # Additional terms under AGPL-3.0 section 7 apply: see NOTICE.
 # Every 6 hours: Trending Top 20. Daily at 04:30: charts and seasonal. Sundays at 05:00: everything.
 # CineSets also takes its own lock, so overlapping runs wait for each other.
-0 */6 * * * root /opt/cinesets/run.sh apply --only m-trending,s-trending > /opt/cinesets/logs/trending.log 2>&1
-30 4 * * * root /opt/cinesets/run.sh apply --group seasonal,charts > /opt/cinesets/logs/daily.log 2>&1
-0 5 * * 0 root /opt/cinesets/run.sh apply > /opt/cinesets/logs/weekly.log 2>&1
+#
+# Replace YOUR-USER with the user that owns /opt/cinesets (ls -ld /opt/cinesets shows it), and the paths if yours
+# differ. Use root only if root owns the folder: CineSets won't run as root in a folder that belongs to someone else,
+# because root's files there would stop that user's own runs.
+0 */6 * * * YOUR-USER /opt/cinesets/run.sh apply --only m-trending,s-trending > /opt/cinesets/logs/trending.log 2>&1
+30 4 * * * YOUR-USER /opt/cinesets/run.sh apply --group seasonal,charts > /opt/cinesets/logs/daily.log 2>&1
+0 5 * * 0 YOUR-USER /opt/cinesets/run.sh apply > /opt/cinesets/logs/weekly.log 2>&1

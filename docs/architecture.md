@@ -32,7 +32,7 @@ answer is "nothing to do", so no server inherits behaviour it didn't choose.
 
 | Group | Questions |
 |---|---|
-| Setup | `TYPE` (its `server.type`), `KEY_PAGE`, `SETUP_NOTE`, `trim(url)` (tidy a pasted address) and `detect(url)` (is this my kind of server, and what's its own address? no API key needed) |
+| Setup | `TYPE` (its `server.type`), `KEY_PAGE`, `SETUP_NOTE`, `trim(url)` (tidy a pasted address's path) and `detect(url, verify)` (is this my kind of server, and what's its own address? no API key needed) |
 | Reads | `media_libraries`, `library_folders`, `library_items`, `genres`, `alive`, `backdrop_image` |
 | Collections | `admin_user`, `list_collections`, `create_collection`, `wait_until_ready`, `members`, `add_items`, `remove_items`, `upload_poster`, `set_details`, `delete_collection` |
 | Placement | `narrow` (which matched titles a collection can hold), `prepare` (get a collection ready before its titles change) and `arrange` (put the collections in page order after a run) |
@@ -41,6 +41,11 @@ answer is "nothing to do", so no server inherits behaviour it didn't choose.
 `cinesets/servers/<type>.py`, and `servers.connect(cfg)` loads only the one in `config.yml`, so an Emby install
 never loads Jellyfin's, Silo's or anyone else's code. Setup is the one time CineSets asks every module, to work out
 which server answers at an address.
+
+That file also has a few helpers a module can call, such as `send`, which tries a request again after a dropped
+connection or a busy answer (only when the module says the request is safe to send twice, never to make a
+collection) and turns an untrusted certificate into an error that says what to do. Each module calls them itself
+and passes `server.verify` with every request.
 
 `tests/test_layout.py` keeps it that way. It fails if:
 
@@ -59,7 +64,7 @@ which server answers at an address.
 | A collection is | a BoxSet, shown server-wide | a BoxSet, shown server-wide | a manual library collection, in one library |
 | Which titles it can hold (`narrow`) | all of them | all of them | those in its library: the first of its type in `config.yml`, or the one holding at least two thirds of its titles (an anime or an international library, say). Setup lists each type's biggest library first |
 | A title is | Emby's item id | Jellyfin's item id | a Silo content id such as `movie-tmdb-105` |
-| Matching ids | every provider id comes with the title | every provider id comes with the title | a content id carries one; a show's others are looked up once and kept in `data/silo-ids.json` |
+| Matching ids | every provider id comes with the title | every provider id comes with the title | a content id carries one; a show's others are looked up once and kept in `data/silo-ids.json` (again after a week if some were missing) |
 | A collection's titles | read without a user | read as the administrator (Jellyfin only lists them for a user) | read from the collection |
 | Adding titles | 40 at a time | 40 at a time | one at a time, with a short pause between them |
 | Poster | uploaded as base64 | uploaded as base64 | uploaded as a file |

@@ -17,21 +17,28 @@
   cinesets setup                          ask for server details and write config.yml
   cinesets adopt   --only KEYS | --all    take over existing collections with CineSets' names (after a reinstall)
   cinesets remove  --only KEYS | --all | --unpicked   delete collections CineSets created (asks first; --yes to skip)
+  cinesets forget  KEY[,KEY]              stop managing collections, leaving them on the server as they are
+
+plan, posters and apply end with a `Summary:` line, and exit with 1 when something failed or the run stopped early.
 """
 import argparse
 import getpass
 import json
 import os
 import re
+import signal
 import sys
 import time
 import traceback
 from urllib.parse import urlparse
 
 import requests
+import yaml
 
 from . import __version__, catalog, config, logos, servers
 from .engine import Engine
+from .servers import ServerError
+from .store import load_json, save_json
 
 
 def select(colls, only=None, group=None, unpicked=()):
@@ -78,37 +85,95 @@ def reload(path, cfg, engine):
     restart. If it no longer loads, say so and carry on with the settings from before."""
     try:
         fresh = config.load(path)
-    except SystemExit as e:
+    except (SystemExit, Exception) as e:  # whatever is wrong with it (bad YAML, say), the job goes on as before
         print(f"!! config.yml has a problem, so this job uses the settings from before: {e}")
         return cfg, engine
     return fresh, Engine(fresh, servers.connect(fresh))
 
 
+RETRY_AFTER = 3600  # a job that didn't finish is tried again after about an hour, not at its next turn
+JOB_KEYS = {"every_hours", "only", "group", "all"}
+
+
+class Stopped(BaseException):
+    """SIGTERM (docker stop, systemctl stop) while the scheduler waits between jobs."""
+
+
+def job_name(job):
+    """A job's name in data/schedule.json: the job itself, so editing the schedule never mixes up the jobs' times."""
+    return json.dumps(job, sort_keys=True)
+
+
+def job_due(job, last, now):
+    """Whether a job runs now, from its record in data/schedule.json ({"at": when it last ran, "ok": whether that run
+    finished}). A job that never ran is due straight away, and one that didn't finish is tried again after an hour."""
+    if not isinstance(last, dict) or not isinstance(last.get("at"), (int, float)):
+        return True
+    every = float(job["every_hours"]) * 3600
+    return now - last["at"] >= (every if last.get("ok", True) else min(RETRY_AFTER, every))
+
+
 def schedule(cfg, engine, path=None):
+    """Run the jobs in config.yml's `schedule` for ever. When each job last ran is kept in data/schedule.json, so a
+    restart carries on where it left off, and SIGTERM stops the scheduler between jobs (or between collections, if a
+    job is running)."""
     jobs = cfg.get("schedule") or DEFAULT_SCHEDULE  # the jobs themselves change only with a restart
     for job in jobs:
         if not isinstance(job, dict) or float(job.get("every_hours", 0)) <= 0:
             raise SystemExit(f"schedule: every job needs every_hours greater than 0: {job}")
-    last = {i: 0.0 for i in range(len(jobs))}
-    print(f"CineSets {__version__} scheduler: {len(jobs)} jobs")
-    while True:
-        for i, job in enumerate(jobs):
-            if time.time() - last[i] >= float(job["every_hours"]) * 3600:
+        if set(job) - JOB_KEYS:
+            print(f"Note: schedule: CineSets doesn't know {', '.join(sorted(map(str, set(job) - JOB_KEYS)))} in {job}, "
+                  "so it is ignored (a job takes every_hours, and only, group or all)")
+    last = load_json(os.path.join(cfg.path("data_dir"), "schedule.json"), {})
+    last = last if isinstance(last, dict) else {}
+    flags = {"busy": False, "stop": False}
+
+    def on_term(signum, frame):
+        flags["stop"] = True
+        if not flags["busy"]:  # waiting between jobs: stop now. In a job, the run stops after the collection it is on
+            raise Stopped()
+    before = None
+    try:
+        try:
+            before = signal.signal(signal.SIGTERM, on_term)
+        except ValueError:  # not the main thread, so nothing to stop it but the process ending
+            pass
+        print(f"CineSets {__version__} scheduler: {len(jobs)} jobs")
+        while True:
+            for i, job in enumerate(jobs):
+                if not job_due(job, last.get(job_name(job)), time.time()):
+                    continue
                 print(f"--- {time.strftime('%Y-%m-%d %H:%M')} job {i + 1}")
+                flags["busy"], ok = True, False
                 try:
                     cfg, engine = reload(path, cfg, engine)
+                    engine.halt = lambda: flags["stop"]
                     colls = catalog.load(cfg)  # re-read each time, so edits apply without a restart
                     chosen = catalog.picked(cfg, colls)
                     unpicked = [c for c in colls if c not in chosen]
                     picked = chosen if job.get("all") else select(chosen, job.get("only"), job.get("group"), unpicked)
-                    engine.run("apply", picked, cfg["defaults"]["min_items"])
-                except SystemExit as e:  # for example a renamed library: report it and try again next time
+                    ok = not engine.run("apply", picked, cfg["defaults"]["min_items"]).stopped
+                except SystemExit as e:  # for example a renamed library: report it and try again
+                    print(f"!! job {i + 1} stopped: {e}")
+                except (ServerError, requests.RequestException, yaml.YAMLError) as e:
                     print(f"!! job {i + 1} stopped: {e}")
                 except Exception:
                     traceback.print_exc()
-                last[i] = time.time()
-        sys.stdout.flush()
-        time.sleep(300)
+                finally:
+                    flags["busy"] = False
+                if not ok and float(job["every_hours"]) * 3600 > RETRY_AFTER and not flags["stop"]:
+                    print(f"   job {i + 1} didn't finish, so it is tried again in about an hour")
+                last[job_name(job)] = {"at": time.time(), "ok": ok}
+                save_json(os.path.join(cfg.path("data_dir"), "schedule.json"), last)
+                if flags["stop"]:
+                    raise Stopped()
+            sys.stdout.flush()
+            time.sleep(300)
+    except Stopped:
+        print("Scheduler stopped.")
+    finally:
+        if before is not None:
+            signal.signal(signal.SIGTERM, before)
 
 
 def show_list(cfg, colls, chosen):
@@ -313,7 +378,8 @@ def main():
     ap = argparse.ArgumentParser(prog="cinesets", description=f"Automatic, beautiful collections for "
                                  f"{', '.join(supported[:-1])} and {supported[-1]}. By blurbery.")
     ap.add_argument("cmd", choices=["index", "plan", "posters", "apply", "logos", "list", "pick", "web", "schedule", "setup",
-                                    "adopt", "remove", "version"])
+                                    "adopt", "remove", "forget", "version"])
+    ap.add_argument("keys", nargs="?", help="forget: comma-separated collection keys")
     ap.add_argument("--only", help="comma-separated collection keys")
     ap.add_argument("--group", help="comma-separated groups")
     ap.add_argument("--min", type=int, help="skip collections with fewer matches than this")
@@ -333,7 +399,22 @@ def main():
     ap.add_argument("--new-key", action="store_true", help="web: make a new access key, signing everyone out")
     ap.add_argument("--set-password", action="store_true", help="web: set a password to sign in with")
     args = ap.parse_args()
+    if args.keys and args.cmd != "forget":
+        ap.error(f"{args.cmd} doesn't take {args.keys!r} on its own: use --only KEYS or --group GROUPS")
+    try:
+        failed = command(args)
+    except ServerError as e:  # outside a run, which reports its own: the library index or the collections, say
+        raise SystemExit(str(e))
+    except requests.RequestException as e:
+        raise SystemExit(f"The server did not answer ({type(e).__name__}): {e}")
+    except yaml.YAMLError as e:
+        raise SystemExit(f"A collections file isn't valid YAML, so it can't be read. Fix the line it points to:\n{e}")
+    if failed:
+        raise SystemExit(1)
 
+
+def command(args):
+    """Run one command. True when a plan, posters or apply run had something fail or stopped early."""
     if args.cmd == "version":
         print(f"CineSets by blurbery (https://github.com/blurbery/cinesets)\n"
               f"Version {__version__}. Copyright (C) 2026 blurbery.\n"
@@ -368,6 +449,9 @@ def main():
     if args.cmd == "list":
         show_list(cfg, colls, chosen)
         return
+    if args.cmd == "forget":
+        forget(cfg, args.keys or args.only, chosen)
+        return
     engine = Engine(cfg, servers.connect(cfg))
     if args.cmd == "adopt":
         if not (args.only or args.group or args.all):
@@ -375,25 +459,7 @@ def main():
         engine.adopt(colls if args.all else select(colls, args.only, args.group))
         return
     if args.cmd == "remove":
-        if not (args.only or args.group or args.all or args.unpicked):
-            raise SystemExit("remove needs --only KEYS, --group GROUPS, --unpicked or --all")
-        owned = engine.owned_keys()
-        if args.all:
-            keys = owned
-        else:
-            keys = [k.strip() for k in (args.only or "").split(",") if k.strip()]
-            if args.group:
-                keys += [c["key"] for c in colls if c["group"] in args.group.split(",")]
-            if args.unpicked:
-                keys += [k for k in owned if k not in {c["key"] for c in chosen}]
-            keys = [k for k in dict.fromkeys(keys) if k in owned]
-        if not keys:
-            print("CineSets owns none of those collections; nothing to delete.")
-            return
-        if not args.yes and input(f"Delete {len(keys)} collections that CineSets created? Type yes: ").strip() != "yes":
-            print("Nothing deleted.")
-            return
-        print(f"Deleted {engine.remove(keys, colls)} collections.")
+        remove(args, engine, colls, chosen)
         return
     if args.cmd == "index":
         engine.get_index(force=True)
@@ -403,10 +469,55 @@ def main():
         if args.reshuffle and cfg["posters"]["artwork"] != "random":
             print("Note: --reshuffle only changes posters when config.yml has posters: artwork: random")
         engine.reshuffle = args.reshuffle
-        engine.run(args.cmd, select(chosen, args.only, args.group, unpicked),
-                   args.min if args.min is not None else cfg["defaults"]["min_items"])
+        picked = select(chosen, args.only, args.group, unpicked)
         if not (args.only or args.group):
-            note_unpicked(engine, chosen)
+            note_unpicked(engine, chosen)  # first, so the run's Summary line is the last one
+        result = engine.run(args.cmd, picked, args.min if args.min is not None else cfg["defaults"]["min_items"])
+        return not result.ok
+
+
+def remove(args, engine, colls, chosen):
+    """Delete collections CineSets made, after showing which ones and asking (unless --yes)."""
+    if not (args.only or args.group or args.all or args.unpicked):
+        raise SystemExit("remove needs --only KEYS, --group GROUPS, --unpicked or --all")
+    owned = engine.owned_keys()
+    if args.all:
+        keys = owned
+    else:
+        keys = [k.strip() for k in (args.only or "").split(",") if k.strip()]
+        if args.group:
+            groups = {g.strip() for g in args.group.split(",") if g.strip()}
+            keys += [c["key"] for c in colls if c["group"] in groups]
+        if args.unpicked:
+            keys += [k for k in owned if k not in {c["key"] for c in chosen}]
+        keys = [k for k in dict.fromkeys(keys) if k in owned]
+    if not keys:
+        print("CineSets owns none of those collections; nothing to delete.")
+        return
+    if not args.yes:
+        state, by_key = load_json(engine.state_file, {}), {c["key"]: c for c in colls}
+        print("These collections CineSets made would be deleted from your server:")
+        for key in keys:
+            name = (state.get(key) or {}).get("name") or (by_key.get(key) or {}).get("name") or "(no name recorded)"
+            print(f"  {key:<28} {name}")
+        if input(f"Delete these {len(keys)} collections? Type yes: ").strip() != "yes":
+            print("Nothing deleted.")
+            return
+    print(f"Deleted {engine.remove(keys, colls)} collections.")
+
+
+def forget(cfg, keys, chosen):
+    """Drop CineSets' record of collections, leaving them on the server as they are. Nothing on the server changes,
+    so it needs no API key; `adopt` takes them back."""
+    keys = [k.strip() for k in (keys or "").split(",") if k.strip()]
+    if not keys:
+        raise SystemExit("forget needs the keys of the collections to forget, for example: cinesets forget m-bttf,s-drama")
+    known = Engine(cfg, None).forget(keys)
+    still = [k for k in known if k in {c["key"] for c in chosen}]
+    if still:
+        print(f"Note: still picked in config.yml: {', '.join(still)}. While a collection with its name is on your "
+              "server, apply leaves it alone and says so, and once there isn't one apply makes it again. Unpick it to "
+              "stop that, or run `adopt` to have CineSets manage it again.")
 
 
 if __name__ == "__main__":

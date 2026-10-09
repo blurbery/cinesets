@@ -24,9 +24,10 @@
 </p>
 
 I made CineSets because I wanted my server's Collections page to look good without having to look after it.
-It builds trending, streaming, genre, best of, kids and seasonal collections, plus 65 movie franchises, from
-what's already in your library. Each one gets a matching poster, they stay in a set order and they update on a
-schedule.
+It builds trending, streaming, genre, best of, kids, regional and seasonal collections, plus 114 franchises and
+studios (89 movie franchises from fixed film lists, 14 more from public lists, 7 studios and directors and 4 TV
+universes), from what's already in your library. Each one gets a matching poster, they stay in a set order and
+they update on a schedule.
 
 It only ever touches collections it made itself. Your films, shows, libraries, users and settings are left
 alone. It talks to your server, public [mdblist](https://mdblist.com) lists and Wikimedia Commons (for the
@@ -41,14 +42,18 @@ streaming logos), and that's it. No account, no tracking.
 You need Python 3.9 or newer, git and an API key from your server, made by an administrator.
 
 ```bash
-sudo git clone https://github.com/blurbery/cinesets.git /opt/cinesets
-sudo chown -R "$(id -un)" /opt/cinesets
+sudo install -d -o "$(id -un)" /opt/cinesets
+git clone https://github.com/blurbery/cinesets.git /opt/cinesets
 cd /opt/cinesets && ./install.sh
 ```
 
 The installer works out whether your server is Emby, Jellyfin or Silo, finds your libraries, asks which
 collections you want, does a dry run and offers to make them and keep them updated. The
-[setup guide](docs/setup.md) has each server's details, Docker, updating and uninstalling.
+[setup guide](docs/setup.md) has each server's details, updating and uninstalling.
+
+Prefer Docker? The image `ghcr.io/blurbery/cinesets` comes ready for amd64 and arm64, with a compose file and an
+Unraid template: see [Docker](docs/setup.md#docker) in the setup guide, which also covers TrueNAS SCALE and
+Synology.
 
 ## Commands
 
@@ -63,6 +68,7 @@ collections you want, does a dry run and offers to make them and keep them updat
 | `./run.sh apply --reshuffle` | Picks new random artwork for the posters (with `artwork: random`) |
 | `./run.sh adopt --all` | Takes your collections back after a reinstall |
 | `./run.sh remove --only KEY` | Deletes a collection CineSets made (`--unpicked` for the ones you unpicked, `--all` for all of them) |
+| `./run.sh forget KEY` | Stops managing a collection and leaves it on your server as it is (`adopt` takes it back) |
 
 Most of them take `--only key1,key2` or `--group streaming`. `./run.sh --help` shows the rest.
 
@@ -127,8 +133,9 @@ touch.
 
 To change the built-in catalogue itself, copy `collections.yml` to `my-collections.yml` (on Docker, put it in
 `./config`), set `collections_file: my-collections.yml` in `config.yml` and change whatever you like. The top of
-the file explains every field. A collection needs at least 8 matches in your library before it's made, so
-regional ones like Stan only show up if you have the shows.
+the file explains every field. A collection needs at least 8 matches in your library before it's made (fewer for
+franchises and small lists), so streaming ones like Stan and regional ones like Korean Series only show up if you
+have enough of their titles.
 
 <details>
 <summary><b>Examples</b></summary>
@@ -164,7 +171,8 @@ A franchise from a fixed list of films. It needs `min` because there are only th
 
 ## Docs
 
-- [Setup guide](docs/setup.md): installing, each server's address and API key, Docker, updating and uninstalling
+- [Setup guide](docs/setup.md): installing, each server's address and API key, Docker (and Unraid, TrueNAS SCALE and
+  Synology), updating and uninstalling
 - [Preview](docs/preview.md): every section and poster style
 - [Dashboard tour](docs/screenshots.md): every tab of the dashboard, in pictures
 - [Dashboard guide](docs/dashboard.md): signing in, [reaching it from another computer](docs/dashboard.md#reaching-it-from-another-computer)
