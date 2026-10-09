@@ -1639,30 +1639,6 @@ collections:
     accent: pink
     lists: [mentalblank/binge-shows-au]
     limit: 50
-  - key: s-iview
-    group: streaming
-    type: show
-    title: "ABC\niview"
-    subtitle: "Latest"
-    accent: teal
-    lists: [allanon2/abc-iview-movies]
-    limit: 50
-  - key: m-sbs
-    group: streaming
-    type: movie
-    title: "SBS"
-    subtitle: "Now Streaming"
-    accent: gold
-    lists: [ta3m/sbs-australia]
-    limit: 50
-  - key: s-sbs
-    group: streaming
-    type: show
-    title: "SBS"
-    subtitle: "Now Streaming"
-    accent: gold
-    lists: [ta3m/sbs-australia]
-    limit: 50
   - key: m-iplayer
     group: streaming
     type: movie

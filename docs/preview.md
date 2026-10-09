@@ -109,7 +109,7 @@ Section key `genres`, 18 collections.
 
 ### Streaming services
 
-Section key `streaming`, 32 collections.
+Section key `streaming`, 29 collections.
 
 ![Streaming services](images/section-streaming.jpg)
 
@@ -138,9 +138,6 @@ Section key `streaming`, 32 collections.
 | `s-stan` | TV Shows - Stan Now Streaming |
 | `m-binge` | Movies - Binge Now Streaming |
 | `s-binge` | TV Shows - Binge Now Streaming |
-| `s-iview` | TV Shows - ABC iview Latest |
-| `m-sbs` | Movies - SBS Now Streaming |
-| `s-sbs` | TV Shows - SBS Now Streaming |
 | `m-iplayer` | Movies - BBC iPlayer Popular |
 | `s-iplayer` | TV Shows - BBC iPlayer Latest |
 | `m-itvx` | Movies - ITVX Popular |
