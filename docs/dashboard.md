@@ -43,9 +43,14 @@ What keeps other people and other sites out:
 
 The Design tab has two modes:
 
-- **Whole section:** pick a section, or **Every section**, and change the text, the font and the poster colour,
-  shade and tint for every poster in it.
+- **Whole section:** pick a section, or **Every section**, and change the text, the font, the artwork and the
+  poster colour, shade and tint for every poster in it.
 - **Each poster:** pick one poster and change anything about it, including its artwork and its words.
+
+The Artwork group in Style is Fixed, Random or Mosaic (a grid of the collection's own posters, 2 x 2 or 3 x 3), and
+the previews show each one. On one poster, the Artwork card's Shuffle and Choose change the picture: on a mosaic
+poster, Shuffle picks new posters for the grid and Choose is off, since it's for a single artwork. Automatic goes
+back to what the next run would pick.
 
 A poster's own settings win over its section's, which win over Every section. Streaming posters keep the service's
 artwork, but can use another version of its logo where there is one (the Netflix N, the 2024 Prime Video logo,
@@ -129,8 +134,8 @@ usual. Franchises always keep every film in their list. These are saved under `l
   each offer Undo too.
 - **Two people at once:** if `config.yml` changed after you opened the dashboard (another tab, someone else, or a
   hand edit), saving says so instead of overwriting the changes. Reload, then save again.
-- **Artwork:** choices are saved as soon as you make them, in `data/state.json` with the rest of CineSets' record.
-  Keep the `data/` folder, as the README says.
+- **Artwork:** choices are saved as soon as you make them, in `data/state.json` with the rest of CineSets' record,
+  and `--reshuffle` leaves them alone. Keep the `data/` folder, as the README says.
 - **When posters change:** on the next apply, whether that's the Apply button, `./run.sh apply` or the schedule. On
   Docker the schedule reads `config.yml` again before every job, so there's nothing to restart. With unsaved
   changes, Apply offers to save them first. When a run ends, the run log says how it went: what was created and

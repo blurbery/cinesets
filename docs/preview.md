@@ -496,7 +496,7 @@ posters are left alone.
 
 ```yaml
 posters:
-  artwork: random   # or fixed
+  artwork: random   # or fixed, or mosaic (below)
 ```
 
 - New installs have this switched on. Installs from before it existed keep `fixed` until they add the line, so
@@ -506,6 +506,33 @@ posters:
   one).
 - `backdrop_item` in your own collections file still pins a collection to one title. `backdrop_title` only
   applies with `artwork: fixed`.
+
+## Mosaic artwork
+
+With `artwork: mosaic`, a poster's background is a grid of the collection's own posters instead of one artwork,
+with the usual shade, tint and text on top. It suits the big franchises, genres and best-of lists. Here the posters
+are made-up films; on your server they're the films and shows in the collection.
+
+![Sci-Fi with one artwork, then as a 2x2 and a 3x3 mosaic, and Action as a 3x3 mosaic with shade: dark](images/style-mosaic.jpg)
+
+```yaml
+posters:
+  artwork: fixed
+  sections:
+    universes: {artwork: mosaic}          # every franchise
+  overrides:
+    m-marvel: {artwork: mosaic, mosaic: 2x2}
+```
+
+- `mosaic` is `3x3` (the default) or `2x2`. `artwork` and `mosaic` work for every poster, a section or one
+  collection, like the other settings.
+- The posters come from the collection's top titles. They're kept from run to run, so a list that changes order
+  doesn't change the poster, and only a title that leaves the collection is replaced. `./run.sh apply --reshuffle`
+  picks new ones.
+- A collection with too few titles that have posters gets one artwork instead, as with `artwork: fixed`, and the
+  run log says so.
+- Streaming posters keep their own look, and `backdrop_item` or artwork chosen in the dashboard still wins.
+- Each title's poster is downloaded once, small, into `data/tiles`.
 
 ## Making these pictures again
 
