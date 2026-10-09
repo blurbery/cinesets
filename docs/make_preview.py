@@ -21,7 +21,7 @@ DOCS = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.dirname(DOCS)
 sys.path.insert(0, ROOT)
 
-from cinesets import catalog, config, posters, scenes  # noqa: E402
+from cinesets import catalog, config, mosaic, posters, scenes  # noqa: E402
 
 OUT = os.path.join(DOCS, "images")
 PAGE = os.path.join(DOCS, "preview.md")
@@ -190,6 +190,24 @@ def random_artwork(studio, by_key):
          "random-artwork.jpg")
 
 
+def mosaic_artwork(studio, by_key):
+    """artwork: mosaic, over made-up film posters (mosaic.demo_poster), each with an invented title. Drawn after the
+    fonts, with its own artwork, so the other pictures keep theirs."""
+    tile = (240, 360)
+    films = []
+    for name in scenes.SCENES:
+        films.append(os.path.join(studio.work, f"film-{name}.jpg"))
+        mosaic.demo_poster(name).save(films[-1], quality=92)
+    grid = lambda n, start: mosaic.compose(films[start:start + n * n], n,
+                                           os.path.join(studio.work, f"grid-{n}-{start}.jpg"))
+    scifi, action = by_key["m-scifi"], by_key["m-action"]
+    tiles = [(studio.poster(scifi, tile, {}, studio.art["nebula"]), "artwork: fixed"),
+             (studio.poster(scifi, tile, {"artwork": "mosaic", "mosaic": "2x2"}, grid(2, 0)), "mosaic: 2x2"),
+             (studio.poster(scifi, tile, {"artwork": "mosaic"}, grid(3, 0)), "mosaic: 3x3"),
+             (studio.poster(action, tile, {"artwork": "mosaic", "shade": "dark"}, grid(3, 3)), "3x3, shade: dark")]
+    save(sheet(tiles, 4, tile), "style-mosaic.jpg")
+
+
 # a collection each font suits, for the fonts picture
 FONT_FOR = {"poppins": "m-action", "bebas-neue": "m-thriller", "abril-fatface": "m-drama", "cinzel-decorative": "m-middleearth",
             "limelight": "m-oscars", "bangers": "m-marvel", "creepster": "m-horror", "audiowide": "m-scifi", "rye": "m-indiana",
@@ -232,6 +250,7 @@ def main():
         style_sheets(studio, by_key)
         random_artwork(studio, by_key)
         font_sheet(studio, by_key)
+        mosaic_artwork(studio, by_key)
     with open(PAGE) as f:
         page = f.read()
     start, end = "<!-- sections:start -->", "<!-- sections:end -->"

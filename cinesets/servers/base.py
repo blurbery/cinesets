@@ -41,8 +41,8 @@ class Server:
         raise NotImplementedError
 
     def library_items(self, folder, kind, name):
-        """Every title in one library: [{"id", "name", "year", "ids": {"tmdb"/"imdb"/"tvdb": id}, "backdrop": bool}],
-        plus "genres" when the server lists them with the titles (the index then keeps them)."""
+        """Every title in one library: [{"id", "name", "year", "ids": {"tmdb"/"imdb"/"tvdb": id}, "backdrop": bool,
+        "poster": bool}], plus "genres" when the server lists them with the titles (the index then keeps them)."""
         raise NotImplementedError
 
     def genres(self, ids):
@@ -55,6 +55,10 @@ class Server:
 
     def backdrop_image(self, item_id, width=1920, quality=90):
         """An item's backdrop as image bytes."""
+        raise NotImplementedError
+
+    def poster_image(self, item_id, width=400, quality=90):
+        """A title's own poster (its primary image) as JPEG bytes, about `width` wide: a tile in a mosaic poster."""
         raise NotImplementedError
 
     # ------------------------------------------------------------ collections

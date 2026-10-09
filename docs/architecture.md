@@ -19,6 +19,7 @@ it sits on the page, without knowing which server it's talking to.
 | `lists.py` | Fetches public MDBList lists, refreshing them every few hours and keeping a copy in case MDBList is down |
 | `engine.py` | The library index, list matching, posters and the writes, with the safety rules: CineSets only touches collections it made, writes only what changed and backs off when a server struggles |
 | `posters.py` | Draws the posters |
+| `mosaic.py` | Mosaic posters: picks and keeps each one's tiles and lays out the grid of the collection's own posters |
 | `logos.py` | Downloads the streaming logos onto your server |
 | `scenes.py` | Made-up artwork for the docs and the dashboard's demo mode |
 | `web.py`, `static/` | The dashboard |
@@ -33,7 +34,7 @@ answer is "nothing to do", so no server inherits behaviour it didn't choose.
 | Group | Questions |
 |---|---|
 | Setup | `TYPE` (its `server.type`), `KEY_PAGE`, `SETUP_NOTE`, `trim(url)` (tidy a pasted address's path) and `detect(url, verify)` (is this my kind of server, and what's its own address? no API key needed) |
-| Reads | `media_libraries`, `library_folders`, `library_items`, `genres`, `alive`, `backdrop_image` |
+| Reads | `media_libraries`, `library_folders`, `library_items`, `genres`, `alive`, `backdrop_image`, `poster_image` (a title's own poster, for mosaic posters) |
 | Collections | `admin_user`, `list_collections`, `create_collection`, `wait_until_ready`, `members`, `add_items`, `remove_items`, `upload_poster`, `set_details`, `delete_collection` |
 | Placement | `narrow` (which matched titles a collection can hold), `prepare` (get a collection ready before its titles change) and `arrange` (put the collections in page order after a run) |
 
@@ -67,6 +68,8 @@ and passes `server.verify` with every request.
 | Matching ids | every provider id comes with the title | every provider id comes with the title | a content id carries one; a show's others are looked up once and kept in `data/silo-ids.json` (again after a week if some were missing) |
 | A collection's titles | read without a user | read as the administrator (Jellyfin only lists them for a user) | read from the collection |
 | Adding titles | 40 at a time | 40 at a time | one at a time, with a short pause between them |
+| A title's own poster (`poster_image`, for mosaics) | its primary image | its primary image | the signed `poster_url` in its catalogue entry, fetched like a backdrop: the API key goes only to Silo's own address |
+| Which titles have a poster | `ImageTags` in the library listing | `ImageTags` in the library listing | `poster_url` or `poster_thumbhash` on the catalogue's cards |
 | Poster | uploaded as base64 | uploaded as base64 | uploaded as a file |
 | Order inside a collection | `DisplayOrder` | `DisplayOrder` | a default sort: release date or title |
 | Order on the page (`arrange`) | a locked sort name, so nothing to do | a sort name (Jellyfin can't lock it), so nothing to do | Silo's per-library order list, rewritten only when it changes and without moving collections CineSets didn't make |

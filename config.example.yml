@@ -70,8 +70,10 @@ alphabetical_groups: [universes]
 # How the posters look. Every setting is optional; docs/preview.md has pictures of each one.
 #   artwork          random: each install picks its own artwork from the top titles in each collection, so no
 #                    two servers look alike. fixed: the title named in collections.yml, or the top title.
+#                    mosaic: a grid of the collection's own posters (one artwork when too few titles have one).
 #                    Without this setting it's fixed, as in older versions. Streaming posters keep their own look
-#                    either way. `./run.sh apply --reshuffle` picks new random artwork.
+#                    either way. `./run.sh apply --reshuffle` picks new random artwork or mosaic tiles.
+#   mosaic           with artwork: mosaic, how many posters: 3x3 or 2x2
 #   accent           auto: each collection's colour from collections.yml. Or one for every poster: purple, pink,
 #                    blue, gold, green, red, teal, orange, silver, ice, or a colour like "#ff3366"
 #   shade            how dark the artwork is: light, medium or dark
@@ -95,10 +97,12 @@ alphabetical_groups: [universes]
 #   logo             streaming posters: standard, alt or icon (another version where the service has one)
 #   logo_colour      streaming posters: original or white
 #   sections         settings for every collection in a section, like  genres: {accent: red, font: bebas-neue}
+#                    or  universes: {artwork: mosaic}
 #   overrides        settings for single collections, like  m-action: {accent: red, title_position: [0.5, 0.6]}
 #                    (a collection's own settings win over its section's, which win over the ones above)
 posters:
   artwork: random
+  mosaic: 3x3
   accent: auto
   shade: medium
   tint: normal

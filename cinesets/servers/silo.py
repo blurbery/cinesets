@@ -245,6 +245,7 @@ class SiloServer(Server):
             seen.add(cid)
             out.append({"id": cid, "name": c.get("title"), "year": c.get("year"), "ids": content_ids(cid),
                         "backdrop": bool(c.get("backdrop_url") or c.get("backdrop_thumbhash")),
+                        "poster": bool(c.get("poster_url") or c.get("poster_thumbhash")),
                         "genres": c.get("genres") or []})
         if self._where is None or name == self.cfg["libraries"][0]["name"]:  # a new index starts the record afresh
             self._where = {}
@@ -337,7 +338,21 @@ class SiloServer(Server):
         d = self.get(f"/catalog/items/{quote(item_id, safe='')}?image_size={size}", headers=self.profile())
         if not d.get("backdrop_url"):
             raise ServerError(f"{item_id} has no backdrop", 404)
-        url = urljoin(self.root + "/", d["backdrop_url"])
+        return self.artwork(d["backdrop_url"], f"backdrop for {item_id}")
+
+    def poster_image(self, item_id, width=400, quality=90):
+        """A title's poster from the signed link in its catalogue entry (`poster_url`), fetched like a backdrop. Silo
+        has posters 300 (small), 500 (medium) and 780 (large) wide, and picks the quality itself."""
+        size = "small" if width <= 300 else "medium" if width <= 500 else "large"
+        d = self.get(f"/catalog/items/{quote(item_id, safe='')}?image_size={size}", headers=self.profile())
+        if not d.get("poster_url"):
+            raise ServerError(f"{item_id} has no poster", 404)
+        return self.artwork(d["poster_url"], f"poster for {item_id}")
+
+    def artwork(self, link, what):
+        """The picture at a catalogue entry's artwork link. The API key goes only to Silo's own scheme, host and port;
+        a link to its storage, or Silo sending CineSets on to it, is fetched without the key (see from_storage)."""
+        url = urljoin(self.root + "/", link)
         if _origin(url) == _origin(self.root):  # Silo's own address, the only place the API key goes
             r = send(self.session.get, url, True, timeout=60, allow_redirects=False, verify=self.verify)[0]
             if 300 <= r.status_code < 400 and r.headers.get("Location"):
@@ -345,7 +360,7 @@ class SiloServer(Server):
         else:
             r = self.from_storage(url)
         if r.status_code != 200:
-            raise ServerError(f"backdrop for {item_id} -> {r.status_code}", r.status_code)
+            raise ServerError(f"{what} -> {r.status_code}", r.status_code)
         return r.content
 
     def from_storage(self, url, hops=3):

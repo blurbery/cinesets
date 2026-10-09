@@ -65,7 +65,7 @@ Synology.
 | `./run.sh web` | Opens the dashboard: pick collections, style the posters and choose their artwork |
 | `./run.sh pick` | Asks which sections or collections you want and saves it in `config.yml` |
 | `./run.sh list` | Lists every section and collection with its key, and what's picked |
-| `./run.sh apply --reshuffle` | Picks new random artwork for the posters (with `artwork: random`) |
+| `./run.sh apply --reshuffle` | Picks new random artwork, or new mosaic tiles, for the posters (with `artwork: random` or `mosaic`) |
 | `./run.sh adopt --all` | Takes your collections back after a reinstall |
 | `./run.sh remove --only KEY` | Deletes a collection CineSets made (`--unpicked` for the ones you unpicked, `--all` for all of them) |
 | `./run.sh forget KEY` | Stops managing a collection and leaves it on your server as it is (`adopt` takes it back) |
@@ -105,12 +105,14 @@ doesn't delete it from your server, it just stops updating; `./run.sh remove --u
 
 Colours, shading, text, the font and where the text sits are settings under `posters` in `config.yml`, easiest
 changed in the dashboard. New installs also give every server its
-own random artwork from its library, so no two look the same (streaming posters keep their own look). The
-[preview](docs/preview.md#poster-style) has pictures of every setting.
+own random artwork from its library, so no two look the same (streaming posters keep their own look). With
+`artwork: mosaic`, a poster's background is a grid of the collection's own posters instead
+([preview](docs/preview.md#mosaic-artwork)). The [preview](docs/preview.md#poster-style) has pictures of every setting.
 
 ```yaml
 posters:
-  artwork: random    # or fixed
+  artwork: random    # or fixed, or mosaic: a grid of the collection's own posters
+  mosaic: 3x3        # with artwork: mosaic, 3x3 or 2x2
   accent: auto       # each collection's own colour, or one for all: silver, orange, "#ff3366" and more
   shade: medium      # light, medium or dark
   title: gradient    # gradient, solid or white
@@ -119,7 +121,8 @@ posters:
   case: normal       # normal or upper
 ```
 
-Twelve fonts come with CineSets, for every poster, a whole section or a single collection. Here's each one on a
+Every setting, `artwork` included, works for every poster, a whole section or a single collection (see
+`sections` and `overrides` in `config.example.yml`). Twelve fonts come with CineSets. Here's each one on a
 collection it suits; the [preview](docs/preview.md#fonts) lists them all. Noto Sans comes along too, not as a
 choice but to draw Greek, Cyrillic and Vietnamese letters the chosen font and Poppins don't have.
 

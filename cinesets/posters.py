@@ -65,7 +65,8 @@ ACCENTS = {
 # settings under `posters:` in config.yml. Text settings apply to every poster; artwork, accent, shade, tint and the
 # title settings leave streaming service posters as they are.
 STYLE = {
-    "artwork": "fixed",          # fixed or random (see engine.Engine.poster_for)
+    "artwork": "fixed",          # fixed, random or mosaic (see engine.Engine.poster_for)
+    "mosaic": "3x3",             # artwork: mosaic only: a grid of 3x3 or 2x2 of the collection's own posters (mosaic.py)
     "accent": "auto",            # auto: each collection's own accent; or one accent name or #hex for every poster
     "shade": "medium",           # how dark the artwork is: light, medium, dark
     "tint": "normal",            # how strongly the accent colour washes over the artwork: strong, normal, subtle, none
@@ -91,7 +92,8 @@ STYLE = {
     "logo_colour": "original",
 }
 CHOICES = {
-    "artwork": ("fixed", "random"),
+    "artwork": ("fixed", "random", "mosaic"),
+    "mosaic": ("2x2", "3x3"),
     "shade": ("light", "medium", "dark"),
     "tint": ("strong", "normal", "subtle", "none"),
     "title": ("gradient", "solid", "white"),
@@ -191,8 +193,8 @@ LAYERS = ("sections", "overrides")  # settings for whole sections (by group), th
 
 def check_style(raw):
     """The `posters` settings from config.yml with defaults filled in, plus `sections` (settings for every collection
-    in a section, by its group) and `overrides` (settings for single collections, by key). Either can hold anything
-    but artwork. Bad values stop with a clear message."""
+    in a section, by its group) and `overrides` (settings for single collections, by key). Either can hold any of
+    them, artwork too. Bad values stop with a clear message."""
     raw = _spellings(raw or {})
     layers = {layer: raw.pop(layer, None) or {} for layer in LAYERS}
     style = _settings(raw, "config.yml posters")
@@ -206,8 +208,6 @@ def check_style(raw):
             if not isinstance(own, dict):
                 raise SystemExit(f"{where}: must be a list of settings, like {{accent: red}}")
             own = _spellings(own)
-            if "artwork" in own:
-                raise SystemExit(f"{where}: artwork can only be set for every poster")
             merged = _settings({**base, **own}, where)
             style[layer][str(key)] = {k: merged[k] for k in STYLE if k in own}
     return style
@@ -224,7 +224,7 @@ def style_for(style, key, group=None):
 
 def style_changes(style, logo=False):
     """The settings that differ from the defaults and change this kind of poster, for its design record."""
-    keys = TEXT_SETTINGS + LOGO_SETTINGS if logo else [k for k in STYLE if k != "artwork" and k not in LOGO_SETTINGS]
+    keys = TEXT_SETTINGS + LOGO_SETTINGS if logo else [k for k in STYLE if k not in ("artwork", "mosaic") + LOGO_SETTINGS]
     return {k: style[k] for k in keys if style and style[k] != STYLE[k]}
 
 
