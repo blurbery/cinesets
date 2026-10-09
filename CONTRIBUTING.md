@@ -62,7 +62,10 @@ I approve them.
   together and how to add a server.
 - New source files get the same header as the others.
 - New collections go in `collections.yml` (the top of the file explains every field). Lists have to be public
-  mdblist lists, and franchises use fixed `[title, year]` lists so remakes don't sneak in.
+  mdblist lists, and franchises use fixed `[title, year, TMDB id]` lists so remakes don't sneak in. Add each film's
+  TMDB id, the number in its themoviedb.org address, so it's found whatever a server calls it (Zootopia is
+  "Zootropolis" in British metadata), and check it against a second source such as Wikidata: a wrong id quietly
+  puts the wrong film in the franchise.
 - One thing per PR.
 
 <details>

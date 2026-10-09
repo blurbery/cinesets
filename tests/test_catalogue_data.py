@@ -29,10 +29,10 @@ def test_fixed_lists_have_real_years_and_a_minimum_they_can_reach(make_cfg):
     fixed = [c for c in catalog.load(make_cfg()) if c.get("titles")]
     assert fixed
     for c in fixed:
-        for title, year in c["titles"]:
+        for title, year, _ in c["titles"]:
             assert isinstance(title, str) and title.strip() == title and title, (c["key"], title)
             assert isinstance(year, int) and 1900 <= year <= latest, (c["key"], title, year)
-        assert len(set(c["titles"])) == len(c["titles"]), c["key"]
+        assert len({(t, y) for t, y, _ in c["titles"]}) == len(c["titles"]), c["key"]
         # a library missing one film still gets the collection, unless the franchise is a pair (one film is no set)
         assert 2 <= c.get("min", 8) < max(len(c["titles"]), 3), c["key"]
 

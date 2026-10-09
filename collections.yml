@@ -11,9 +11,13 @@
 #   title      big poster title (\n breaks the line)
 # One of:
 #   lists      public mdblist lists (user/list-slug), merged in order
-#   titles     a fixed list of [title, year] (franchises), each as TMDB names it; needs min, since a franchise has
-#              fewer films than defaults.min_items. A title written another way (case, accents, punctuation, "&" or
-#              "and", a leading "The") or a year out either side still matches, but a remake from another year doesn't.
+#   titles     a fixed list of [title, year, TMDB id] (franchises), each as TMDB names it; needs min, since a franchise
+#              has fewer films than defaults.min_items. The id is the number in the title's TMDB address (269149 in
+#              themoviedb.org/movie/269149-zootopia, or themoviedb.org/tv/... for a show) and finds it whatever the
+#              server calls it, like Zootopia, which is "Zootropolis" in British metadata. The id can be left off, as
+#              [title, year]. Without it, or when nothing in the library has it, the title and year are matched: a
+#              title written another way (case, accents, punctuation, "&" or "and", a leading "The") or a year out
+#              either side still matches, but a remake from another year doesn't.
 # Optional:
 #   subtitle         smaller white line under the title
 #   accent           poster colour: purple, pink, blue, gold, green, red, teal, orange, silver, ice, a colour like
@@ -164,7 +168,7 @@ collections:
     limit: 100
     backdrop_title: "A Tale of Two Cities"
 
-  # --- Franchises and universes. Shown last, A to Z. Entries with `titles` use a fixed (title, year) list.
+  # --- Franchises and universes. Shown last, A to Z. Entries with `titles` use a fixed (title, year, TMDB id) list.
   - key: m-marvel
     group: universes
     type: movie
