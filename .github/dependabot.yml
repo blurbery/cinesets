@@ -13,6 +13,10 @@ updates:
       interval: weekly
     commit-message:
       prefix: deps
+    ignore:
+      # pytest 9 needs Python 3.10 or newer, and CineSets still supports 3.9: drop this when that changes
+      - dependency-name: pytest
+        versions: [">=9"]
 
   - package-ecosystem: docker
     directory: /
