@@ -238,7 +238,7 @@ def test_preview_draws_the_unsaved_settings_and_reports_the_layout(site):
 @pytest.mark.parametrize("body, status, words", [
     ({"key": "m-bttf", "posters": {"shade": "pitch"}}, 400, "Poster settings: shade must be one of"),
     ({"key": "m-bttf", "posters": {"title_position": [2, 0]}}, 400, "two numbers from 0 to 1"),
-    ({"key": "m-bttf", "posters": {"overrides": {"m-bttf": {"artwork": "random"}}}}, 400, "artwork can only be set"),
+    ({"key": "m-bttf", "posters": {"overrides": {"m-bttf": {"artwork": "collage"}}}}, 400, "artwork must be one of"),
     ({"key": "m-nope", "posters": {}}, 404, "no collection called"),
     ({"key": "m-bttf", "posters": {}, "artwork": "../../etc"}, 400, "not an item id"),
     ({"key": "m-bttf", "posters": {}, "artwork": "m404"}, 404, "not in your library"),
@@ -403,8 +403,8 @@ def test_sections_sit_between_every_poster_and_one_collection():
                              (("m-action", "genres"), ("m-comedy", "genres"), ("m-bttf", "universes")))
     assert (action["accent"], action["case"], action["shade"]) == ("#00ff00", "upper", "dark")
     assert (comedy["accent"], comedy["case"]) == ("red", "upper") and (other["accent"], other["case"]) == ("gold", "normal")
-    with pytest.raises(SystemExit, match="sections genres: artwork can only be set"):
-        posters.check_style({"sections": {"genres": {"artwork": "random"}}})
+    with pytest.raises(SystemExit, match="sections genres: artwork must be one of fixed, random, mosaic"):
+        posters.check_style({"sections": {"genres": {"artwork": "collage"}}})
 
 
 def test_section_settings_reach_the_next_run(make_cfg):
