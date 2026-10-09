@@ -11,6 +11,8 @@ import os
 
 import requests
 
+from . import __version__
+
 FILES = {
     "netflix": "File:Netflix 2015 logo.svg",
     "prime": "File:Amazon Prime Video logo.svg",
@@ -40,10 +42,28 @@ def file_name(key, variant="standard"):
     return f"{key}.png" if variant == "standard" else f"{key}--{variant}.png"
 
 
+def _save(path, data):
+    """Write the file next to where it goes, then swap it in, so a download that's cut off never leaves half a logo.
+    It's opened plainly, so the logo gets the usual permissions and anyone who could read it before still can."""
+    part = f"{path}.{os.getpid()}.part"
+    try:
+        with open(part, "wb") as f:
+            f.write(data)
+        os.replace(part, path)
+    except BaseException:
+        try:
+            os.remove(part)
+        except OSError:
+            pass
+        raise
+
+
 def download(logos_dir, force=False):
     os.makedirs(logos_dir, exist_ok=True)
     s = requests.Session()
-    s.headers["User-Agent"] = "CineSets/1.0 (+https://github.com/blurbery/cinesets; self-hosted media server posters)"
+    # Wikimedia asks every tool to name itself, its version and where to find it
+    s.headers["User-Agent"] = (f"CineSets/{__version__} (+https://github.com/blurbery/cinesets; self-hosted media server "
+                               f"posters) python-requests/{requests.__version__}")
     every = {file_name(k): t for k, t in FILES.items()}
     every.update({file_name(k, v): t for k, versions in VARIANTS.items() for v, (_, t) in versions.items()})
     want = {name: t for name, t in every.items() if force or not os.path.exists(os.path.join(logos_dir, name))}
@@ -51,20 +71,26 @@ def download(logos_dir, force=False):
         print("All logos already downloaded.")
         return
     q = s.get("https://commons.wikimedia.org/w/api.php", params={
-        "action": "query", "format": "json", "prop": "imageinfo", "iiprop": "url", "iiurlwidth": 1280,
+        "action": "query", "format": "json", "prop": "imageinfo", "iiprop": "url", "iiurlwidth": 1280, "redirects": 1,
         "titles": "|".join(want.values())}, timeout=30).json()["query"]
+    # a title can be tidied (normalized) and then lead on to a file that has been renamed (redirects)
     norm = {n["from"]: n["to"] for n in q.get("normalized", [])}
-    urls = {p["title"]: p["imageinfo"][0]["thumburl"] for p in q["pages"].values() if p.get("imageinfo")}
+    moved = {r["from"]: r["to"] for r in q.get("redirects", [])}
+    urls = {p["title"]: p["imageinfo"][0].get("thumburl") for p in q.get("pages", {}).values() if p.get("imageinfo")}
     for name, title in want.items():
         key = name[:-4]
-        url = urls.get(norm.get(title, title))
+        title = norm.get(title, title)
+        url = urls.get(moved.get(title, title))
         if not url:
             print(f"  {key}: not found on Wikimedia Commons, posters will show the service name instead")
             continue
-        r = s.get(url, timeout=60)
+        try:
+            r = s.get(url, timeout=60)
+        except requests.RequestException as e:
+            print(f"  {key}: download failed ({type(e).__name__})")
+            continue
         if r.ok and r.headers.get("Content-Type", "").startswith("image/png"):
-            with open(os.path.join(logos_dir, name), "wb") as f:
-                f.write(r.content)
+            _save(os.path.join(logos_dir, name), r.content)
             print(f"  {key}: {len(r.content) // 1024} KB")
         else:
             print(f"  {key}: download failed ({r.status_code})")

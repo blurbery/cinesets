@@ -33,6 +33,10 @@ Third-party material:
   Pacifico (Copyright 2018 The Pacifico Project Authors), Titan One (Copyright 2011 Rodrigo Fuenzalida) and
   Courier Prime (Copyright 2015 The Courier Prime Project Authors). All but Poppins are unmodified copies from
   the Google Fonts repository (github.com/google/fonts, commit 5e8a3ba).
+- Noto Sans (Copyright 2022 The Noto Project Authors), licensed under the SIL Open Font License 1.1, with its
+  licence in assets/fonts/noto-sans/OFL.txt: an unmodified copy from the Noto fonts repository
+  (github.com/notofonts/latin-greek-cyrillic). It isn't one of the poster fonts; it only draws letters the chosen
+  font and Poppins don't have.
 - Streaming service logos are not included. `cinesets logos` downloads them from Wikimedia Commons onto your
   own server; they remain trade marks of their owners.
 - Collection lists are read from public lists on mdblist.com and are not redistributed here.
