@@ -221,6 +221,14 @@ def font_sheet(studio, by_key):
     save(sheet(tiles, 6, tile), "style-fonts.jpg")
 
 
+# a few words under a section's heading, where the picture alone doesn't say it
+SECTION_NOTES = {
+    "seasonal": "Each one is only there around its holiday: Halloween from 1 October to 1 November, Christmas from 20 "
+                "November\nto 6 January. Outside those dates CineSets takes down the copy it made, and makes it again "
+                "next season.\n\n",
+}
+
+
 def section_tables(made):
     """Markdown for every section: its picture and a table of its keys, to paste between the markers in preview.md."""
     parts = []
@@ -228,7 +236,7 @@ def section_tables(made):
         name = members[0]["section"]
         note = f" A sample of {shown} of its {len(members)} collections." if shown < len(members) else ""
         parts.append(f"### {name}\n\nSection key `{group}`, {len(members)} collections.{note}\n\n"
-                     f"![{name}](images/section-{group}.jpg)\n\n<details>\n<summary>Every collection in "
+                     f"{SECTION_NOTES.get(group, '')}![{name}](images/section-{group}.jpg)\n\n<details>\n<summary>Every collection in "
                      f"{name.lower() if name[1:2].islower() else name}</summary>\n\n| Key | Collection |\n|---|---|\n"
                      + "".join(f"| `{c['key']}` | {c['name']} |\n" for c in members) + "\n</details>\n")
     return "\n".join(parts)
