@@ -155,7 +155,9 @@ From a public mdblist list (swap in a real `user/slug`):
     lists: [some-user/best-heist-movies]
 ```
 
-A franchise from a fixed list of films. It needs `min` because there are only three:
+A franchise from a fixed list of films. It needs `min` because there are only three. The last number on each film is
+its TMDB id, the one in its themoviedb.org address, so it's found whatever your server calls it. It can be left
+off: when there's no id, or nothing in your library has it, the title and year are matched instead.
 
 ```yaml
   - key: m-karatekid
@@ -165,9 +167,9 @@ A franchise from a fixed list of films. It needs `min` because there are only th
     accent: red
     min: 2
     titles:
-      - ["The Karate Kid", 1984]
-      - ["The Karate Kid Part II", 1986]
-      - ["The Karate Kid Part III", 1989]
+      - ["The Karate Kid", 1984, 1885]
+      - ["The Karate Kid Part II", 1986, 8856]
+      - ["The Karate Kid Part III", 1989, 10495]
 ```
 
 </details>

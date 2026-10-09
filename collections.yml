@@ -230,13 +230,13 @@ collections:
     title: "Middle-\nearth"
     accent: green
     titles:
-      - ["The Lord of the Rings: The Fellowship of the Ring", 2001]
-      - ["The Lord of the Rings: The Two Towers", 2002]
-      - ["The Lord of the Rings: The Return of the King", 2003]
-      - ["The Hobbit: An Unexpected Journey", 2012]
-      - ["The Hobbit: The Desolation of Smaug", 2013]
-      - ["The Hobbit: The Battle of the Five Armies", 2014]
-      - ["The Lord of the Rings: The War of the Rohirrim", 2024]
+      - ["The Lord of the Rings: The Fellowship of the Ring", 2001, 120]
+      - ["The Lord of the Rings: The Two Towers", 2002, 121]
+      - ["The Lord of the Rings: The Return of the King", 2003, 122]
+      - ["The Hobbit: An Unexpected Journey", 2012, 49051]
+      - ["The Hobbit: The Desolation of Smaug", 2013, 57158]
+      - ["The Hobbit: The Battle of the Five Armies", 2014, 122917]
+      - ["The Lord of the Rings: The War of the Rohirrim", 2024, 839033]
     min: 3
     backdrop_title: "The Lord of the Rings: The Return of the King"
   - key: m-bond
@@ -307,11 +307,11 @@ collections:
     title: "John\nWick"
     accent: purple
     titles:
-      - ["John Wick", 2014]
-      - ["John Wick: Chapter 2", 2017]
-      - ["John Wick: Chapter 3 - Parabellum", 2019]
-      - ["John Wick: Chapter 4", 2023]
-      - ["Ballerina", 2025]
+      - ["John Wick", 2014, 245891]
+      - ["John Wick: Chapter 2", 2017, 324552]
+      - ["John Wick: Chapter 3 - Parabellum", 2019, 458156]
+      - ["John Wick: Chapter 4", 2023, 603692]
+      - ["Ballerina", 2025, 541671]
     min: 3
   - key: m-monsterverse
     group: universes
@@ -389,15 +389,15 @@ collections:
     title: "Rocky &\nCreed"
     accent: red
     titles:
-      - ["Rocky", 1976]
-      - ["Rocky II", 1979]
-      - ["Rocky III", 1982]
-      - ["Rocky IV", 1985]
-      - ["Rocky V", 1990]
-      - ["Rocky Balboa", 2006]
-      - ["Creed", 2015]
-      - ["Creed II", 2018]
-      - ["Creed III", 2023]
+      - ["Rocky", 1976, 1366]
+      - ["Rocky II", 1979, 1367]
+      - ["Rocky III", 1982, 1371]
+      - ["Rocky IV", 1985, 1374]
+      - ["Rocky V", 1990, 1375]
+      - ["Rocky Balboa", 2006, 1246]
+      - ["Creed", 2015, 312221]
+      - ["Creed II", 2018, 480530]
+      - ["Creed III", 2023, 677179]
     min: 3
     backdrop_title: "Creed"
   - key: m-despicable
@@ -407,13 +407,13 @@ collections:
     subtitle: "& Minions"
     accent: gold
     titles:
-      - ["Despicable Me", 2010]
-      - ["Despicable Me 2", 2013]
-      - ["Despicable Me 3", 2017]
-      - ["Despicable Me 4", 2024]
-      - ["Minions", 2015]
-      - ["Minions: The Rise of Gru", 2022]
-      - ["Minions & Monsters", 2026]
+      - ["Despicable Me", 2010, 20352]
+      - ["Despicable Me 2", 2013, 93456]
+      - ["Despicable Me 3", 2017, 324852]
+      - ["Despicable Me 4", 2024, 519182]
+      - ["Minions", 2015, 211672]
+      - ["Minions: The Rise of Gru", 2022, 438148]
+      - ["Minions & Monsters", 2026, 1315772]
     min: 3
     backdrop_title: "Despicable Me"
   - key: m-toystory
@@ -422,12 +422,12 @@ collections:
     title: "Toy Story"
     accent: blue
     titles:
-      - ["Toy Story", 1995]
-      - ["Toy Story 2", 1999]
-      - ["Toy Story 3", 2010]
-      - ["Toy Story 4", 2019]
-      - ["Toy Story 5", 2026]
-      - ["Lightyear", 2022]
+      - ["Toy Story", 1995, 862]
+      - ["Toy Story 2", 1999, 863]
+      - ["Toy Story 3", 2010, 10193]
+      - ["Toy Story 4", 2019, 301528]
+      - ["Toy Story 5", 2026, 1084244]
+      - ["Lightyear", 2022, 718789]
     min: 3
     backdrop_title: "Toy Story 4"
   - key: m-shrek
@@ -436,12 +436,12 @@ collections:
     title: "Shrek"
     accent: green
     titles:
-      - ["Shrek", 2001]
-      - ["Shrek 2", 2004]
-      - ["Shrek the Third", 2007]
-      - ["Shrek Forever After", 2010]
-      - ["Puss in Boots", 2011]
-      - ["Puss in Boots: The Last Wish", 2022]
+      - ["Shrek", 2001, 808]
+      - ["Shrek 2", 2004, 809]
+      - ["Shrek the Third", 2007, 810]
+      - ["Shrek Forever After", 2010, 10192]
+      - ["Puss in Boots", 2011, 417859]
+      - ["Puss in Boots: The Last Wish", 2022, 315162]
     min: 3
     backdrop_title: "Shrek 2"
   - key: m-predator
@@ -450,13 +450,13 @@ collections:
     title: "Predator"
     accent: green
     titles:
-      - ["Predator", 1987]
-      - ["Predator 2", 1990]
-      - ["Predators", 2010]
-      - ["The Predator", 2018]
-      - ["Prey", 2022]
-      - ["Predator: Killer of Killers", 2025]
-      - ["Predator: Badlands", 2025]
+      - ["Predator", 1987, 106]
+      - ["Predator 2", 1990, 169]
+      - ["Predators", 2010, 34851]
+      - ["The Predator", 2018, 346910]
+      - ["Prey", 2022, 766507]
+      - ["Predator: Killer of Killers", 2025, 1376434]
+      - ["Predator: Badlands", 2025, 1242898]
     min: 3
     backdrop_title: "Prey"
   - key: m-iceage
@@ -465,12 +465,12 @@ collections:
     title: "Ice Age"
     accent: blue
     titles:
-      - ["Ice Age", 2002]
-      - ["Ice Age: The Meltdown", 2006]
-      - ["Ice Age: Dawn of the Dinosaurs", 2009]
-      - ["Ice Age: Continental Drift", 2012]
-      - ["Ice Age: Collision Course", 2016]
-      - ["The Ice Age Adventures of Buck Wild", 2022]
+      - ["Ice Age", 2002, 425]
+      - ["Ice Age: The Meltdown", 2006, 950]
+      - ["Ice Age: Dawn of the Dinosaurs", 2009, 8355]
+      - ["Ice Age: Continental Drift", 2012, 57800]
+      - ["Ice Age: Collision Course", 2016, 278154]
+      - ["The Ice Age Adventures of Buck Wild", 2022, 774825]
     min: 3
     backdrop_title: "Ice Age"
   - key: m-pirates
@@ -479,11 +479,11 @@ collections:
     title: "Pirates of\nthe Caribbean"
     accent: gold
     titles:
-      - ["Pirates of the Caribbean: The Curse of the Black Pearl", 2003]
-      - ["Pirates of the Caribbean: Dead Man's Chest", 2006]
-      - ["Pirates of the Caribbean: At World's End", 2007]
-      - ["Pirates of the Caribbean: On Stranger Tides", 2011]
-      - ["Pirates of the Caribbean: Dead Men Tell No Tales", 2017]
+      - ["Pirates of the Caribbean: The Curse of the Black Pearl", 2003, 22]
+      - ["Pirates of the Caribbean: Dead Man's Chest", 2006, 58]
+      - ["Pirates of the Caribbean: At World's End", 2007, 285]
+      - ["Pirates of the Caribbean: On Stranger Tides", 2011, 1865]
+      - ["Pirates of the Caribbean: Dead Men Tell No Tales", 2017, 166426]
     min: 3
     backdrop_title: "Pirates of the Caribbean: The Curse of the Black Pearl"
   - key: m-matrix
@@ -492,11 +492,11 @@ collections:
     title: "The Matrix"
     accent: green
     titles:
-      - ["The Matrix", 1999]
-      - ["The Animatrix", 2003]
-      - ["The Matrix Reloaded", 2003]
-      - ["The Matrix Revolutions", 2003]
-      - ["The Matrix Resurrections", 2021]
+      - ["The Matrix", 1999, 603]
+      - ["The Animatrix", 2003, 55931]
+      - ["The Matrix Reloaded", 2003, 604]
+      - ["The Matrix Revolutions", 2003, 605]
+      - ["The Matrix Resurrections", 2021, 624860]
     min: 3
     backdrop_title: "The Matrix"
   - key: m-rambo
@@ -505,11 +505,11 @@ collections:
     title: "Rambo"
     accent: red
     titles:
-      - ["First Blood", 1982]
-      - ["Rambo: First Blood Part II", 1985]
-      - ["Rambo III", 1988]
-      - ["Rambo", 2008]
-      - ["Rambo: Last Blood", 2019]
+      - ["First Blood", 1982, 1368]
+      - ["Rambo: First Blood Part II", 1985, 1369]
+      - ["Rambo III", 1988, 1370]
+      - ["Rambo", 2008, 7555]
+      - ["Rambo: Last Blood", 2019, 522938]
     min: 3
     backdrop_title: "First Blood"
   - key: m-terminator
@@ -518,12 +518,12 @@ collections:
     title: "Terminator"
     accent: blue
     titles:
-      - ["The Terminator", 1984]
-      - ["Terminator 2: Judgment Day", 1991]
-      - ["Terminator 3: Rise of the Machines", 2003]
-      - ["Terminator Salvation", 2009]
-      - ["Terminator Genisys", 2015]
-      - ["Terminator: Dark Fate", 2019]
+      - ["The Terminator", 1984, 218]
+      - ["Terminator 2: Judgment Day", 1991, 280]
+      - ["Terminator 3: Rise of the Machines", 2003, 296]
+      - ["Terminator Salvation", 2009, 534]
+      - ["Terminator Genisys", 2015, 87101]
+      - ["Terminator: Dark Fate", 2019, 290859]
     min: 3
     backdrop_title: "Terminator 2: Judgment Day"
   - key: m-indiana
@@ -532,11 +532,11 @@ collections:
     title: "Indiana\nJones"
     accent: gold
     titles:
-      - ["Raiders of the Lost Ark", 1981]
-      - ["Indiana Jones and the Temple of Doom", 1984]
-      - ["Indiana Jones and the Last Crusade", 1989]
-      - ["Indiana Jones and the Kingdom of the Crystal Skull", 2008]
-      - ["Indiana Jones and the Dial of Destiny", 2023]
+      - ["Raiders of the Lost Ark", 1981, 85]
+      - ["Indiana Jones and the Temple of Doom", 1984, 87]
+      - ["Indiana Jones and the Last Crusade", 1989, 89]
+      - ["Indiana Jones and the Kingdom of the Crystal Skull", 2008, 217]
+      - ["Indiana Jones and the Dial of Destiny", 2023, 335977]
     min: 3
     backdrop_title: "Raiders of the Lost Ark"
   - key: m-hungergames
@@ -545,12 +545,12 @@ collections:
     title: "The Hunger\nGames"
     accent: red
     titles:
-      - ["The Hunger Games", 2012]
-      - ["The Hunger Games: Catching Fire", 2013]
-      - ["The Hunger Games: Mockingjay - Part 1", 2014]
-      - ["The Hunger Games: Mockingjay - Part 2", 2015]
-      - ["The Hunger Games: The Ballad of Songbirds & Snakes", 2023]
-      - ["The Hunger Games: Sunrise on the Reaping", 2026]
+      - ["The Hunger Games", 2012, 70160]
+      - ["The Hunger Games: Catching Fire", 2013, 101299]
+      - ["The Hunger Games: Mockingjay - Part 1", 2014, 131631]
+      - ["The Hunger Games: Mockingjay - Part 2", 2015, 131634]
+      - ["The Hunger Games: The Ballad of Songbirds & Snakes", 2023, 695721]
+      - ["The Hunger Games: Sunrise on the Reaping", 2026, 1300968]
     min: 3
     backdrop_title: "The Hunger Games: Catching Fire"
   - key: m-apes
@@ -559,11 +559,11 @@ collections:
     title: "Planet of\nthe Apes"
     accent: teal
     titles:
-      - ["Planet of the Apes", 1968]
-      - ["Rise of the Planet of the Apes", 2011]
-      - ["Dawn of the Planet of the Apes", 2014]
-      - ["War for the Planet of the Apes", 2017]
-      - ["Kingdom of the Planet of the Apes", 2024]
+      - ["Planet of the Apes", 1968, 871]
+      - ["Rise of the Planet of the Apes", 2011, 61791]
+      - ["Dawn of the Planet of the Apes", 2014, 119450]
+      - ["War for the Planet of the Apes", 2017, 281338]
+      - ["Kingdom of the Planet of the Apes", 2024, 653346]
     min: 3
     backdrop_title: "War for the Planet of the Apes"
   - key: m-madmax
@@ -572,11 +572,11 @@ collections:
     title: "Mad Max"
     accent: gold
     titles:
-      - ["Mad Max", 1979]
-      - ["Mad Max 2", 1981]
-      - ["Mad Max Beyond Thunderdome", 1985]
-      - ["Mad Max: Fury Road", 2015]
-      - ["Furiosa: A Mad Max Saga", 2024]
+      - ["Mad Max", 1979, 9659]
+      - ["Mad Max 2", 1981, 8810]
+      - ["Mad Max Beyond Thunderdome", 1985, 9355]
+      - ["Mad Max: Fury Road", 2015, 76341]
+      - ["Furiosa: A Mad Max Saga", 2024, 786892]
     min: 3
     backdrop_title: "Furiosa: A Mad Max Saga"
   - key: m-conjuring
@@ -586,15 +586,15 @@ collections:
     subtitle: "Universe"
     accent: purple
     titles:
-      - ["The Conjuring", 2013]
-      - ["Annabelle", 2014]
-      - ["The Conjuring 2", 2016]
-      - ["Annabelle: Creation", 2017]
-      - ["The Nun", 2018]
-      - ["Annabelle Comes Home", 2019]
-      - ["The Conjuring: The Devil Made Me Do It", 2021]
-      - ["The Nun II", 2023]
-      - ["The Conjuring: Last Rites", 2025]
+      - ["The Conjuring", 2013, 138843]
+      - ["Annabelle", 2014, 250546]
+      - ["The Conjuring 2", 2016, 259693]
+      - ["Annabelle: Creation", 2017, 396422]
+      - ["The Nun", 2018, 439079]
+      - ["Annabelle Comes Home", 2019, 521029]
+      - ["The Conjuring: The Devil Made Me Do It", 2021, 423108]
+      - ["The Nun II", 2023, 968051]
+      - ["The Conjuring: Last Rites", 2025, 1038392]
     min: 3
     backdrop_title: "The Conjuring"
   - key: m-bourne
@@ -603,11 +603,11 @@ collections:
     title: "Bourne"
     accent: blue
     titles:
-      - ["The Bourne Identity", 2002]
-      - ["The Bourne Supremacy", 2004]
-      - ["The Bourne Ultimatum", 2007]
-      - ["The Bourne Legacy", 2012]
-      - ["Jason Bourne", 2016]
+      - ["The Bourne Identity", 2002, 2501]
+      - ["The Bourne Supremacy", 2004, 2502]
+      - ["The Bourne Ultimatum", 2007, 2503]
+      - ["The Bourne Legacy", 2012, 49040]
+      - ["Jason Bourne", 2016, 324668]
     min: 3
     backdrop_title: "The Bourne Ultimatum"
   - key: m-alien
@@ -616,13 +616,13 @@ collections:
     title: "Alien"
     accent: teal
     titles:
-      - ["Alien", 1979]
-      - ["Aliens", 1986]
-      - ["Alien³", 1992]
-      - ["Alien Resurrection", 1997]
-      - ["Prometheus", 2012]
-      - ["Alien: Covenant", 2017]
-      - ["Alien: Romulus", 2024]
+      - ["Alien", 1979, 348]
+      - ["Aliens", 1986, 679]
+      - ["Alien³", 1992, 8077]
+      - ["Alien Resurrection", 1997, 8078]
+      - ["Prometheus", 2012, 70981]
+      - ["Alien: Covenant", 2017, 126889]
+      - ["Alien: Romulus", 2024, 945961]
     min: 3
     backdrop_title: "Alien: Romulus"
   - key: m-kungfupanda
@@ -631,10 +631,10 @@ collections:
     title: "Kung Fu\nPanda"
     accent: gold
     titles:
-      - ["Kung Fu Panda", 2008]
-      - ["Kung Fu Panda 2", 2011]
-      - ["Kung Fu Panda 3", 2016]
-      - ["Kung Fu Panda 4", 2024]
+      - ["Kung Fu Panda", 2008, 9502]
+      - ["Kung Fu Panda 2", 2011, 49444]
+      - ["Kung Fu Panda 3", 2016, 140300]
+      - ["Kung Fu Panda 4", 2024, 1011985]
     min: 3
     backdrop_title: "Kung Fu Panda 4"
   - key: m-diehard
@@ -643,11 +643,11 @@ collections:
     title: "Die Hard"
     accent: red
     titles:
-      - ["Die Hard", 1988]
-      - ["Die Hard 2", 1990]
-      - ["Die Hard: With a Vengeance", 1995]
-      - ["Live Free or Die Hard", 2007]
-      - ["A Good Day to Die Hard", 2013]
+      - ["Die Hard", 1988, 562]
+      - ["Die Hard 2", 1990, 1573]
+      - ["Die Hard: With a Vengeance", 1995, 1572]
+      - ["Live Free or Die Hard", 2007, 1571]
+      - ["A Good Day to Die Hard", 2013, 47964]
     min: 3
     backdrop_title: "Die Hard"
   - key: m-halloweensaga
@@ -657,17 +657,17 @@ collections:
     subtitle: "Saga"
     accent: red
     titles:
-      - ["Halloween", 1978]
-      - ["Halloween II", 1981]
-      - ["Halloween III: Season of the Witch", 1982]
-      - ["Halloween 4: The Return of Michael Myers", 1988]
-      - ["Halloween 5: The Revenge of Michael Myers", 1989]
-      - ["Halloween: The Curse of Michael Myers", 1995]
-      - ["Halloween H20: 20 Years Later", 1998]
-      - ["Halloween: Resurrection", 2002]
-      - ["Halloween", 2018]
-      - ["Halloween Kills", 2021]
-      - ["Halloween Ends", 2022]
+      - ["Halloween", 1978, 948]
+      - ["Halloween II", 1981, 11281]
+      - ["Halloween III: Season of the Witch", 1982, 10676]
+      - ["Halloween 4: The Return of Michael Myers", 1988, 11357]
+      - ["Halloween 5: The Revenge of Michael Myers", 1989, 11361]
+      - ["Halloween: The Curse of Michael Myers", 1995, 10987]
+      - ["Halloween H20: 20 Years Later", 1998, 11675]
+      - ["Halloween: Resurrection", 2002, 11442]
+      - ["Halloween", 2018, 424139]
+      - ["Halloween Kills", 2021, 610253]
+      - ["Halloween Ends", 2022, 616820]
     min: 3
   - key: m-residentevil
     group: universes
@@ -675,14 +675,14 @@ collections:
     title: "Resident\nEvil"
     accent: blue
     titles:
-      - ["Resident Evil", 2002]
-      - ["Resident Evil: Apocalypse", 2004]
-      - ["Resident Evil: Extinction", 2007]
-      - ["Resident Evil: Afterlife", 2010]
-      - ["Resident Evil: Retribution", 2012]
-      - ["Resident Evil: The Final Chapter", 2016]
-      - ["Resident Evil: Welcome to Raccoon City", 2021]
-      - ["Resident Evil", 2026]
+      - ["Resident Evil", 2002, 1576]
+      - ["Resident Evil: Apocalypse", 2004, 1577]
+      - ["Resident Evil: Extinction", 2007, 7737]
+      - ["Resident Evil: Afterlife", 2010, 35791]
+      - ["Resident Evil: Retribution", 2012, 71679]
+      - ["Resident Evil: The Final Chapter", 2016, 173897]
+      - ["Resident Evil: Welcome to Raccoon City", 2021, 460458]
+      - ["Resident Evil", 2026, 1423191]
     min: 3
   - key: m-evildead
     group: universes
@@ -690,12 +690,12 @@ collections:
     title: "Evil Dead"
     accent: gold
     titles:
-      - ["The Evil Dead", 1983]
-      - ["Evil Dead II", 1987]
-      - ["Army of Darkness", 1992]
-      - ["Evil Dead", 2013]
-      - ["Evil Dead Rise", 2023]
-      - ["Evil Dead Burn", 2026]
+      - ["The Evil Dead", 1983, 764]
+      - ["Evil Dead II", 1987, 765]
+      - ["Army of Darkness", 1992, 766]
+      - ["Evil Dead", 2013, 109428]
+      - ["Evil Dead Rise", 2023, 713704]
+      - ["Evil Dead Burn", 2026, 1212763]
     min: 3
   - key: m-jackass
     group: universes
@@ -703,12 +703,12 @@ collections:
     title: "Jackass"
     accent: green
     titles:
-      - ["Jackass: The Movie", 2002]
-      - ["Jackass Number Two", 2006]
-      - ["Jackass 3D", 2010]
-      - ["Jackass Presents: Bad Grandpa", 2013]
-      - ["Jackass Forever", 2022]
-      - ["Jackass: Best and Last", 2026]
+      - ["Jackass: The Movie", 2002, 9012]
+      - ["Jackass Number Two", 2006, 12094]
+      - ["Jackass 3D", 2010, 16290]
+      - ["Jackass Presents: Bad Grandpa", 2013, 208134]
+      - ["Jackass Forever", 2022, 656663]
+      - ["Jackass: Best and Last", 2026, 1612018]
     min: 3
   - key: m-americanpie
     group: universes
@@ -716,10 +716,10 @@ collections:
     title: "American Pie"
     accent: purple
     titles:
-      - ["American Pie", 1999]
-      - ["American Pie 2", 2001]
-      - ["American Wedding", 2003]
-      - ["American Reunion", 2012]
+      - ["American Pie", 1999, 2105]
+      - ["American Pie 2", 2001, 2770]
+      - ["American Wedding", 2003, 8273]
+      - ["American Reunion", 2012, 71552]
     min: 3
   - key: m-badboys
     group: universes
@@ -727,10 +727,10 @@ collections:
     title: "Bad Boys"
     accent: teal
     titles:
-      - ["Bad Boys", 1995]
-      - ["Bad Boys II", 2003]
-      - ["Bad Boys for Life", 2020]
-      - ["Bad Boys: Ride or Die", 2024]
+      - ["Bad Boys", 1995, 9737]
+      - ["Bad Boys II", 2003, 8961]
+      - ["Bad Boys for Life", 2020, 38700]
+      - ["Bad Boys: Ride or Die", 2024, 573435]
     min: 3
   - key: m-childsplaychucky
     group: universes
@@ -738,13 +738,13 @@ collections:
     title: "Chucky"
     accent: pink
     titles:
-      - ["Child's Play", 1988]
-      - ["Child's Play 2", 1990]
-      - ["Child's Play 3", 1991]
-      - ["Bride of Chucky", 1998]
-      - ["Seed of Chucky", 2004]
-      - ["Curse of Chucky", 2013]
-      - ["Cult of Chucky", 2017]
+      - ["Child's Play", 1988, 10585]
+      - ["Child's Play 2", 1990, 11186]
+      - ["Child's Play 3", 1991, 11187]
+      - ["Bride of Chucky", 1998, 11932]
+      - ["Seed of Chucky", 2004, 11249]
+      - ["Curse of Chucky", 2013, 167032]
+      - ["Cult of Chucky", 2017, 393345]
     min: 3
   - key: m-lethalweapon
     group: universes
@@ -752,10 +752,10 @@ collections:
     title: "Lethal\nWeapon"
     accent: red
     titles:
-      - ["Lethal Weapon", 1987]
-      - ["Lethal Weapon 2", 1989]
-      - ["Lethal Weapon 3", 1992]
-      - ["Lethal Weapon 4", 1998]
+      - ["Lethal Weapon", 1987, 941]
+      - ["Lethal Weapon 2", 1989, 942]
+      - ["Lethal Weapon 3", 1992, 943]
+      - ["Lethal Weapon 4", 1998, 944]
     min: 3
   - key: m-madagascar
     group: universes
@@ -763,10 +763,10 @@ collections:
     title: "Madagascar"
     accent: blue
     titles:
-      - ["Madagascar", 2005]
-      - ["Madagascar: Escape 2 Africa", 2008]
-      - ["Madagascar 3: Europe's Most Wanted", 2012]
-      - ["Penguins of Madagascar", 2014]
+      - ["Madagascar", 2005, 953]
+      - ["Madagascar: Escape 2 Africa", 2008, 10527]
+      - ["Madagascar 3: Europe's Most Wanted", 2012, 80321]
+      - ["Penguins of Madagascar", 2014, 270946]
     min: 3
   - key: m-spykids
     group: universes
@@ -774,11 +774,11 @@ collections:
     title: "Spy Kids"
     accent: gold
     titles:
-      - ["Spy Kids", 2001]
-      - ["Spy Kids 2: The Island of Lost Dreams", 2002]
-      - ["Spy Kids 3-D: Game Over", 2003]
-      - ["Spy Kids: All the Time in the World", 2011]
-      - ["Spy Kids: Armageddon", 2023]
+      - ["Spy Kids", 2001, 10054]
+      - ["Spy Kids 2: The Island of Lost Dreams", 2002, 9488]
+      - ["Spy Kids 3-D: Game Over", 2003, 12279]
+      - ["Spy Kids: All the Time in the World", 2011, 56288]
+      - ["Spy Kids: Armageddon", 2023, 790493]
     min: 3
   - key: m-theexpendables
     group: universes
@@ -786,10 +786,10 @@ collections:
     title: "The\nExpendables"
     accent: green
     titles:
-      - ["The Expendables", 2010]
-      - ["The Expendables 2", 2012]
-      - ["The Expendables 3", 2014]
-      - ["Expend4bles", 2023]
+      - ["The Expendables", 2010, 27578]
+      - ["The Expendables 2", 2012, 76163]
+      - ["The Expendables 3", 2014, 138103]
+      - ["Expend4bles", 2023, 299054]
     min: 3
   - key: m-thelegomovie
     group: universes
@@ -797,10 +797,10 @@ collections:
     title: "The LEGO\nMovie"
     accent: purple
     titles:
-      - ["The Lego Movie", 2014]
-      - ["The Lego Batman Movie", 2017]
-      - ["The Lego Ninjago Movie", 2017]
-      - ["The Lego Movie 2: The Second Part", 2019]
+      - ["The Lego Movie", 2014, 137106]
+      - ["The Lego Batman Movie", 2017, 324849]
+      - ["The Lego Ninjago Movie", 2017, 274862]
+      - ["The Lego Movie 2: The Second Part", 2019, 280217]
     min: 3
   - key: m-themummy
     group: universes
@@ -808,10 +808,10 @@ collections:
     title: "The Mummy"
     accent: teal
     titles:
-      - ["The Mummy", 1999]
-      - ["The Mummy Returns", 2001]
-      - ["The Scorpion King", 2002]
-      - ["The Mummy: Tomb of the Dragon Emperor", 2008]
+      - ["The Mummy", 1999, 564]
+      - ["The Mummy Returns", 2001, 1734]
+      - ["The Scorpion King", 2002, 9334]
+      - ["The Mummy: Tomb of the Dragon Emperor", 2008, 1735]
     min: 3
   - key: m-thepurge
     group: universes
@@ -819,11 +819,11 @@ collections:
     title: "The Purge"
     accent: pink
     titles:
-      - ["The Purge", 2013]
-      - ["The Purge: Anarchy", 2014]
-      - ["The Purge: Election Year", 2016]
-      - ["The First Purge", 2018]
-      - ["The Forever Purge", 2021]
+      - ["The Purge", 2013, 158015]
+      - ["The Purge: Anarchy", 2014, 238636]
+      - ["The Purge: Election Year", 2016, 316727]
+      - ["The First Purge", 2018, 442249]
+      - ["The Forever Purge", 2021, 602223]
     min: 3
   - key: m-underworld
     group: universes
@@ -831,11 +831,11 @@ collections:
     title: "Underworld"
     accent: red
     titles:
-      - ["Underworld", 2003]
-      - ["Underworld: Evolution", 2006]
-      - ["Underworld: Rise of the Lycans", 2009]
-      - ["Underworld: Awakening", 2012]
-      - ["Underworld: Blood Wars", 2016]
+      - ["Underworld", 2003, 277]
+      - ["Underworld: Evolution", 2006, 834]
+      - ["Underworld: Rise of the Lycans", 2009, 12437]
+      - ["Underworld: Awakening", 2012, 52520]
+      - ["Underworld: Blood Wars", 2016, 346672]
     min: 3
   - key: m-28dayslater
     group: universes
@@ -843,10 +843,10 @@ collections:
     title: "28 Days\nLater"
     accent: red
     titles:
-      - ["28 Days Later", 2002]
-      - ["28 Weeks Later", 2007]
-      - ["28 Years Later", 2025]
-      - ["28 Years Later: The Bone Temple", 2026]
+      - ["28 Days Later", 2002, 170]
+      - ["28 Weeks Later", 2007, 1562]
+      - ["28 Years Later", 2025, 1100988]
+      - ["28 Years Later: The Bone Temple", 2026, 1272837]
     min: 3
   - key: m-anightmareonelmstreet
     group: universes
@@ -854,13 +854,13 @@ collections:
     title: "A Nightmare\non Elm Street"
     accent: red
     titles:
-      - ["A Nightmare on Elm Street", 1984]
-      - ["A Nightmare on Elm Street Part 2: Freddy's Revenge", 1985]
-      - ["A Nightmare on Elm Street 3: Dream Warriors", 1987]
-      - ["A Nightmare on Elm Street 4: The Dream Master", 1988]
-      - ["A Nightmare on Elm Street: The Dream Child", 1989]
-      - ["Freddy's Dead: The Final Nightmare", 1991]
-      - ["Wes Craven's New Nightmare", 1994]
+      - ["A Nightmare on Elm Street", 1984, 377]
+      - ["A Nightmare on Elm Street Part 2: Freddy's Revenge", 1985, 10014]
+      - ["A Nightmare on Elm Street 3: Dream Warriors", 1987, 10072]
+      - ["A Nightmare on Elm Street 4: The Dream Master", 1988, 10131]
+      - ["A Nightmare on Elm Street: The Dream Child", 1989, 10160]
+      - ["Freddy's Dead: The Final Nightmare", 1991, 11284]
+      - ["Wes Craven's New Nightmare", 1994, 11596]
     min: 3
   - key: m-aquietplace
     group: universes
@@ -868,9 +868,9 @@ collections:
     title: "A Quiet\nPlace"
     accent: blue
     titles:
-      - ["A Quiet Place", 2018]
-      - ["A Quiet Place Part II", 2021]
-      - ["A Quiet Place: Day One", 2024]
+      - ["A Quiet Place", 2018, 447332]
+      - ["A Quiet Place Part II", 2021, 520763]
+      - ["A Quiet Place: Day One", 2024, 762441]
     min: 2
   - key: m-austinpowers
     group: universes
@@ -878,9 +878,9 @@ collections:
     title: "Austin\nPowers"
     accent: pink
     titles:
-      - ["Austin Powers: International Man of Mystery", 1997]
-      - ["Austin Powers: The Spy Who Shagged Me", 1999]
-      - ["Austin Powers in Goldmember", 2002]
+      - ["Austin Powers: International Man of Mystery", 1997, 816]
+      - ["Austin Powers: The Spy Who Shagged Me", 1999, 817]
+      - ["Austin Powers in Goldmember", 2002, 818]
     min: 2
   - key: m-avatar
     group: universes
@@ -888,9 +888,9 @@ collections:
     title: "Avatar"
     accent: gold
     titles:
-      - ["Avatar", 2009]
-      - ["Avatar: The Way of Water", 2022]
-      - ["Avatar: Fire and Ash", 2025]
+      - ["Avatar", 2009, 19995]
+      - ["Avatar: The Way of Water", 2022, 76600]
+      - ["Avatar: Fire and Ash", 2025, 83533]
     min: 2
   - key: m-backtothefuture
     group: universes
@@ -898,9 +898,9 @@ collections:
     title: "Back to\nthe Future"
     accent: green
     titles:
-      - ["Back to the Future", 1985]
-      - ["Back to the Future Part II", 1989]
-      - ["Back to the Future Part III", 1990]
+      - ["Back to the Future", 1985, 105]
+      - ["Back to the Future Part II", 1989, 165]
+      - ["Back to the Future Part III", 1990, 196]
     min: 2
   - key: m-beetlejuice
     group: universes
@@ -908,8 +908,8 @@ collections:
     title: "Beetlejuice"
     accent: green
     titles:
-      - ["Beetlejuice", 1988]
-      - ["Beetlejuice Beetlejuice", 2024]
+      - ["Beetlejuice", 1988, 4011]
+      - ["Beetlejuice Beetlejuice", 2024, 917496]
     min: 2
   - key: m-beverlyhillscop
     group: universes
@@ -917,10 +917,10 @@ collections:
     title: "Beverly Hills\nCop"
     accent: purple
     titles:
-      - ["Beverly Hills Cop", 1984]
-      - ["Beverly Hills Cop II", 1987]
-      - ["Beverly Hills Cop III", 1994]
-      - ["Beverly Hills Cop: Axel F", 2024]
+      - ["Beverly Hills Cop", 1984, 90]
+      - ["Beverly Hills Cop II", 1987, 96]
+      - ["Beverly Hills Cop III", 1994, 306]
+      - ["Beverly Hills Cop: Axel F", 2024, 280180]
     min: 3
   - key: m-cars
     group: universes
@@ -928,9 +928,9 @@ collections:
     title: "Cars"
     accent: teal
     titles:
-      - ["Cars", 2006]
-      - ["Cars 2", 2011]
-      - ["Cars 3", 2017]
+      - ["Cars", 2006, 920]
+      - ["Cars 2", 2011, 49013]
+      - ["Cars 3", 2017, 260514]
     min: 2
   - key: m-dune
     group: universes
@@ -938,9 +938,9 @@ collections:
     title: "Dune"
     accent: gold
     titles:
-      - ["Dune", 2021]
-      - ["Dune: Part Two", 2024]
-      - ["Dune: Part Three", 2026]
+      - ["Dune", 2021, 438631]
+      - ["Dune: Part Two", 2024, 693134]
+      - ["Dune: Part Three", 2026, 1170608]
     min: 2
   - key: m-fiftyshades
     group: universes
@@ -948,9 +948,9 @@ collections:
     title: "Fifty Shades"
     accent: pink
     titles:
-      - ["Fifty Shades of Grey", 2015]
-      - ["Fifty Shades Darker", 2017]
-      - ["Fifty Shades Freed", 2018]
+      - ["Fifty Shades of Grey", 2015, 216015]
+      - ["Fifty Shades Darker", 2017, 341174]
+      - ["Fifty Shades Freed", 2018, 337167]
     min: 2
   - key: m-finaldestination
     group: universes
@@ -958,12 +958,12 @@ collections:
     title: "Final\nDestination"
     accent: red
     titles:
-      - ["Final Destination", 2000]
-      - ["Final Destination 2", 2003]
-      - ["Final Destination 3", 2006]
-      - ["The Final Destination", 2009]
-      - ["Final Destination 5", 2011]
-      - ["Final Destination Bloodlines", 2025]
+      - ["Final Destination", 2000, 9532]
+      - ["Final Destination 2", 2003, 9358]
+      - ["Final Destination 3", 2006, 9286]
+      - ["The Final Destination", 2009, 19912]
+      - ["Final Destination 5", 2011, 55779]
+      - ["Final Destination Bloodlines", 2025, 574475]
     min: 3
   - key: m-fridaythe13th
     group: universes
@@ -971,17 +971,17 @@ collections:
     title: "Friday\nthe 13th"
     accent: blue
     titles:
-      - ["Friday the 13th", 1980]
-      - ["Friday the 13th Part 2", 1981]
-      - ["Friday the 13th Part III", 1982]
-      - ["Friday the 13th: The Final Chapter", 1984]
-      - ["Friday the 13th: A New Beginning", 1985]
-      - ["Jason Lives - Friday the 13th Part VI", 1986]
-      - ["Friday the 13th Part VII - The New Blood", 1988]
-      - ["Friday the 13th Part VIII: Jason Takes Manhattan", 1989]
-      - ["Jason Goes to Hell: The Final Friday", 1993]
-      - ["Jason X", 2001]
-      - ["Freddy vs. Jason", 2003]
+      - ["Friday the 13th", 1980, 4488]
+      - ["Friday the 13th Part 2", 1981, 9725]
+      - ["Friday the 13th Part III", 1982, 9728]
+      - ["Friday the 13th: The Final Chapter", 1984, 9730]
+      - ["Friday the 13th: A New Beginning", 1985, 9731]
+      - ["Jason Lives - Friday the 13th Part VI", 1986, 10225]
+      - ["Friday the 13th Part VII - The New Blood", 1988, 10281]
+      - ["Friday the 13th Part VIII: Jason Takes Manhattan", 1989, 10283]
+      - ["Jason Goes to Hell: The Final Friday", 1993, 10285]
+      - ["Jason X", 2001, 11470]
+      - ["Freddy vs. Jason", 2003, 6466]
     min: 3
   - key: m-frozen
     group: universes
@@ -989,8 +989,8 @@ collections:
     title: "Frozen"
     accent: ice
     titles:
-      - ["Frozen", 2013]
-      - ["Frozen II", 2019]
+      - ["Frozen", 2013, 109445]
+      - ["Frozen II", 2019, 330457]
     min: 2
   - key: m-ghostbusters
     group: universes
@@ -998,10 +998,10 @@ collections:
     title: "Ghostbusters"
     accent: red
     titles:
-      - ["Ghostbusters", 1984]
-      - ["Ghostbusters II", 1989]
-      - ["Ghostbusters: Afterlife", 2021]
-      - ["Ghostbusters: Frozen Empire", 2024]
+      - ["Ghostbusters", 1984, 620]
+      - ["Ghostbusters II", 1989, 2978]
+      - ["Ghostbusters: Afterlife", 2021, 425909]
+      - ["Ghostbusters: Frozen Empire", 2024, 967847]
     min: 3
   - key: m-gladiator
     group: universes
@@ -1009,8 +1009,8 @@ collections:
     title: "Gladiator"
     accent: gold
     titles:
-      - ["Gladiator", 2000]
-      - ["Gladiator II", 2024]
+      - ["Gladiator", 2000, 98]
+      - ["Gladiator II", 2024, 558449]
     min: 2
   - key: m-homealone
     group: universes
@@ -1018,11 +1018,11 @@ collections:
     title: "Home Alone"
     accent: blue
     titles:
-      - ["Home Alone", 1990]
-      - ["Home Alone 2: Lost in New York", 1992]
-      - ["Home Alone 3", 1997]
-      - ["Home Alone 4", 2002]
-      - ["Home Sweet Home Alone", 2021]
+      - ["Home Alone", 1990, 771]
+      - ["Home Alone 2: Lost in New York", 1992, 772]
+      - ["Home Alone 3", 1997, 9714]
+      - ["Home Alone 4", 2002, 12536]
+      - ["Home Sweet Home Alone", 2021, 654974]
     min: 3
   - key: m-hoteltransylvania
     group: universes
@@ -1030,10 +1030,10 @@ collections:
     title: "Hotel\nTransylvania"
     accent: gold
     titles:
-      - ["Hotel Transylvania", 2012]
-      - ["Hotel Transylvania 2", 2015]
-      - ["Hotel Transylvania 3: Summer Vacation", 2018]
-      - ["Hotel Transylvania: Transformania", 2022]
+      - ["Hotel Transylvania", 2012, 76492]
+      - ["Hotel Transylvania 2", 2015, 159824]
+      - ["Hotel Transylvania 3: Summer Vacation", 2018, 400155]
+      - ["Hotel Transylvania: Transformania", 2022, 585083]
     min: 3
   - key: m-howtotrainyourdragon
     group: universes
@@ -1041,10 +1041,10 @@ collections:
     title: "How to Train\nYour Dragon"
     accent: green
     titles:
-      - ["How to Train Your Dragon", 2010]
-      - ["How to Train Your Dragon 2", 2014]
-      - ["How to Train Your Dragon: The Hidden World", 2019]
-      - ["How to Train Your Dragon", 2025]
+      - ["How to Train Your Dragon", 2010, 10191]
+      - ["How to Train Your Dragon 2", 2014, 82702]
+      - ["How to Train Your Dragon: The Hidden World", 2019, 166428]
+      - ["How to Train Your Dragon", 2025, 1087192]
     min: 3
   - key: m-insidious
     group: universes
@@ -1052,12 +1052,12 @@ collections:
     title: "Insidious"
     accent: purple
     titles:
-      - ["Insidious", 2011]
-      - ["Insidious: Chapter 2", 2013]
-      - ["Insidious: Chapter 3", 2015]
-      - ["Insidious: The Last Key", 2018]
-      - ["Insidious: The Red Door", 2023]
-      - ["Insidious: Out of the Further", 2026]
+      - ["Insidious", 2011, 49018]
+      - ["Insidious: Chapter 2", 2013, 91586]
+      - ["Insidious: Chapter 3", 2015, 280092]
+      - ["Insidious: The Last Key", 2018, 406563]
+      - ["Insidious: The Red Door", 2023, 614479]
+      - ["Insidious: Out of the Further", 2026, 1291595]
     min: 3
   - key: m-jaws
     group: universes
@@ -1065,10 +1065,10 @@ collections:
     title: "Jaws"
     accent: teal
     titles:
-      - ["Jaws", 1975]
-      - ["Jaws 2", 1978]
-      - ["Jaws 3-D", 1983]
-      - ["Jaws: The Revenge", 1987]
+      - ["Jaws", 1975, 578]
+      - ["Jaws 2", 1978, 579]
+      - ["Jaws 3-D", 1983, 17692]
+      - ["Jaws: The Revenge", 1987, 580]
     min: 3
   - key: m-jumanji
     group: universes
@@ -1076,10 +1076,10 @@ collections:
     title: "Jumanji"
     accent: pink
     titles:
-      - ["Jumanji", 1995]
-      - ["Jumanji: Welcome to the Jungle", 2017]
-      - ["Jumanji: The Next Level", 2019]
-      - ["Jumanji: Open World", 2026]
+      - ["Jumanji", 1995, 8844]
+      - ["Jumanji: Welcome to the Jungle", 2017, 353486]
+      - ["Jumanji: The Next Level", 2019, 512200]
+      - ["Jumanji: Open World", 2026, 1260649]
     min: 3
   - key: m-killbill
     group: universes
@@ -1087,8 +1087,8 @@ collections:
     title: "Kill Bill"
     accent: red
     titles:
-      - ["Kill Bill: Vol. 1", 2003]
-      - ["Kill Bill: Vol. 2", 2004]
+      - ["Kill Bill: Vol. 1", 2003, 24]
+      - ["Kill Bill: Vol. 2", 2004, 393]
       - ["Kill Bill: The Whole Bloody Affair", 2011]
     min: 2
   - key: m-kingsman
@@ -1097,9 +1097,9 @@ collections:
     title: "Kingsman"
     accent: blue
     titles:
-      - ["Kingsman: The Secret Service", 2015]
-      - ["Kingsman: The Golden Circle", 2017]
-      - ["The King's Man", 2021]
+      - ["Kingsman: The Secret Service", 2015, 207703]
+      - ["Kingsman: The Golden Circle", 2017, 343668]
+      - ["The King's Man", 2021, 476669]
     min: 2
   - key: m-knivesout
     group: universes
@@ -1107,9 +1107,9 @@ collections:
     title: "Knives Out"
     accent: gold
     titles:
-      - ["Knives Out", 2019]
-      - ["Glass Onion: A Knives Out Mystery", 2022]
-      - ["Wake Up Dead Man: A Knives Out Mystery", 2025]
+      - ["Knives Out", 2019, 546554]
+      - ["Glass Onion: A Knives Out Mystery", 2022, 661374]
+      - ["Wake Up Dead Man: A Knives Out Mystery", 2025, 812583]
     min: 2
   - key: m-meettheparents
     group: universes
@@ -1117,10 +1117,10 @@ collections:
     title: "Meet the\nParents"
     accent: green
     titles:
-      - ["Meet the Parents", 2000]
-      - ["Meet the Fockers", 2004]
-      - ["Little Fockers", 2010]
-      - ["Focker-in-Law", 2026]
+      - ["Meet the Parents", 2000, 1597]
+      - ["Meet the Fockers", 2004, 693]
+      - ["Little Fockers", 2010, 39451]
+      - ["Focker-in-Law", 2026, 1400336]
     min: 3
   - key: m-meninblack
     group: universes
@@ -1128,9 +1128,9 @@ collections:
     title: "Men in Black"
     accent: purple
     titles:
-      - ["Men in Black", 1997]
-      - ["Men in Black II", 2002]
-      - ["Men in Black 3", 2012]
+      - ["Men in Black", 1997, 607]
+      - ["Men in Black II", 2002, 608]
+      - ["Men in Black 3", 2012, 41154]
     min: 2
   - key: m-moana
     group: universes
@@ -1138,8 +1138,8 @@ collections:
     title: "Moana"
     accent: teal
     titles:
-      - ["Moana", 2016]
-      - ["Moana 2", 2024]
+      - ["Moana", 2016, 277834]
+      - ["Moana 2", 2024, 1241982]
     min: 2
   - key: m-mortalkombat
     group: universes
@@ -1147,10 +1147,10 @@ collections:
     title: "Mortal\nKombat"
     accent: gold
     titles:
-      - ["Mortal Kombat", 1995]
-      - ["Mortal Kombat: Annihilation", 1997]
-      - ["Mortal Kombat", 2021]
-      - ["Mortal Kombat II", 2026]
+      - ["Mortal Kombat", 1995, 9312]
+      - ["Mortal Kombat: Annihilation", 1997, 9823]
+      - ["Mortal Kombat", 2021, 460465]
+      - ["Mortal Kombat II", 2026, 931285]
     min: 3
   - key: m-nightatthemuseum
     group: universes
@@ -1158,9 +1158,9 @@ collections:
     title: "Night at\nthe Museum"
     accent: gold
     titles:
-      - ["Night at the Museum", 2006]
-      - ["Night at the Museum: Battle of the Smithsonian", 2009]
-      - ["Night at the Museum: Secret of the Tomb", 2014]
+      - ["Night at the Museum", 2006, 1593]
+      - ["Night at the Museum: Battle of the Smithsonian", 2009, 18360]
+      - ["Night at the Museum: Secret of the Tomb", 2014, 181533]
     min: 2
   - key: m-nowyouseeme
     group: universes
@@ -1168,9 +1168,9 @@ collections:
     title: "Now You\nSee Me"
     accent: purple
     titles:
-      - ["Now You See Me", 2013]
-      - ["Now You See Me 2", 2016]
-      - ["Now You See Me: Now You Don't", 2025]
+      - ["Now You See Me", 2013, 75656]
+      - ["Now You See Me 2", 2016, 291805]
+      - ["Now You See Me: Now You Don't", 2025, 425274]
     min: 2
   - key: m-oceans
     group: universes
@@ -1179,9 +1179,9 @@ collections:
     subtitle: "Trilogy"
     accent: teal
     titles:
-      - ["Ocean's Eleven", 2001]
-      - ["Ocean's Twelve", 2004]
-      - ["Ocean's Thirteen", 2007]
+      - ["Ocean's Eleven", 2001, 161]
+      - ["Ocean's Twelve", 2004, 163]
+      - ["Ocean's Thirteen", 2007, 298]
     min: 2
   - key: m-paddington
     group: universes
@@ -1189,9 +1189,9 @@ collections:
     title: "Paddington"
     accent: pink
     titles:
-      - ["Paddington", 2014]
-      - ["Paddington 2", 2017]
-      - ["Paddington in Peru", 2024]
+      - ["Paddington", 2014, 116149]
+      - ["Paddington 2", 2017, 346648]
+      - ["Paddington in Peru", 2024, 516729]
     min: 2
   - key: m-paranormalactivity
     group: universes
@@ -1199,13 +1199,13 @@ collections:
     title: "Paranormal\nActivity"
     accent: purple
     titles:
-      - ["Paranormal Activity", 2009]
-      - ["Paranormal Activity 2", 2010]
-      - ["Paranormal Activity 3", 2011]
-      - ["Paranormal Activity 4", 2012]
-      - ["Paranormal Activity: The Marked Ones", 2014]
-      - ["Paranormal Activity: The Ghost Dimension", 2015]
-      - ["Paranormal Activity: Next of Kin", 2021]
+      - ["Paranormal Activity", 2009, 23827]
+      - ["Paranormal Activity 2", 2010, 41436]
+      - ["Paranormal Activity 3", 2011, 72571]
+      - ["Paranormal Activity 4", 2012, 82990]
+      - ["Paranormal Activity: The Marked Ones", 2014, 227348]
+      - ["Paranormal Activity: The Ghost Dimension", 2015, 146301]
+      - ["Paranormal Activity: Next of Kin", 2021, 609972]
     min: 3
   - key: m-pitchperfect
     group: universes
@@ -1213,9 +1213,9 @@ collections:
     title: "Pitch\nPerfect"
     accent: pink
     titles:
-      - ["Pitch Perfect", 2012]
-      - ["Pitch Perfect 2", 2015]
-      - ["Pitch Perfect 3", 2017]
+      - ["Pitch Perfect", 2012, 114150]
+      - ["Pitch Perfect 2", 2015, 254470]
+      - ["Pitch Perfect 3", 2017, 353616]
     min: 2
   - key: m-rushhour
     group: universes
@@ -1223,9 +1223,9 @@ collections:
     title: "Rush Hour"
     accent: red
     titles:
-      - ["Rush Hour", 1998]
-      - ["Rush Hour 2", 2001]
-      - ["Rush Hour 3", 2007]
+      - ["Rush Hour", 1998, 2109]
+      - ["Rush Hour 2", 2001, 5175]
+      - ["Rush Hour 3", 2007, 5174]
     min: 2
   - key: m-saw
     group: universes
@@ -1233,16 +1233,16 @@ collections:
     title: "Saw"
     accent: blue
     titles:
-      - ["Saw", 2004]
-      - ["Saw II", 2005]
-      - ["Saw III", 2006]
-      - ["Saw IV", 2007]
-      - ["Saw V", 2008]
-      - ["Saw VI", 2009]
-      - ["Saw 3D", 2010]
-      - ["Jigsaw", 2017]
-      - ["Spiral: From the Book of Saw", 2021]
-      - ["Saw X", 2023]
+      - ["Saw", 2004, 176]
+      - ["Saw II", 2005, 215]
+      - ["Saw III", 2006, 214]
+      - ["Saw IV", 2007, 663]
+      - ["Saw V", 2008, 11917]
+      - ["Saw VI", 2009, 22804]
+      - ["Saw 3D", 2010, 41439]
+      - ["Jigsaw", 2017, 298250]
+      - ["Spiral: From the Book of Saw", 2021, 602734]
+      - ["Saw X", 2023, 951491]
     min: 3
   - key: m-scream
     group: universes
@@ -1250,13 +1250,13 @@ collections:
     title: "Scream"
     accent: gold
     titles:
-      - ["Scream", 1996]
-      - ["Scream 2", 1997]
-      - ["Scream 3", 2000]
-      - ["Scream 4", 2011]
-      - ["Scream", 2022]
-      - ["Scream VI", 2023]
-      - ["Scream 7", 2026]
+      - ["Scream", 1996, 4232]
+      - ["Scream 2", 1997, 4233]
+      - ["Scream 3", 2000, 4234]
+      - ["Scream 4", 2011, 41446]
+      - ["Scream", 2022, 646385]
+      - ["Scream VI", 2023, 934433]
+      - ["Scream 7", 2026, 1159559]
     min: 3
   - key: m-sonicthehedgehog
     group: universes
@@ -1264,9 +1264,9 @@ collections:
     title: "Sonic the\nHedgehog"
     accent: green
     titles:
-      - ["Sonic the Hedgehog", 2020]
-      - ["Sonic the Hedgehog 2", 2022]
-      - ["Sonic the Hedgehog 3", 2024]
+      - ["Sonic the Hedgehog", 2020, 454626]
+      - ["Sonic the Hedgehog 2", 2022, 675353]
+      - ["Sonic the Hedgehog 3", 2024, 939243]
     min: 2
   - key: m-supermario
     group: universes
@@ -1274,8 +1274,8 @@ collections:
     title: "Super\nMario"
     accent: red
     titles:
-      - ["The Super Mario Bros. Movie", 2023]
-      - ["The Super Mario Galaxy Movie", 2026]
+      - ["The Super Mario Bros. Movie", 2023, 502356]
+      - ["The Super Mario Galaxy Movie", 2026, 1226863]
     min: 2
   - key: m-taken
     group: universes
@@ -1283,9 +1283,9 @@ collections:
     title: "Taken"
     accent: purple
     titles:
-      - ["Taken", 2008]
-      - ["Taken 2", 2012]
-      - ["Taken 3", 2014]
+      - ["Taken", 2008, 8681]
+      - ["Taken 2", 2012, 82675]
+      - ["Taken 3", 2014, 260346]
     min: 2
   - key: m-terrifier
     group: universes
@@ -1294,8 +1294,8 @@ collections:
     accent: silver
     titles:
       - ["Terrifier", 2018]
-      - ["Terrifier 2", 2022]
-      - ["Terrifier 3", 2024]
+      - ["Terrifier 2", 2022, 663712]
+      - ["Terrifier 3", 2024, 1034541]
     min: 2
   - key: m-texaschainsaw
     group: universes
@@ -1304,13 +1304,13 @@ collections:
     subtitle: "Massacre"
     accent: orange
     titles:
-      - ["The Texas Chain Saw Massacre", 1974]
-      - ["The Texas Chainsaw Massacre Part 2", 1986]
-      - ["Leatherface: The Texas Chainsaw Massacre III", 1990]
-      - ["The Return of the Texas Chainsaw Massacre", 1995]
-      - ["Texas Chainsaw 3D", 2013]
-      - ["Leatherface", 2017]
-      - ["Texas Chainsaw Massacre", 2022]
+      - ["The Texas Chain Saw Massacre", 1974, 30497]
+      - ["The Texas Chainsaw Massacre Part 2", 1986, 16337]
+      - ["Leatherface: The Texas Chainsaw Massacre III", 1990, 25018]
+      - ["The Return of the Texas Chainsaw Massacre", 1995, 16780]
+      - ["Texas Chainsaw 3D", 2013, 76617]
+      - ["Leatherface", 2017, 300665]
+      - ["Texas Chainsaw Massacre", 2022, 632727]
     min: 3
   - key: m-theequalizer
     group: universes
@@ -1318,9 +1318,9 @@ collections:
     title: "The\nEqualizer"
     accent: teal
     titles:
-      - ["The Equalizer", 2014]
-      - ["The Equalizer 2", 2018]
-      - ["The Equalizer 3", 2023]
+      - ["The Equalizer", 2014, 156022]
+      - ["The Equalizer 2", 2018, 345887]
+      - ["The Equalizer 3", 2023, 926393]
     min: 2
   - key: m-thegodfather
     group: universes
@@ -1328,9 +1328,9 @@ collections:
     title: "The\nGodfather"
     accent: pink
     titles:
-      - ["The Godfather", 1972]
-      - ["The Godfather Part II", 1974]
-      - ["The Godfather Part III", 1990]
+      - ["The Godfather", 1972, 238]
+      - ["The Godfather Part II", 1974, 240]
+      - ["The Godfather Part III", 1990, 242]
     min: 2
   - key: m-thehangover
     group: universes
@@ -1338,9 +1338,9 @@ collections:
     title: "The\nHangover"
     accent: teal
     titles:
-      - ["The Hangover", 2009]
-      - ["The Hangover Part II", 2011]
-      - ["The Hangover Part III", 2013]
+      - ["The Hangover", 2009, 18785]
+      - ["The Hangover Part II", 2011, 45243]
+      - ["The Hangover Part III", 2013, 109439]
     min: 2
   - key: m-themazerunner
     group: universes
@@ -1348,9 +1348,9 @@ collections:
     title: "The Maze\nRunner"
     accent: red
     titles:
-      - ["The Maze Runner", 2014]
-      - ["Maze Runner: The Scorch Trials", 2015]
-      - ["Maze Runner: The Death Cure", 2018]
+      - ["The Maze Runner", 2014, 198663]
+      - ["Maze Runner: The Scorch Trials", 2015, 294254]
+      - ["Maze Runner: The Death Cure", 2018, 336843]
     min: 2
   - key: m-topgun
     group: universes
@@ -1358,8 +1358,8 @@ collections:
     title: "Top Gun"
     accent: blue
     titles:
-      - ["Top Gun", 1986]
-      - ["Top Gun: Maverick", 2022]
+      - ["Top Gun", 1986, 744]
+      - ["Top Gun: Maverick", 2022, 361743]
     min: 2
   - key: m-tron
     group: universes
@@ -1367,9 +1367,9 @@ collections:
     title: "Tron"
     accent: blue
     titles:
-      - ["Tron", 1982]
-      - ["TRON: Legacy", 2010]
-      - ["TRON: Ares", 2025]
+      - ["Tron", 1982, 97]
+      - ["TRON: Legacy", 2010, 20526]
+      - ["TRON: Ares", 2025, 533533]
     min: 2
   - key: m-twilight
     group: universes
@@ -1377,11 +1377,11 @@ collections:
     title: "Twilight"
     accent: gold
     titles:
-      - ["Twilight", 2008]
-      - ["The Twilight Saga: New Moon", 2009]
-      - ["The Twilight Saga: Eclipse", 2010]
-      - ["The Twilight Saga: Breaking Dawn - Part 1", 2011]
-      - ["The Twilight Saga: Breaking Dawn - Part 2", 2012]
+      - ["Twilight", 2008, 8966]
+      - ["The Twilight Saga: New Moon", 2009, 18239]
+      - ["The Twilight Saga: Eclipse", 2010, 24021]
+      - ["The Twilight Saga: Breaking Dawn - Part 1", 2011, 50619]
+      - ["The Twilight Saga: Breaking Dawn - Part 2", 2012, 50620]
     min: 3
   - key: m-venom
     group: universes
@@ -1389,9 +1389,9 @@ collections:
     title: "Venom"
     accent: green
     titles:
-      - ["Venom", 2018]
-      - ["Venom: Let There Be Carnage", 2021]
-      - ["Venom: The Last Dance", 2024]
+      - ["Venom", 2018, 335983]
+      - ["Venom: Let There Be Carnage", 2021, 580489]
+      - ["Venom: The Last Dance", 2024, 912649]
     min: 2
   - key: m-wicked
     group: universes
@@ -1399,8 +1399,8 @@ collections:
     title: "Wicked"
     accent: green
     titles:
-      - ["Wicked", 2024]
-      - ["Wicked: For Good", 2025]
+      - ["Wicked", 2024, 402431]
+      - ["Wicked: For Good", 2025, 967941]
     min: 2
   - key: m-zootopia
     group: universes
@@ -1408,8 +1408,8 @@ collections:
     title: "Zootopia"
     accent: blue
     titles:
-      - ["Zootopia", 2016]
-      - ["Zootopia 2", 2025]
+      - ["Zootopia", 2016, 269149]
+      - ["Zootopia 2", 2025, 1084242]
     min: 2
 
   # --- Kids and family.
