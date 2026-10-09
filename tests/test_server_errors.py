@@ -93,7 +93,7 @@ def test_setup_says_when_the_certificate_is_not_trusted(monkeypatch):
     with pytest.raises(SystemExit) as e:
         cli.find_server("https://media.example.com:8920")
     text = str(e.value)
-    assert "isn't trusted" in text and "server.verify" in text and "http://" in text   # and how to get past setup
+    assert "isn't trusted" in text and "server.verify" in text and "terminal" in text  # and how to get past setup
 
 
 def test_setup_still_just_does_not_recognise_https_on_a_plain_port(monkeypatch):

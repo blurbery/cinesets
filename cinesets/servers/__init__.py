@@ -92,6 +92,15 @@ def untrusted(url):
             "false to skip the check (see docs/setup.md).")
 
 
+class UntrustedCertificate(SystemExit):
+    """Setup reached a server whose https certificate isn't trusted. Run at a terminal, setup asks what to do about it
+    and tries again; anywhere else it stops with this message."""
+
+    def __init__(self, url):
+        super().__init__(untrusted(url) + " Run setup at a terminal and it asks what to do.")
+        self.url = url
+
+
 def verify_setting(cfg):
     """server.verify from config.yml, the way requests takes it: True checks the server's certificate against the usual
     authorities, False skips the check, and a file (relative to config.yml's folder) checks it against that CA
@@ -174,9 +183,7 @@ def public_info(url, path, verify=True):
         info = r.json() if r.status_code == 200 else None
     except requests.exceptions.SSLError as e:
         if untrusted_certificate(e):
-            raise SystemExit(untrusted(url) + " Setup can't take that setting yet: give it the server's http:// "
-                             "address and change server.url afterwards, or fill in config.yml from "
-                             "config.example.yml by hand.") from e
+            raise UntrustedCertificate(url) from e
         info = None
     except (requests.RequestException, ValueError):
         info = None

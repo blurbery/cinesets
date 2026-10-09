@@ -80,8 +80,8 @@ If your server's `https://` address has a certificate CineSets doesn't trust (a 
 and says so. Set `verify` under `server` in `config.yml` to the CA certificate file that signed it (a path relative
 to `config.yml`'s folder; on Docker, one inside the container), or to `false` to skip the check, which is only wise
 on your own network. It covers everything CineSets fetches from the server, Silo's artwork storage included.
-Setup can't ask for it yet: give setup the server's `http://` address and change `url` afterwards, or fill in
-`config.yml` from `config.example.yml` by hand.
+Setup asks about it when it meets such a certificate: point it to the CA certificate file, skip the check, or stop.
+It writes your answer into `config.yml`. Run without a terminal, setup stops and says so instead.
 
 ## Docker
 
