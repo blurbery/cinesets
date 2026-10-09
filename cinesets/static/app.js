@@ -1897,7 +1897,7 @@
 
   /** The font for all the text: a wrapping row of font names, which the server sends with their keys. */
   function fontControl(values) {
-    const hint = "For the label, title and subtitle. Text with a letter the font doesn't have is drawn in Poppins.";
+    const hint = "For the label, title and subtitle. Text with a letter the font doesn't have is drawn in Poppins, or in Noto Sans for Greek, Cyrillic and Vietnamese letters Poppins lacks too.";
     const row = segControl("font", "Font", values, hint, (S.info && S.info.fonts) || {});
     row.querySelector(".seg").classList.add("seg-wrap");
     return row;
@@ -1952,7 +1952,7 @@
       caseSwitch
         ? switchControl("case", "Capitals", (v) => v === "upper", (on) => (on ? "upper" : caseOff))
         : caseValues.length && segControl("case", "Case", caseValues),
-      ch.text_shadow && segControl("text_shadow", "Text shadow", ch.text_shadow, "Auto adds a soft shadow only to text you've moved."),
+      ch.text_shadow && segControl("text_shadow", "Text shadow", ch.text_shadow, "Auto adds a soft shadow to text you've moved, and to text the artwork makes hard to read."),
     ]);
     group("Label and subtitle", [
       switchControl("label", "Show the label", (v) => !!v, (on) => on),

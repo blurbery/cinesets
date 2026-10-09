@@ -24,7 +24,8 @@
 #   active           only part of the year: ["MM-DD", "MM-DD"], from and to, both days included and in quotes. It
 #                    can run past new year, like ["11-20", "01-06"]. Outside it the collection isn't made, and the
 #                    copy CineSets made is taken down.
-#   logo             streaming service logo key (netflix, prime, disney, hbomax, apple, hulu, paramount, peacock, stan)
+#   logo             streaming service logo key (netflix, prime, disney, hbomax, apple, hulu, paramount, peacock, stan,
+#                    binge, iplayer, channel4, crunchyroll, shudder)
 #   backdrop_title   the film or show whose artwork the poster uses
 #   backdrop_item    the server item id whose artwork the poster uses (instead of backdrop_title)
 #   exclude_genres   drop titles with any of these genres
@@ -1622,7 +1623,6 @@ collections:
     lists: [altfreq/stan-australia-series]
     limit: 50
     logo: "stan"
-  # Services CineSets has no logo for: their posters show the service's name.
   - key: m-binge
     group: streaming
     type: movie
@@ -1631,6 +1631,7 @@ collections:
     accent: pink
     lists: [mentalblank/binge-movies-au]
     limit: 50
+    logo: "binge"
   - key: s-binge
     group: streaming
     type: show
@@ -1639,30 +1640,7 @@ collections:
     accent: pink
     lists: [mentalblank/binge-shows-au]
     limit: 50
-  - key: s-iview
-    group: streaming
-    type: show
-    title: "ABC\niview"
-    subtitle: "Latest"
-    accent: teal
-    lists: [allanon2/abc-iview-movies]
-    limit: 50
-  - key: m-sbs
-    group: streaming
-    type: movie
-    title: "SBS"
-    subtitle: "Now Streaming"
-    accent: gold
-    lists: [ta3m/sbs-australia]
-    limit: 50
-  - key: s-sbs
-    group: streaming
-    type: show
-    title: "SBS"
-    subtitle: "Now Streaming"
-    accent: gold
-    lists: [ta3m/sbs-australia]
-    limit: 50
+    logo: "binge"
   - key: m-iplayer
     group: streaming
     type: movie
@@ -1672,6 +1650,7 @@ collections:
     lists: [andyhawks/bbc-iplayer-popular-films]
     limit: 50
     min: 4
+    logo: "iplayer"
   - key: s-iplayer
     group: streaming
     type: show
@@ -1680,6 +1659,54 @@ collections:
     accent: pink
     lists: [ceefaxer/bbc-iplayer]
     limit: 50
+    logo: "iplayer"
+  - key: s-channel4
+    group: streaming
+    type: show
+    title: "Channel 4"
+    subtitle: "Now Streaming"
+    accent: silver
+    lists: [xg1ll/channel-4-shows]
+    limit: 50
+    logo: "channel4"
+  - key: m-crunchyroll
+    group: streaming
+    type: movie
+    title: "Crunchyroll"
+    subtitle: "Top 100"
+    accent: orange
+    lists: [aawalton/crunchyroll-top-100-movies]
+    limit: 50
+    logo: "crunchyroll"
+  - key: s-crunchyroll
+    group: streaming
+    type: show
+    title: "Crunchyroll"
+    subtitle: "Top 100"
+    accent: orange
+    lists: [aawalton/crunchyroll-top-100-shows]
+    limit: 50
+    logo: "crunchyroll"
+  - key: m-shudder
+    group: streaming
+    type: movie
+    title: "Shudder"
+    subtitle: "Popular"
+    accent: red
+    lists: [ipdinata/popular-movies-shudder]
+    limit: 50
+    logo: "shudder"
+  - key: s-shudder
+    group: streaming
+    type: show
+    title: "Shudder"
+    subtitle: "Popular"
+    accent: red
+    lists: [ipdinata/popular-series-shudder]
+    limit: 50
+    min: 4
+    logo: "shudder"
+  # Services CineSets has no logo for: their posters show the service's name.
   - key: m-itvx
     group: streaming
     type: movie
@@ -1696,47 +1723,6 @@ collections:
     accent: teal
     lists: [petera209/itvx-shows]
     limit: 50
-  - key: s-channel4
-    group: streaming
-    type: show
-    title: "Channel 4"
-    subtitle: "Now Streaming"
-    accent: silver
-    lists: [xg1ll/channel-4-shows]
-    limit: 50
-  - key: m-crunchyroll
-    group: streaming
-    type: movie
-    title: "Crunchyroll"
-    subtitle: "Top 100"
-    accent: orange
-    lists: [aawalton/crunchyroll-top-100-movies]
-    limit: 50
-  - key: s-crunchyroll
-    group: streaming
-    type: show
-    title: "Crunchyroll"
-    subtitle: "Top 100"
-    accent: orange
-    lists: [aawalton/crunchyroll-top-100-shows]
-    limit: 50
-  - key: m-shudder
-    group: streaming
-    type: movie
-    title: "Shudder"
-    subtitle: "Popular"
-    accent: red
-    lists: [ipdinata/popular-movies-shudder]
-    limit: 50
-  - key: s-shudder
-    group: streaming
-    type: show
-    title: "Shudder"
-    subtitle: "Popular"
-    accent: red
-    lists: [ipdinata/popular-series-shudder]
-    limit: 50
-    min: 4
 
   # --- Best of.
   - key: m-top250

@@ -7,7 +7,7 @@ What CineSets makes, section by section, and how the poster settings change the 
 > Every poster on this page is drawn by CineSets itself, but over made-up artwork, so no film stills end up in
 > this repository. On your server the posters use artwork from the films and shows in your own library.
 > Streaming posters show the service's name here; on your server they show its logo once you've run
-> `./run.sh logos`.
+> `./run.sh logos` (all but ITVX, which has no logo CineSets can download, so it keeps its name).
 
 ## Try it in the dashboard
 
@@ -109,7 +109,7 @@ Section key `genres`, 18 collections.
 
 ### Streaming services
 
-Section key `streaming`, 32 collections.
+Section key `streaming`, 29 collections.
 
 ![Streaming services](images/section-streaming.jpg)
 
@@ -138,9 +138,6 @@ Section key `streaming`, 32 collections.
 | `s-stan` | TV Shows - Stan Now Streaming |
 | `m-binge` | Movies - Binge Now Streaming |
 | `s-binge` | TV Shows - Binge Now Streaming |
-| `s-iview` | TV Shows - ABC iview Latest |
-| `m-sbs` | Movies - SBS Now Streaming |
-| `s-sbs` | TV Shows - SBS Now Streaming |
 | `m-iplayer` | Movies - BBC iPlayer Popular |
 | `s-iplayer` | TV Shows - BBC iPlayer Latest |
 | `m-itvx` | Movies - ITVX Popular |

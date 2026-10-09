@@ -757,9 +757,16 @@ SERVICES = {
     "paramount": ((60, 130, 255), (2, 14, 50)),
     "peacock": ((255, 255, 255), (18, 14, 26)),
     "stan": ((255, 255, 255), (2, 12, 40)),
+    "binge": ((203, 4, 120), (28, 4, 30)),
+    "iplayer": ((255, 76, 152), (40, 8, 24)),
+    "channel4": ((170, 255, 137), (14, 26, 12)),
+    "crunchyroll": ((255, 94, 0), (40, 14, 0)),
+    "shudder": ((212, 0, 0), (32, 2, 4)),
 }
-# these brands switch to a light logo on dark backgrounds: (top colour, bottom colour)
-LIGHT_ON_DARK = {"disney": ((255, 255, 255), (150, 215, 255)), "paramount": ((255, 255, 255), (225, 235, 255))}
+# these brands are recoloured on dark backgrounds, a light logo or (Channel 4) its streaming green:
+# (top colour, bottom colour)
+LIGHT_ON_DARK = {"disney": ((255, 255, 255), (150, 215, 255)), "paramount": ((255, 255, 255), (225, 235, 255)),
+                 "channel4": ((170, 255, 137), (170, 255, 137))}
 
 
 def _logo_image(path, key, white=False):
