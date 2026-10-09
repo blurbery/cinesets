@@ -10,6 +10,10 @@ cd "$(dirname "$0")" || exit 1
 uid=$(ls -ldn . | awk '{print $3}')
 if [ "$(id -u)" = 0 ] && [ "$uid" != 0 ]; then
   owner=$(id -un "$uid" 2>/dev/null || echo "$uid")
+  # older cron.example lines ran as root: carry on as the folder's owner, so those schedules keep working
+  if [ "$owner" != "$uid" ] && command -v runuser >/dev/null 2>&1; then
+    exec runuser -u "$owner" -- "$(pwd)/run.sh" "$@"
+  fi
   echo "CineSets doesn't run as root here: this folder belongs to $owner. Run it as $owner instead, for example:" >&2
   echo "  sudo -u $owner $(pwd)/run.sh $*" >&2
   echo "In /etc/cron.d, put $owner in place of root (deploy/cron.example shows how)." >&2
