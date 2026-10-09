@@ -499,7 +499,9 @@ boxes, as they used to, and the posters are drawn again once it's there.
 
 Each font has a size of its own that evens out how big it looks, and long titles still shrink to fit. A title too
 long for one line goes onto two at its best space, and long labels and subtitles shrink too, so text always stays
-on the poster.
+on the poster. Japanese and Chinese, written without spaces, go onto two lines between the two characters that
+suit best, by their own rules: a line never starts with closing punctuation, a small kana or ー, and never ends
+with an opening bracket. Korean, written with spaces, breaks at a space.
 
 ## Random artwork
 

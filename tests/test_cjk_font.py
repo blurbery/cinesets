@@ -230,7 +230,9 @@ def test_posters_without_japanese_chinese_or_korean_text_draw_byte_identically(t
     samples = [("Movies", "Back to\nthe Future", "Saga", {"font": f}) for f in ("poppins", "rye", "bebas-neue")]
     samples += [(label, text, sub, {"font": f, "case": case}) for label, text, sub in (
         ("TV Shows", GREEK, "Σειρά"), ("Movies", CYRILLIC, "Фильмы"), ("TV Shows", VIETNAMESE, None),
-        ("Movies", "Stars ★", "Collection"), ("Movies", "Ωμέγα ★", None), ("Movies", "Shōgun", None))
+        ("Movies", "Stars ★", "Collection"), ("Movies", "Ωμέγα ★", None), ("Movies", "Shōgun", None),
+        ("Movies", "The Lord of the Rings The Return of the King Extended Edition", None),   # wrapped at a space
+        ("Movies", "Supercalifragilisticexpialidociousnessesque", "Saga"))                   # squeezed and cut
         for f, case in (("poppins", "normal"), ("creepster", "upper"))]
 
     def draw_all():
@@ -247,6 +249,66 @@ def test_posters_without_japanese_chinese_or_korean_text_draw_byte_identically(t
     fonts.use(str(tmp_path / "fonts"))
     assert fonts.ready() and posters._with_font({}, "Movies", "千と千尋")["font"] in posters.CJK
     assert draw_all() == before                                                       # and with it, to the byte
+
+
+# ---------------------------------------------------------------- long titles: wrapped between characters
+LONG_JP = "ハリーポッターとアズカバンの囚人と炎のゴブレットと謎のプリンス"   # no spaces
+LONG_KR = "반지의 제왕 반지 원정대 확장판 특별 편집본 감독판 리마스터"        # Korean is written with spaces
+
+
+def with_cjk(tmp_path, monkeypatch):
+    put(str(tmp_path / "fonts"), stand_in(monkeypatch))
+    fonts.use(str(tmp_path / "fonts"))
+
+
+def test_a_long_japanese_title_wraps_onto_two_lines_inside_the_poster(tmp_path, monkeypatch):
+    with_cjk(tmp_path, monkeypatch)
+    style = posters._with_font(posters.STYLE, "Movies", LONG_JP)
+    assert style["font"] == "noto-sans-cjk-jp"
+    tf, lines, _, _ = posters._title_text(style, LONG_JP, None)
+    assert len(lines) == 2 and "".join(lines) == LONG_JP                              # nothing cut off
+    assert abs(len(lines[0]) - len(lines[1])) <= 2                                    # the most even split
+    assert tf.size > posters.SMALLEST["title"] and all(tf.getbbox(t)[2] <= posters.W - 2 * posters.PAD for t in lines)
+    left, top, right, bottom = posters.poster_image("Movies", LONG_JP, None, "purple")[1]["title"]
+    assert 0 <= left < right <= 1 and 0 <= top < bottom <= 1
+    assert posters.text_fixes("Movies", LONG_JP) == ["cjk", "fits"]
+
+
+@pytest.mark.parametrize("title", [
+    "あいうえおかきくけこーさしすせそたちつてと",       # the even split would start a line with ー
+    "あいうえおかきくけこ。さしすせそたちつてと",       # or with 。
+    "あいうえおかきくけこっさしすせそたちつてと",       # or with a small kana
+    "あいうえおかきくけこ」」さしすせそたちつてと",     # or with either closing bracket
+    "あいうえおかきくけ「こさしすせそたちつてと",       # or end one with 「
+])
+def test_lines_never_start_with_closing_punctuation_or_end_with_an_opening_bracket(tmp_path, monkeypatch, title):
+    with_cjk(tmp_path, monkeypatch)
+    lines = posters._wrap("noto-sans-cjk-jp", title, 100)
+    assert len(lines) == 2 and "".join(lines) == title
+    assert lines[1][0] not in posters.NO_START and lines[0][-1] not in posters.NO_END
+    assert lines[1][0] not in "。ー」っ" and lines[0][-1] != "「"
+    assert abs(len(lines[0]) - len(lines[1])) <= 3                                    # still close to even
+
+
+def test_latin_letters_in_japanese_stay_together(tmp_path, monkeypatch):
+    with_cjk(tmp_path, monkeypatch)
+    lines = posters._wrap("noto-sans-cjk-jp", "あいうえおABCDEFGHIJKLMNかきくけこ", 100)
+    assert len(lines) == 2 and any("ABCDEFGHIJKLMN" in line for line in lines)
+
+
+def test_a_long_korean_title_still_breaks_at_a_space(tmp_path, monkeypatch):
+    with_cjk(tmp_path, monkeypatch)
+    style = posters._with_font(posters.STYLE, "TV Shows", LONG_KR)
+    assert style["font"] == "noto-sans-cjk-kr"
+    lines = posters._title_text(style, LONG_KR, None)[1]
+    assert len(lines) == 2 and " ".join(lines) == LONG_KR                             # split where a space was
+
+
+def test_without_the_font_long_titles_come_out_as_before(tmp_path):
+    fonts.use(str(tmp_path / "fonts"))                                                # nothing downloaded there
+    style = posters._with_font(posters.STYLE, "Movies", LONG_JP)
+    assert style["font"] == "poppins" and posters._wrap("poppins", LONG_JP, 100) == [LONG_JP]
+    assert len(posters._title_text(style, LONG_JP, None)[1]) == 1                     # one line of boxes, as before
 
 
 # ---------------------------------------------------------------- runs: downloaded when first needed

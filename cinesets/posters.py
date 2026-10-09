@@ -497,11 +497,36 @@ def _squeeze(face, lines, f, max_w, subtitle=False):
     return f, [cut(t) for t in lines]
 
 
+# Japanese, Chinese and Korean lines can break between almost any two characters, but by their rules (kinsoku) a line
+# never starts with closing punctuation, a small kana or the prolonged sound mark, and never ends with an opening bracket
+NO_START = set("、。，．・：；！？‼⁇⁈⁉）」』】〉》〕］｝〙〗〞〟’”ー〜～…‥゛゜ゝゞヽヾ々〻ぁぃぅぇぉっゃゅょゎゕゖァィゥェォッャュョヮヵヶ"
+               "ｧｨｩｪｫｬｭｮｯｰﾞﾟ｡｣､･)]},.!?:;%") | {chr(c) for c in range(0x31F0, 0x3200)}  # and the small Ainu katakana
+NO_END = set("「『【〈《（〔［｛〘〖〝‘“｢([{")
+
+
+def _wrap_letters(f, line):
+    """Japanese, Chinese or Korean text with no space to split at, split onto two lines between the two characters
+    that leave the narrower widest line, as the rules above allow. A run of Latin letters or digits stays whole."""
+    latin = lambda c: c.isalnum() and not fonts.wanted(c)
+    best = None
+    for i in range(1, len(line)):
+        before, after = line[i - 1], line[i]
+        if after in NO_START or before in NO_END or (latin(before) and latin(after)):
+            continue
+        widest = max(f.getlength(line[:i]), f.getlength(line[i:]))
+        if best is None or widest < best[0]:
+            best = (widest, [line[:i], line[i:]])
+    return best[1] if best else [line]
+
+
 def _wrap(face, line, size):
     """A one-line title too long for the poster, split onto two lines at the space that leaves the narrower widest
-    line."""
+    line. Japanese, Chinese or Korean text drawn in Noto Sans CJK with no space in it splits between two characters
+    instead (Korean, written with spaces, still splits at one)."""
     f = _font(face, size)
     words = line.split()
+    if len(words) < 2 and face in CJK and fonts.wanted(line):
+        return _wrap_letters(f, line.strip())
     widths, space = [f.getlength(w) for w in words], f.getlength(" ")
     best = None
     for i in range(1, len(words)):
