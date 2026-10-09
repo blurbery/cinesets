@@ -11,13 +11,19 @@
 #   title      big poster title (\n breaks the line)
 # One of:
 #   lists      public mdblist lists (user/list-slug), merged in order
-#   titles     a fixed list of [title, year] (franchises); needs min if fewer than defaults.min_items films
+#   titles     a fixed list of [title, year] (franchises), each as TMDB names it; needs min, since a franchise has
+#              fewer films than defaults.min_items. A title written another way (case, accents, punctuation, "&" or
+#              "and", a leading "The") or a year out either side still matches, but a remake from another year doesn't.
 # Optional:
 #   subtitle         smaller white line under the title
 #   accent           poster colour: purple, pink, blue, gold, green, red, teal, orange, silver, ice, a colour like
 #                    "#ff3366", or two like ["#ff3366", "#ffaa00"] for the title's start and end
 #   limit            most titles to keep (defaults.limit)
-#   min              skip the collection if fewer titles match (defaults.min_items)
+#   min              skip the collection if fewer titles match (defaults.min_items). For a fixed list keep it below
+#                    the number of films, so a library missing one still gets the collection (2 for a pair).
+#   active           only part of the year: ["MM-DD", "MM-DD"], from and to, both days included and in quotes. It
+#                    can run past new year, like ["11-20", "01-06"]. Outside it the collection isn't made, and the
+#                    copy CineSets made is taken down.
 #   logo             streaming service logo key (netflix, prime, disney, hbomax, apple, hulu, paramount, peacock, stan)
 #   backdrop_title   the film or show whose artwork the poster uses
 #   backdrop_item    the server item id whose artwork the poster uses (instead of backdrop_title)
@@ -35,13 +41,14 @@
 
 collections:
 
-  # --- Seasonal. Remove or comment these out after the season ends.
+  # --- Seasonal. Each one is `active` around its holiday only, so Halloween isn't there all year.
   - key: m-halloween
     group: seasonal
     type: movie
     title: "Halloween"
     accent: red
     lists: [bsm-venger/halloween-movies]
+    active: ["10-01", "11-01"]
   - key: s-halloween
     group: seasonal
     type: show
@@ -49,6 +56,7 @@ collections:
     accent: red
     lists: [bobnimbo/halloween-shows]
     backdrop_title: "Wednesday"
+    active: ["10-01", "11-01"]
   - key: m-halloween-kids
     group: seasonal
     type: movie
@@ -56,6 +64,29 @@ collections:
     subtitle: "For Kids"
     accent: red
     lists: [hdlists/halloween-movies-for-kids]
+    active: ["10-01", "11-01"]
+  - key: m-christmas
+    group: seasonal
+    type: movie
+    title: "Christmas"
+    accent: green
+    lists: [hdlists/christmas-movies]
+    active: ["11-20", "01-06"]
+  - key: s-christmas
+    group: seasonal
+    type: show
+    title: "Christmas"
+    accent: green
+    lists: [japanesegeek/christmas-shows]
+    active: ["11-20", "01-06"]
+  - key: m-christmas-kids
+    group: seasonal
+    type: movie
+    title: "Christmas"
+    subtitle: "For Kids"
+    accent: green
+    lists: [paperarmour/christmas-kids-movies]
+    active: ["11-20", "01-06"]
 
   # --- Charts: trending, most watched and new releases. Trending entries are pinned to the top.
   - key: m-trending
@@ -104,7 +135,7 @@ collections:
     title: "Most\nWatched"
     subtitle: "This Week"
     accent: blue
-    lists: [linaspurinis/top-watched-movies-of-the-week]
+    lists: [hiraeth239/most-watched-movies-this-week]
     limit: 100
   - key: s-watched-week
     group: charts
@@ -130,7 +161,7 @@ collections:
     accent: teal
     lists: [garycrawfordgc/latest-tv-shows]
     limit: 100
-    backdrop_title: "A Tale of Two Cities (2026)"
+    backdrop_title: "A Tale of Two Cities"
 
   # --- Franchises and universes. Shown last, A to Z. Entries with `titles` use a fixed (title, year) list.
   - key: m-marvel
@@ -147,7 +178,7 @@ collections:
     title: "Marvel"
     subtitle: "Universe"
     accent: red
-    lists: [aznpho50/mcu-shows]
+    lists: [lt3dave/marvel-cinematic-universe-mcu-shows-in-order]
     backdrop_title: "Loki"
   - key: m-dc
     group: universes
@@ -155,7 +186,7 @@ collections:
     title: "DC"
     subtitle: "Universe"
     accent: blue
-    lists: [nobnobz/collection-dc-extended-universe-dceu]
+    lists: [d3pr3d4d0r/dc-movies]
     backdrop_title: "Wonder Woman"
   - key: s-dc
     group: universes
@@ -170,7 +201,8 @@ collections:
     type: movie
     title: "Star Wars"
     accent: gold
-    lists: [carpenter_/star-wars-films]
+    lists: [kaoxt/star-wars]
+    min: 3
     backdrop_title: "Star Wars"
   - key: s-starwars
     group: universes
@@ -186,13 +218,21 @@ collections:
     subtitle: "World"
     accent: purple
     lists: [aaron713/wizarding-world]
+    min: 3
   - key: m-middleearth
     group: universes
     type: movie
     title: "Middle-\nearth"
     accent: green
-    lists: [thebirdod/lord-of-the-rings-and-hobbit-collection]
-    min: 5
+    titles:
+      - ["The Lord of the Rings: The Fellowship of the Ring", 2001]
+      - ["The Lord of the Rings: The Two Towers", 2002]
+      - ["The Lord of the Rings: The Return of the King", 2003]
+      - ["The Hobbit: An Unexpected Journey", 2012]
+      - ["The Hobbit: The Desolation of Smaug", 2013]
+      - ["The Hobbit: The Battle of the Five Armies", 2014]
+      - ["The Lord of the Rings: The War of the Rohirrim", 2024]
+    min: 3
     backdrop_title: "The Lord of the Rings: The Return of the King"
   - key: m-bond
     group: universes
@@ -208,6 +248,7 @@ collections:
     title: "X-Men"
     accent: gold
     lists: [wheezer0610/x-men-universe]
+    min: 3
     backdrop_title: "Logan"
   - key: m-spiderman
     group: universes
@@ -215,6 +256,7 @@ collections:
     title: "Spider-\nMan"
     accent: red
     lists: [magicnorris/spider-man-collection]
+    min: 3
     backdrop_title: "Spider-Man 2"
   - key: m-fast
     group: universes
@@ -222,6 +264,7 @@ collections:
     title: "Fast &\nFurious"
     accent: blue
     lists: [kaoxt/fast-and-furious-collection]
+    min: 3
     backdrop_title: "Fast Five"
   - key: m-mission
     group: universes
@@ -229,19 +272,21 @@ collections:
     title: "Mission:\nImpossible"
     accent: red
     lists: [thebirdod/mission-impossible-collection]
+    min: 3
   - key: m-jurassic
     group: universes
     type: movie
     title: "Jurassic\nPark"
     accent: green
     lists: [thebirdod/jurassic-park-collection]
-    min: 5
+    min: 3
   - key: m-transformers
     group: universes
     type: movie
     title: "Transformers"
     accent: blue
     lists: [michael0deon/transformers-all]
+    min: 3
     backdrop_title: "Transformers"
   - key: m-batman
     group: universes
@@ -249,27 +294,34 @@ collections:
     title: "Batman"
     accent: gold
     lists: [thebirdod/batman-collection]
+    min: 3
     backdrop_title: "The Batman"
   - key: m-johnwick
     group: universes
     type: movie
     title: "John\nWick"
     accent: purple
-    lists: [wheezer0610/john-wick]
-    min: 4
+    titles:
+      - ["John Wick", 2014]
+      - ["John Wick: Chapter 2", 2017]
+      - ["John Wick: Chapter 3 - Parabellum", 2019]
+      - ["John Wick: Chapter 4", 2023]
+      - ["Ballerina", 2025]
+    min: 3
   - key: m-monsterverse
     group: universes
     type: movie
-    title: "Monster\nVerse"
+    title: "MonsterVerse"
     accent: teal
     lists: [kraftynic/monsterverse-chronological-jeare7t6jn]
-    min: 5
+    min: 3
   - key: m-startrek
     group: universes
     type: movie
     title: "Star Trek"
     accent: blue
     lists: [theimmortal68/star-trek]
+    min: 3
   - key: s-startrek
     group: universes
     type: show
@@ -336,6 +388,7 @@ collections:
       - ["Rocky II", 1979]
       - ["Rocky III", 1982]
       - ["Rocky IV", 1985]
+      - ["Rocky V", 1990]
       - ["Rocky Balboa", 2006]
       - ["Creed", 2015]
       - ["Creed II", 2018]
@@ -393,6 +446,7 @@ collections:
     accent: green
     titles:
       - ["Predator", 1987]
+      - ["Predator 2", 1990]
       - ["Predators", 2010]
       - ["The Predator", 2018]
       - ["Prey", 2022]
@@ -461,6 +515,7 @@ collections:
     titles:
       - ["The Terminator", 1984]
       - ["Terminator 2: Judgment Day", 1991]
+      - ["Terminator 3: Rise of the Machines", 2003]
       - ["Terminator Salvation", 2009]
       - ["Terminator Genisys", 2015]
       - ["Terminator: Dark Fate", 2019]
@@ -490,6 +545,7 @@ collections:
       - ["The Hunger Games: Mockingjay - Part 1", 2014]
       - ["The Hunger Games: Mockingjay - Part 2", 2015]
       - ["The Hunger Games: The Ballad of Songbirds & Snakes", 2023]
+      - ["The Hunger Games: Sunrise on the Reaping", 2026]
     min: 3
     backdrop_title: "The Hunger Games: Catching Fire"
   - key: m-apes
@@ -526,9 +582,13 @@ collections:
     accent: purple
     titles:
       - ["The Conjuring", 2013]
+      - ["Annabelle", 2014]
       - ["The Conjuring 2", 2016]
       - ["Annabelle: Creation", 2017]
+      - ["The Nun", 2018]
+      - ["Annabelle Comes Home", 2019]
       - ["The Conjuring: The Devil Made Me Do It", 2021]
+      - ["The Nun II", 2023]
       - ["The Conjuring: Last Rites", 2025]
     min: 3
     backdrop_title: "The Conjuring"
@@ -551,9 +611,12 @@ collections:
     title: "Alien"
     accent: teal
     titles:
+      - ["Alien", 1979]
       - ["Aliens", 1986]
+      - ["Alien³", 1992]
       - ["Alien Resurrection", 1997]
       - ["Prometheus", 2012]
+      - ["Alien: Covenant", 2017]
       - ["Alien: Romulus", 2024]
     min: 3
     backdrop_title: "Alien: Romulus"
@@ -577,6 +640,7 @@ collections:
     titles:
       - ["Die Hard", 1988]
       - ["Die Hard 2", 1990]
+      - ["Die Hard: With a Vengeance", 1995]
       - ["Live Free or Die Hard", 2007]
       - ["A Good Day to Die Hard", 2013]
     min: 3
@@ -591,6 +655,9 @@ collections:
       - ["Halloween", 1978]
       - ["Halloween II", 1981]
       - ["Halloween III: Season of the Witch", 1982]
+      - ["Halloween 4: The Return of Michael Myers", 1988]
+      - ["Halloween 5: The Revenge of Michael Myers", 1989]
+      - ["Halloween: The Curse of Michael Myers", 1995]
       - ["Halloween H20: 20 Years Later", 1998]
       - ["Halloween: Resurrection", 2002]
       - ["Halloween", 2018]
@@ -618,9 +685,10 @@ collections:
     title: "Evil Dead"
     accent: gold
     titles:
-      - ["The Evil Dead", 1982]
+      - ["The Evil Dead", 1983]
       - ["Evil Dead II", 1987]
       - ["Army of Darkness", 1992]
+      - ["Evil Dead", 2013]
       - ["Evil Dead Rise", 2023]
       - ["Evil Dead Burn", 2026]
     min: 3
@@ -635,6 +703,7 @@ collections:
       - ["Jackass 3D", 2010]
       - ["Jackass Presents: Bad Grandpa", 2013]
       - ["Jackass Forever", 2022]
+      - ["Jackass: Best and Last", 2026]
     min: 3
   - key: m-americanpie
     group: universes
@@ -668,6 +737,9 @@ collections:
       - ["Child's Play 2", 1990]
       - ["Child's Play 3", 1991]
       - ["Bride of Chucky", 1998]
+      - ["Seed of Chucky", 2004]
+      - ["Curse of Chucky", 2013]
+      - ["Cult of Chucky", 2017]
     min: 3
   - key: m-lethalweapon
     group: universes
@@ -700,6 +772,7 @@ collections:
       - ["Spy Kids", 2001]
       - ["Spy Kids 2: The Island of Lost Dreams", 2002]
       - ["Spy Kids 3-D: Game Over", 2003]
+      - ["Spy Kids: All the Time in the World", 2011]
       - ["Spy Kids: Armageddon", 2023]
     min: 3
   - key: m-theexpendables
@@ -742,6 +815,7 @@ collections:
     accent: pink
     titles:
       - ["The Purge", 2013]
+      - ["The Purge: Anarchy", 2014]
       - ["The Purge: Election Year", 2016]
       - ["The First Purge", 2018]
       - ["The Forever Purge", 2021]
@@ -756,6 +830,32 @@ collections:
       - ["Underworld: Evolution", 2006]
       - ["Underworld: Rise of the Lycans", 2009]
       - ["Underworld: Awakening", 2012]
+      - ["Underworld: Blood Wars", 2016]
+    min: 3
+  - key: m-28dayslater
+    group: universes
+    type: movie
+    title: "28 Days\nLater"
+    accent: red
+    titles:
+      - ["28 Days Later", 2002]
+      - ["28 Weeks Later", 2007]
+      - ["28 Years Later", 2025]
+      - ["28 Years Later: The Bone Temple", 2026]
+    min: 3
+  - key: m-anightmareonelmstreet
+    group: universes
+    type: movie
+    title: "A Nightmare\non Elm Street"
+    accent: red
+    titles:
+      - ["A Nightmare on Elm Street", 1984]
+      - ["A Nightmare on Elm Street Part 2: Freddy's Revenge", 1985]
+      - ["A Nightmare on Elm Street 3: Dream Warriors", 1987]
+      - ["A Nightmare on Elm Street 4: The Dream Master", 1988]
+      - ["A Nightmare on Elm Street: The Dream Child", 1989]
+      - ["Freddy's Dead: The Final Nightmare", 1991]
+      - ["Wes Craven's New Nightmare", 1994]
     min: 3
   - key: m-aquietplace
     group: universes
@@ -766,7 +866,17 @@ collections:
       - ["A Quiet Place", 2018]
       - ["A Quiet Place Part II", 2021]
       - ["A Quiet Place: Day One", 2024]
-    min: 3
+    min: 2
+  - key: m-austinpowers
+    group: universes
+    type: movie
+    title: "Austin\nPowers"
+    accent: pink
+    titles:
+      - ["Austin Powers: International Man of Mystery", 1997]
+      - ["Austin Powers: The Spy Who Shagged Me", 1999]
+      - ["Austin Powers in Goldmember", 2002]
+    min: 2
   - key: m-avatar
     group: universes
     type: movie
@@ -776,7 +886,7 @@ collections:
       - ["Avatar", 2009]
       - ["Avatar: The Way of Water", 2022]
       - ["Avatar: Fire and Ash", 2025]
-    min: 3
+    min: 2
   - key: m-backtothefuture
     group: universes
     type: movie
@@ -786,7 +896,16 @@ collections:
       - ["Back to the Future", 1985]
       - ["Back to the Future Part II", 1989]
       - ["Back to the Future Part III", 1990]
-    min: 3
+    min: 2
+  - key: m-beetlejuice
+    group: universes
+    type: movie
+    title: "Beetlejuice"
+    accent: green
+    titles:
+      - ["Beetlejuice", 1988]
+      - ["Beetlejuice Beetlejuice", 2024]
+    min: 2
   - key: m-beverlyhillscop
     group: universes
     type: movie
@@ -795,6 +914,7 @@ collections:
     titles:
       - ["Beverly Hills Cop", 1984]
       - ["Beverly Hills Cop II", 1987]
+      - ["Beverly Hills Cop III", 1994]
       - ["Beverly Hills Cop: Axel F", 2024]
     min: 3
   - key: m-cars
@@ -806,7 +926,17 @@ collections:
       - ["Cars", 2006]
       - ["Cars 2", 2011]
       - ["Cars 3", 2017]
-    min: 3
+    min: 2
+  - key: m-dune
+    group: universes
+    type: movie
+    title: "Dune"
+    accent: gold
+    titles:
+      - ["Dune", 2021]
+      - ["Dune: Part Two", 2024]
+      - ["Dune: Part Three", 2026]
+    min: 2
   - key: m-fiftyshades
     group: universes
     type: movie
@@ -816,7 +946,47 @@ collections:
       - ["Fifty Shades of Grey", 2015]
       - ["Fifty Shades Darker", 2017]
       - ["Fifty Shades Freed", 2018]
+    min: 2
+  - key: m-finaldestination
+    group: universes
+    type: movie
+    title: "Final\nDestination"
+    accent: red
+    titles:
+      - ["Final Destination", 2000]
+      - ["Final Destination 2", 2003]
+      - ["Final Destination 3", 2006]
+      - ["The Final Destination", 2009]
+      - ["Final Destination 5", 2011]
+      - ["Final Destination Bloodlines", 2025]
     min: 3
+  - key: m-fridaythe13th
+    group: universes
+    type: movie
+    title: "Friday\nthe 13th"
+    accent: blue
+    titles:
+      - ["Friday the 13th", 1980]
+      - ["Friday the 13th Part 2", 1981]
+      - ["Friday the 13th Part III", 1982]
+      - ["Friday the 13th: The Final Chapter", 1984]
+      - ["Friday the 13th: A New Beginning", 1985]
+      - ["Jason Lives - Friday the 13th Part VI", 1986]
+      - ["Friday the 13th Part VII - The New Blood", 1988]
+      - ["Friday the 13th Part VIII: Jason Takes Manhattan", 1989]
+      - ["Jason Goes to Hell: The Final Friday", 1993]
+      - ["Jason X", 2001]
+      - ["Freddy vs. Jason", 2003]
+    min: 3
+  - key: m-frozen
+    group: universes
+    type: movie
+    title: "Frozen"
+    accent: ice
+    titles:
+      - ["Frozen", 2013]
+      - ["Frozen II", 2019]
+    min: 2
   - key: m-ghostbusters
     group: universes
     type: movie
@@ -826,7 +996,17 @@ collections:
       - ["Ghostbusters", 1984]
       - ["Ghostbusters II", 1989]
       - ["Ghostbusters: Afterlife", 2021]
+      - ["Ghostbusters: Frozen Empire", 2024]
     min: 3
+  - key: m-gladiator
+    group: universes
+    type: movie
+    title: "Gladiator"
+    accent: gold
+    titles:
+      - ["Gladiator", 2000]
+      - ["Gladiator II", 2024]
+    min: 2
   - key: m-homealone
     group: universes
     type: movie
@@ -835,6 +1015,8 @@ collections:
     titles:
       - ["Home Alone", 1990]
       - ["Home Alone 2: Lost in New York", 1992]
+      - ["Home Alone 3", 1997]
+      - ["Home Alone 4", 2002]
       - ["Home Sweet Home Alone", 2021]
     min: 3
   - key: m-hoteltransylvania
@@ -845,6 +1027,7 @@ collections:
     titles:
       - ["Hotel Transylvania", 2012]
       - ["Hotel Transylvania 2", 2015]
+      - ["Hotel Transylvania 3: Summer Vacation", 2018]
       - ["Hotel Transylvania: Transformania", 2022]
     min: 3
   - key: m-howtotrainyourdragon
@@ -866,7 +1049,10 @@ collections:
     titles:
       - ["Insidious", 2011]
       - ["Insidious: Chapter 2", 2013]
+      - ["Insidious: Chapter 3", 2015]
       - ["Insidious: The Last Key", 2018]
+      - ["Insidious: The Red Door", 2023]
+      - ["Insidious: Out of the Further", 2026]
     min: 3
   - key: m-jaws
     group: universes
@@ -877,6 +1063,7 @@ collections:
       - ["Jaws", 1975]
       - ["Jaws 2", 1978]
       - ["Jaws 3-D", 1983]
+      - ["Jaws: The Revenge", 1987]
     min: 3
   - key: m-jumanji
     group: universes
@@ -887,6 +1074,7 @@ collections:
       - ["Jumanji", 1995]
       - ["Jumanji: Welcome to the Jungle", 2017]
       - ["Jumanji: The Next Level", 2019]
+      - ["Jumanji: Open World", 2026]
     min: 3
   - key: m-killbill
     group: universes
@@ -897,7 +1085,7 @@ collections:
       - ["Kill Bill: Vol. 1", 2003]
       - ["Kill Bill: Vol. 2", 2004]
       - ["Kill Bill: The Whole Bloody Affair", 2011]
-    min: 3
+    min: 2
   - key: m-kingsman
     group: universes
     type: movie
@@ -907,7 +1095,7 @@ collections:
       - ["Kingsman: The Secret Service", 2015]
       - ["Kingsman: The Golden Circle", 2017]
       - ["The King's Man", 2021]
-    min: 3
+    min: 2
   - key: m-knivesout
     group: universes
     type: movie
@@ -917,7 +1105,7 @@ collections:
       - ["Knives Out", 2019]
       - ["Glass Onion: A Knives Out Mystery", 2022]
       - ["Wake Up Dead Man: A Knives Out Mystery", 2025]
-    min: 3
+    min: 2
   - key: m-meettheparents
     group: universes
     type: movie
@@ -927,6 +1115,7 @@ collections:
       - ["Meet the Parents", 2000]
       - ["Meet the Fockers", 2004]
       - ["Little Fockers", 2010]
+      - ["Focker-in-Law", 2026]
     min: 3
   - key: m-meninblack
     group: universes
@@ -937,7 +1126,47 @@ collections:
       - ["Men in Black", 1997]
       - ["Men in Black II", 2002]
       - ["Men in Black 3", 2012]
+    min: 2
+  - key: m-moana
+    group: universes
+    type: movie
+    title: "Moana"
+    accent: teal
+    titles:
+      - ["Moana", 2016]
+      - ["Moana 2", 2024]
+    min: 2
+  - key: m-mortalkombat
+    group: universes
+    type: movie
+    title: "Mortal\nKombat"
+    accent: gold
+    titles:
+      - ["Mortal Kombat", 1995]
+      - ["Mortal Kombat: Annihilation", 1997]
+      - ["Mortal Kombat", 2021]
+      - ["Mortal Kombat II", 2026]
     min: 3
+  - key: m-nightatthemuseum
+    group: universes
+    type: movie
+    title: "Night at\nthe Museum"
+    accent: gold
+    titles:
+      - ["Night at the Museum", 2006]
+      - ["Night at the Museum: Battle of the Smithsonian", 2009]
+      - ["Night at the Museum: Secret of the Tomb", 2014]
+    min: 2
+  - key: m-nowyouseeme
+    group: universes
+    type: movie
+    title: "Now You\nSee Me"
+    accent: purple
+    titles:
+      - ["Now You See Me", 2013]
+      - ["Now You See Me 2", 2016]
+      - ["Now You See Me: Now You Don't", 2025]
+    min: 2
   - key: m-oceans
     group: universes
     type: movie
@@ -948,7 +1177,7 @@ collections:
       - ["Ocean's Eleven", 2001]
       - ["Ocean's Twelve", 2004]
       - ["Ocean's Thirteen", 2007]
-    min: 3
+    min: 2
   - key: m-paddington
     group: universes
     type: movie
@@ -958,7 +1187,31 @@ collections:
       - ["Paddington", 2014]
       - ["Paddington 2", 2017]
       - ["Paddington in Peru", 2024]
+    min: 2
+  - key: m-paranormalactivity
+    group: universes
+    type: movie
+    title: "Paranormal\nActivity"
+    accent: purple
+    titles:
+      - ["Paranormal Activity", 2009]
+      - ["Paranormal Activity 2", 2010]
+      - ["Paranormal Activity 3", 2011]
+      - ["Paranormal Activity 4", 2012]
+      - ["Paranormal Activity: The Marked Ones", 2014]
+      - ["Paranormal Activity: The Ghost Dimension", 2015]
+      - ["Paranormal Activity: Next of Kin", 2021]
     min: 3
+  - key: m-pitchperfect
+    group: universes
+    type: movie
+    title: "Pitch\nPerfect"
+    accent: pink
+    titles:
+      - ["Pitch Perfect", 2012]
+      - ["Pitch Perfect 2", 2015]
+      - ["Pitch Perfect 3", 2017]
+    min: 2
   - key: m-rushhour
     group: universes
     type: movie
@@ -968,7 +1221,7 @@ collections:
       - ["Rush Hour", 1998]
       - ["Rush Hour 2", 2001]
       - ["Rush Hour 3", 2007]
-    min: 3
+    min: 2
   - key: m-saw
     group: universes
     type: movie
@@ -977,6 +1230,13 @@ collections:
     titles:
       - ["Saw", 2004]
       - ["Saw II", 2005]
+      - ["Saw III", 2006]
+      - ["Saw IV", 2007]
+      - ["Saw V", 2008]
+      - ["Saw VI", 2009]
+      - ["Saw 3D", 2010]
+      - ["Jigsaw", 2017]
+      - ["Spiral: From the Book of Saw", 2021]
       - ["Saw X", 2023]
     min: 3
   - key: m-scream
@@ -986,6 +1246,9 @@ collections:
     accent: gold
     titles:
       - ["Scream", 1996]
+      - ["Scream 2", 1997]
+      - ["Scream 3", 2000]
+      - ["Scream 4", 2011]
       - ["Scream", 2022]
       - ["Scream VI", 2023]
       - ["Scream 7", 2026]
@@ -999,7 +1262,16 @@ collections:
       - ["Sonic the Hedgehog", 2020]
       - ["Sonic the Hedgehog 2", 2022]
       - ["Sonic the Hedgehog 3", 2024]
-    min: 3
+    min: 2
+  - key: m-supermario
+    group: universes
+    type: movie
+    title: "Super\nMario"
+    accent: red
+    titles:
+      - ["The Super Mario Bros. Movie", 2023]
+      - ["The Super Mario Galaxy Movie", 2026]
+    min: 2
   - key: m-taken
     group: universes
     type: movie
@@ -1009,6 +1281,31 @@ collections:
       - ["Taken", 2008]
       - ["Taken 2", 2012]
       - ["Taken 3", 2014]
+    min: 2
+  - key: m-terrifier
+    group: universes
+    type: movie
+    title: "Terrifier"
+    accent: silver
+    titles:
+      - ["Terrifier", 2018]
+      - ["Terrifier 2", 2022]
+      - ["Terrifier 3", 2024]
+    min: 2
+  - key: m-texaschainsaw
+    group: universes
+    type: movie
+    title: "Texas\nChainsaw"
+    subtitle: "Massacre"
+    accent: orange
+    titles:
+      - ["The Texas Chain Saw Massacre", 1974]
+      - ["The Texas Chainsaw Massacre Part 2", 1986]
+      - ["Leatherface: The Texas Chainsaw Massacre III", 1990]
+      - ["The Return of the Texas Chainsaw Massacre", 1995]
+      - ["Texas Chainsaw 3D", 2013]
+      - ["Leatherface", 2017]
+      - ["Texas Chainsaw Massacre", 2022]
     min: 3
   - key: m-theequalizer
     group: universes
@@ -1019,7 +1316,7 @@ collections:
       - ["The Equalizer", 2014]
       - ["The Equalizer 2", 2018]
       - ["The Equalizer 3", 2023]
-    min: 3
+    min: 2
   - key: m-thegodfather
     group: universes
     type: movie
@@ -1029,7 +1326,17 @@ collections:
       - ["The Godfather", 1972]
       - ["The Godfather Part II", 1974]
       - ["The Godfather Part III", 1990]
-    min: 3
+    min: 2
+  - key: m-thehangover
+    group: universes
+    type: movie
+    title: "The\nHangover"
+    accent: teal
+    titles:
+      - ["The Hangover", 2009]
+      - ["The Hangover Part II", 2011]
+      - ["The Hangover Part III", 2013]
+    min: 2
   - key: m-themazerunner
     group: universes
     type: movie
@@ -1039,7 +1346,16 @@ collections:
       - ["The Maze Runner", 2014]
       - ["Maze Runner: The Scorch Trials", 2015]
       - ["Maze Runner: The Death Cure", 2018]
-    min: 3
+    min: 2
+  - key: m-topgun
+    group: universes
+    type: movie
+    title: "Top Gun"
+    accent: blue
+    titles:
+      - ["Top Gun", 1986]
+      - ["Top Gun: Maverick", 2022]
+    min: 2
   - key: m-tron
     group: universes
     type: movie
@@ -1047,9 +1363,9 @@ collections:
     accent: blue
     titles:
       - ["Tron", 1982]
-      - ["Tron: Legacy", 2010]
-      - ["Tron: Ares", 2025]
-    min: 3
+      - ["TRON: Legacy", 2010]
+      - ["TRON: Ares", 2025]
+    min: 2
   - key: m-twilight
     group: universes
     type: movie
@@ -1057,6 +1373,8 @@ collections:
     accent: gold
     titles:
       - ["Twilight", 2008]
+      - ["The Twilight Saga: New Moon", 2009]
+      - ["The Twilight Saga: Eclipse", 2010]
       - ["The Twilight Saga: Breaking Dawn - Part 1", 2011]
       - ["The Twilight Saga: Breaking Dawn - Part 2", 2012]
     min: 3
@@ -1069,7 +1387,25 @@ collections:
       - ["Venom", 2018]
       - ["Venom: Let There Be Carnage", 2021]
       - ["Venom: The Last Dance", 2024]
-    min: 3
+    min: 2
+  - key: m-wicked
+    group: universes
+    type: movie
+    title: "Wicked"
+    accent: green
+    titles:
+      - ["Wicked", 2024]
+      - ["Wicked: For Good", 2025]
+    min: 2
+  - key: m-zootopia
+    group: universes
+    type: movie
+    title: "Zootopia"
+    accent: blue
+    titles:
+      - ["Zootopia", 2016]
+      - ["Zootopia 2", 2025]
+    min: 2
 
   # --- Kids and family.
   - key: m-kids
@@ -1098,7 +1434,7 @@ collections:
     type: show
     title: "Preschool"
     accent: gold
-    lists: [rizzlemedizzle/mdb-aria-preschool-candidates]
+    lists: [debridman8/toddler-tv]
   - key: m-familybest
     group: kids
     type: movie
@@ -1152,6 +1488,7 @@ collections:
     lists: [fadetoblah/amazon-prime-top-tv-shows]
     limit: 50
     logo: "prime"
+    min: 4
   - key: m-disney
     group: streaming
     type: movie
@@ -1190,6 +1527,7 @@ collections:
     limit: 50
     backdrop_title: "Hacks"
     logo: "hbomax"
+    min: 4
   - key: m-apple
     group: streaming
     type: movie
@@ -1227,6 +1565,7 @@ collections:
     lists: [fadetoblah/hulu-top-tv-shows]
     limit: 50
     logo: "hulu"
+    min: 4
   - key: m-paramount
     group: streaming
     type: movie
@@ -1251,24 +1590,25 @@ collections:
     title: "Peacock"
     subtitle: "Popular"
     accent: gold
-    lists: [fadetoblah/peacock-top-movies]
+    lists: [boholiday/popular-peacock-movies]
     limit: 50
     logo: "peacock"
+    min: 4
   - key: s-peacock
     group: streaming
     type: show
     title: "Peacock"
     subtitle: "Popular"
     accent: gold
-    lists: [fadetoblah/peacock-top-tv-shows]
+    lists: [boholiday/top-20-peacock-shows]
     limit: 50
     logo: "peacock"
-    min: 5
+    min: 4
   - key: m-stan
     group: streaming
     type: movie
     title: "Stan"
-    subtitle: "Popular"
+    subtitle: "Now Streaming"
     accent: blue
     lists: [altfreq/stan-australia-movies]
     limit: 50
@@ -1277,11 +1617,126 @@ collections:
     group: streaming
     type: show
     title: "Stan"
-    subtitle: "Popular"
+    subtitle: "Now Streaming"
     accent: blue
     lists: [altfreq/stan-australia-series]
     limit: 50
     logo: "stan"
+  # Services CineSets has no logo for: their posters show the service's name.
+  - key: m-binge
+    group: streaming
+    type: movie
+    title: "Binge"
+    subtitle: "Now Streaming"
+    accent: pink
+    lists: [mentalblank/binge-movies-au]
+    limit: 50
+  - key: s-binge
+    group: streaming
+    type: show
+    title: "Binge"
+    subtitle: "Now Streaming"
+    accent: pink
+    lists: [mentalblank/binge-shows-au]
+    limit: 50
+  - key: s-iview
+    group: streaming
+    type: show
+    title: "ABC\niview"
+    subtitle: "Latest"
+    accent: teal
+    lists: [allanon2/abc-iview-movies]
+    limit: 50
+  - key: m-sbs
+    group: streaming
+    type: movie
+    title: "SBS"
+    subtitle: "Now Streaming"
+    accent: gold
+    lists: [ta3m/sbs-australia]
+    limit: 50
+  - key: s-sbs
+    group: streaming
+    type: show
+    title: "SBS"
+    subtitle: "Now Streaming"
+    accent: gold
+    lists: [ta3m/sbs-australia]
+    limit: 50
+  - key: m-iplayer
+    group: streaming
+    type: movie
+    title: "BBC\niPlayer"
+    subtitle: "Popular"
+    accent: pink
+    lists: [andyhawks/bbc-iplayer-popular-films]
+    limit: 50
+    min: 4
+  - key: s-iplayer
+    group: streaming
+    type: show
+    title: "BBC\niPlayer"
+    subtitle: "Latest"
+    accent: pink
+    lists: [ceefaxer/bbc-iplayer]
+    limit: 50
+  - key: m-itvx
+    group: streaming
+    type: movie
+    title: "ITVX"
+    subtitle: "Popular"
+    accent: teal
+    lists: [harmes7/itvx-popular-movies]
+    limit: 50
+  - key: s-itvx
+    group: streaming
+    type: show
+    title: "ITVX"
+    subtitle: "Now Streaming"
+    accent: teal
+    lists: [petera209/itvx-shows]
+    limit: 50
+  - key: s-channel4
+    group: streaming
+    type: show
+    title: "Channel 4"
+    subtitle: "Now Streaming"
+    accent: silver
+    lists: [xg1ll/channel-4-shows]
+    limit: 50
+  - key: m-crunchyroll
+    group: streaming
+    type: movie
+    title: "Crunchyroll"
+    subtitle: "Top 100"
+    accent: orange
+    lists: [aawalton/crunchyroll-top-100-movies]
+    limit: 50
+  - key: s-crunchyroll
+    group: streaming
+    type: show
+    title: "Crunchyroll"
+    subtitle: "Top 100"
+    accent: orange
+    lists: [aawalton/crunchyroll-top-100-shows]
+    limit: 50
+  - key: m-shudder
+    group: streaming
+    type: movie
+    title: "Shudder"
+    subtitle: "Popular"
+    accent: red
+    lists: [ipdinata/popular-movies-shudder]
+    limit: 50
+  - key: s-shudder
+    group: streaming
+    type: show
+    title: "Shudder"
+    subtitle: "Popular"
+    accent: red
+    lists: [ipdinata/popular-series-shudder]
+    limit: 50
+    min: 4
 
   # --- Best of.
   - key: m-top250
@@ -1408,6 +1863,14 @@ collections:
     subtitle: "Trending"
     accent: pink
     lists: [snoak/trending-anime-shows]
+  - key: m-criterion
+    group: bestof
+    type: movie
+    title: "Criterion"
+    subtitle: "Collection"
+    accent: silver
+    lists: [rgreen83/the-complete-criterion-collection]
+    limit: 250
 
   # --- Popular by genre.
   - key: m-action
@@ -1481,7 +1944,7 @@ collections:
     title: "Popular"
     subtitle: "Animation"
     accent: pink
-    lists: [hdlists/latest-hd-animated-movies-from-1980-to-today]
+    lists: [snoak/popular-animated-movies]
   - key: s-action
     group: genres
     type: show
@@ -1556,3 +2019,45 @@ collections:
     subtitle: "Series"
     accent: red
     lists: [fufu67/popular-turkish-shows]
+  - key: m-korean
+    group: regional
+    type: movie
+    title: "Korean"
+    subtitle: "Movies"
+    accent: blue
+    lists: [an-kah/popular-korean-movies]
+  - key: s-korean
+    group: regional
+    type: show
+    title: "Korean"
+    subtitle: "Series"
+    accent: blue
+    lists: [an-kah/popular-korean-shows]
+  - key: m-japanese
+    group: regional
+    type: movie
+    title: "Japanese"
+    subtitle: "Movies"
+    accent: pink
+    lists: [kaidey2/japanese-trending]
+  - key: m-indian
+    group: regional
+    type: movie
+    title: "Indian"
+    subtitle: "Movies"
+    accent: orange
+    lists: [apollocat/trending-bollywood-movies]
+  - key: s-british
+    group: regional
+    type: show
+    title: "British"
+    subtitle: "Series"
+    accent: purple
+    lists: [djnield/best-of-british]
+  - key: s-australian
+    group: regional
+    type: show
+    title: "Australian"
+    subtitle: "Series"
+    accent: gold
+    lists: [lucasghayes/australian-tv]
