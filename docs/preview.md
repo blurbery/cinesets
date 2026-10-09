@@ -385,6 +385,11 @@ posters:
   tint: normal    # strong, normal, subtle or none
 ```
 
+Whatever you pick, text stays readable: where the artwork behind it is too bright (a white sky with `tint: none`,
+say), CineSets darkens the artwork just behind the text, only as much as it needs, and adds a soft shadow (unless
+`text_shadow` is `off`). A text colour too dark to read on a poster, like a near-black `#hex` accent, is lightened
+instead.
+
 ### Text
 
 ![Each text setting on its own](images/style-text.jpg)
@@ -434,8 +439,13 @@ posters:
 | `courier-prime` | Typewriter, documentaries and true crime |
 
 The font's name works too, like `font: Bebas Neue`. A few fonts don't have every accented letter (Creepster and
-Rye have no ō or č, for example), so a poster whose text has one is drawn in Poppins instead. Each font has a
-size of its own that evens out how big it looks, and long titles still shrink to fit.
+Rye have no ō or č, for example), so a poster whose text has one is drawn in Poppins instead. Text with Greek,
+Cyrillic or Vietnamese letters that Poppins doesn't have either is drawn in Noto Sans, which comes with CineSets
+for just that. Japanese, Chinese and Korean aren't covered yet, so their letters still come out as boxes.
+
+Each font has a size of its own that evens out how big it looks, and long titles still shrink to fit. A title too
+long for one line goes onto two at its best space, and long labels and subtitles shrink too, so text always stays
+on the poster.
 
 ## Random artwork
 

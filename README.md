@@ -114,7 +114,8 @@ posters:
 ```
 
 Twelve fonts come with CineSets, for every poster, a whole section or a single collection. Here's each one on a
-collection it suits; the [preview](docs/preview.md#fonts) lists them all.
+collection it suits; the [preview](docs/preview.md#fonts) lists them all. Noto Sans comes along too, not as a
+choice but to draw Greek, Cyrillic and Vietnamese letters the chosen font and Poppins don't have.
 
 ![Every font, each on a collection it suits](docs/images/style-fonts.jpg)
 
@@ -185,5 +186,5 @@ PR.
 
 [AGPL-3.0-or-later](LICENSE) with a few extra terms in [NOTICE](NOTICE): keep the "CineSets by blurbery"
 credit, mark your changes if you share a modified version, and the licence doesn't cover the CineSets name or
-logo. The poster fonts in `assets/fonts` are under the SIL Open Font License. Streaming logos belong to their
-owners and are downloaded to your own server, not shipped with CineSets.
+logo. The poster fonts in `assets/fonts`, Noto Sans included, are under the SIL Open Font License. Streaming
+logos belong to their owners and are downloaded to your own server, not shipped with CineSets.
