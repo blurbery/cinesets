@@ -55,9 +55,9 @@ def empty_index(items):
 
 
 def reference(coll, index, short):
-    """Franchise matching without titles_in, reading every title in the index for each title wanted: the exact title
-    and year first, then the loose title (short: item id -> catalog.loose_title) from that year or one either side,
-    each item used once."""
+    """Franchise matching without titles_in, reading every title in the index for each title wanted: the TMDB id
+    first (titles written [title, year, id]), then the exact title and year, then the loose title (short: item id ->
+    catalog.loose_title) from that year or one either side, each item used once."""
     kind = coll["kind"]
     canon = set(index[kind]["imdb"].values()) | set(index[kind]["tmdb"].values())
 
@@ -69,12 +69,17 @@ def reference(coll, index, short):
         return pick
 
     picks, used = {}, set()
-    for n, (t, y) in enumerate(coll["titles"]):
-        iid = best(lambda iid, it: ((it.get("n") or "").lower(), it.get("y")) == (t.lower(), y))
+    for n, entry in enumerate(coll["titles"]):
+        iid = index[kind]["tmdb"].get(str(entry[2])) if len(entry) == 3 and entry[2] else None
         if iid and iid not in used:
             picks[n] = iid
             used.add(iid)
-    for n, (t, y) in enumerate(coll["titles"]):
+    for n, (t, y, *_) in enumerate(coll["titles"]):
+        iid = None if n in picks else best(lambda iid, it: ((it.get("n") or "").lower(), it.get("y")) == (t.lower(), y))
+        if iid and iid not in used:
+            picks[n] = iid
+            used.add(iid)
+    for n, (t, y, *_) in enumerate(coll["titles"]):
         for year in () if n in picks else (y, y - 1, y + 1):
             iid = best(lambda iid, it: it.get("y") == year and short[iid] and short[iid] == catalog.loose_title(t))
             if iid and iid not in used:

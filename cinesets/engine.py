@@ -120,23 +120,26 @@ class Engine:
         """Matched item ids in list order, plus (titles wanted, titles matched)."""
         kind = coll["kind"]
         if coll.get("titles"):
-            # fixed franchise list: the exact title and year first, then the same title written another way (case,
-            # accents, punctuation, "&" or "and", a leading "The") from that year or one either side. Each library
-            # item fills one place at most, and a remake from another year never counts.
-            from .catalog import loose_title
+            # fixed franchise list: the TMDB id first, whatever the server calls the title (Zootopia is Zootropolis in
+            # British and Australian metadata), then the exact title and year, then the same title written another
+            # way (case, accents, punctuation, "&" or "and", a leading "The") from that year or one either side. Each
+            # library item fills one place at most, and a remake from another year never counts.
+            from .catalog import fixed_title, loose_title
+            wanted = [fixed_title(x) for x in coll["titles"]]
             found, near = self.titles_in(index, kind), self.titles_in(index, kind, loose=True)
             picks, used = {}, set()
-            for n, (t, y) in enumerate(coll["titles"]):
-                iid = found.get((str(t).lower(), y))
-                if iid and iid not in used:
+
+            def fill(n, iid):
+                if iid and iid not in used and n not in picks:
                     picks[n] = iid
                     used.add(iid)
-            for n, (t, y) in enumerate(coll["titles"]):
+            for n, (t, y, tmdb) in enumerate(wanted):
+                fill(n, index[kind]["tmdb"].get(str(tmdb)) if tmdb else None)
+            for n, (t, y, tmdb) in enumerate(wanted):
+                fill(n, found.get((str(t).lower(), y)))
+            for n, (t, y, tmdb) in enumerate(wanted):
                 years = near.get(loose_title(t), {}) if n not in picks and isinstance(y, int) else {}
-                iid = next((years[x] for x in (y, y - 1, y + 1) if x in years and years[x] not in used), None)
-                if iid:
-                    picks[n] = iid
-                    used.add(iid)
+                fill(n, next((years[x] for x in (y, y - 1, y + 1) if x in years and years[x] not in used), None))
             ids = self.srv.narrow(coll, [picks[n] for n in sorted(picks)])
             return ids, len(coll["titles"]), len(ids)
         ids, seen, wanted = [], set(), 0

@@ -76,6 +76,27 @@ def in_season(coll, today=None):
     return start <= now <= end if start <= end else (now >= start or now <= end)
 
 
+def fixed_title(entry):
+    """One place in a fixed list as (title, year, TMDB id or None), from [title, year] or [title, year, TMDB id]."""
+    title, year, *tmdb = entry
+    return title, year, (tmdb[0] if tmdb else None)
+
+
+def _fixed_titles(value, key):
+    """`titles` checked: each one [title, year], or [title, year, TMDB id] with the id a positive whole number."""
+    out = []
+    for entry in value if isinstance(value, list) else [value]:
+        if not (isinstance(entry, (list, tuple)) and len(entry) in (2, 3)):
+            raise SystemExit(f"collections.yml: {key}: each of its titles must be [title, year] or [title, year, TMDB "
+                             f"id], like [\"Zootopia\", 2016, 269149], not {entry!r}")
+        title, year, tmdb = fixed_title(entry)
+        if len(entry) == 3 and (isinstance(tmdb, bool) or not isinstance(tmdb, int) or tmdb < 1):
+            raise SystemExit(f"collections.yml: {key}: the TMDB id of {title!r} must be a positive whole number, the "
+                             f"one in its themoviedb.org address (like 269149 for Zootopia), not {tmdb!r}")
+        out.append((title, year, tmdb))
+    return out
+
+
 def loose_title(name):
     """A title reduced to its letters and digits for a second try at matching a fixed list: no case, accents,
     punctuation, spaces or leading "The", "&" read as "and" and "³" as "3", so "Alien³" and "Alien 3" are the same."""
@@ -172,7 +193,7 @@ def load(cfg):
         c.setdefault("accent", "purple")
         c.setdefault("lists", [])
         if c.get("titles"):
-            c["titles"] = [(t, y) for t, y in c["titles"]]
+            c["titles"] = _fixed_titles(c["titles"], c["key"])
         label = str(c.get("label") or cfg["labels"][c["kind"]])
         words = " ".join(x for x in [c["title"].replace("-\n", "-").replace("\n", " "), c["subtitle"]] if x)
         twin = 0 if c["kind"] == "movie" else 1
