@@ -221,6 +221,16 @@ class Engine:
         parts = [coll["label"], coll["title"], coll.get("subtitle"), coll["accent"], coll.get("backdrop_item"), coll.get("backdrop_title")]
         if logo:
             parts.append("logo:" + logo)
+            # the logo file drawn, once there is one, so a poster made before `cinesets logos` (or before another
+            # version was downloaded, or a fresh copy) is made again with it
+            drawn = posters.logo_file(self.logos, logo, style)
+            if drawn:
+                parts.append(f"logo-file:{os.path.basename(drawn)}:{int(os.path.getmtime(drawn))}")
+            fixes = posters.text_fixes(coll["label"], coll["title"], coll.get("subtitle") or "Popular", style, bool(drawn))
+        else:
+            fixes = posters.text_fixes(coll["label"], coll["title"], coll.get("subtitle"), style)
+        if fixes:  # text that ran off the poster or had letters drawn as boxes, drawn again now it's fixed
+            parts.append("text:" + ",".join(fixes))
         # only settings changed from the defaults go in, so posters made before these settings existed are kept
         changed = posters.style_changes(style, logo=bool(logo))
         if changed:

@@ -6,13 +6,21 @@
 artwork, or a streaming service logo for service collections. The `posters` settings in config.yml change the
 colours, shading, text and font; at their defaults every poster comes out exactly as it always has."""
 import colorsys
+import functools
+import io
+import math
 import os
 import re
 import sys
 
-from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont
+from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont, ImageOps
 
 from .config import ROOT
+
+try:  # colour profiles: part of nearly every Pillow, but a build can leave them out
+    from PIL import ImageCms
+except ImportError:  # pragma: no cover
+    ImageCms = None
 
 FONT_DIR = os.path.join(ROOT, "assets", "fonts")
 # fonts for the poster text, each in assets/fonts/<key> with its licence (all SIL Open Font License 1.1):
@@ -32,6 +40,10 @@ FONTS = {
     "titan-one": ("Titan One", "TitanOne-Regular.ttf", "TitanOne-Regular.ttf", 0.9, 1.05),
     "courier-prime": ("Courier Prime", "CourierPrime-Bold.ttf", "CourierPrime-Regular.ttf", 1.1, 1.05),
 }
+# the last font to fall back on, for letters the chosen font and Poppins don't have (Greek, Cyrillic and the rest of
+# Vietnamese), in assets/fonts/noto-sans. It isn't one of the choices. Japanese, Chinese and Korean aren't covered.
+FALLBACK = "noto-sans"
+FACES = {**FONTS, FALLBACK: ("Noto Sans", "NotoSans-SemiBold.ttf", "NotoSans-Regular.ttf", 1.0, 1.12)}
 W, H = 1000, 1500
 PAD = 78
 LABEL_COLOUR = (240, 196, 92)
@@ -72,7 +84,9 @@ STYLE = {
     "title_position": None,
     "title_size": 1.0,           # 0.5 to 2 times the usual size (long titles still shrink to fit the width)
     "label_size": 1.0,           # 0.5 to 2 times the usual size
-    "text_shadow": "auto",       # a soft shadow behind the text: auto (only text moved from its usual place), on, off
+    # a soft shadow behind the text: auto (text moved from its usual place, or over artwork too bright to read it on),
+    # on or off
+    "text_shadow": "auto",
     # streaming posters only: which logo (standard, alt or icon, where the service has one) and in what colours
     "logo": "standard",
     "logo_colour": "original",
@@ -220,9 +234,11 @@ def _text_colour(value, accent):
     return TEXT_COLOURS.get(value) or _hex(value)
 
 
+@functools.lru_cache(maxsize=256)
 def _font(face, size, subtitle=False):
-    """One of FONTS at a size: its file for the label and title, or for the subtitle."""
-    entry = FONTS[face]
+    """One of FONTS (or the fallback) at a size: its file for the label and title, or for the subtitle. Each one is
+    kept once loaded, as fitting text tries a font at many sizes."""
+    entry = FACES[face]
     return ImageFont.truetype(os.path.join(FONT_DIR, face, entry[2] if subtitle else entry[1]), size)
 
 
@@ -236,8 +252,9 @@ def _glyph(font, ch):
     return img.size, img.tobytes()
 
 
-def _draws(face, text):
-    """Whether the font has every character in the text, rather than drawing its box for a missing one."""
+def _missing(face, text):
+    """The characters in the text the font doesn't have (it would draw its box for them)."""
+    gaps = set()
     for ch in set(text):
         if ch.isspace():
             continue
@@ -246,32 +263,69 @@ def _draws(face, text):
             # U+FFFF is never a character, so every font draws its missing-character box for it
             _DRAWN[(face, ch)] = all(_glyph(f, ch) != _glyph(f, "\uffff") for f in fonts)
         if not _DRAWN[(face, ch)]:
-            return False
-    return True
+            gaps.add(ch)
+    return gaps
+
+
+def _draws(face, text):
+    """Whether the font has every character in the text, rather than drawing its box for a missing one."""
+    return not _missing(face, text)
 
 
 def _with_font(style, *texts):
-    """The style, switched to Poppins when its font is missing a character in any of the texts."""
+    """The style, switched to Poppins when its font is missing a character in any of the texts, or to Noto Sans
+    when Poppins is missing one too. When neither has them all (Japanese, say) it's whichever is missing fewer,
+    Poppins on a tie, so a star sign alone doesn't change the font."""
     face = style.get("font", "poppins")
     text = "".join(t for t in texts if t)
     if style.get("case") == "upper":
         text = text.upper()
-    return style if face == "poppins" or _draws(face, text) else {**style, "font": "poppins"}
+    if _draws(face, text):
+        return style
+    better = min(("poppins", FALLBACK), key=lambda f: len(_missing(f, text)))
+    return style if better == face else {**style, "font": better}
 
 
-def _cover(img, w, h):
-    """Scale to fill, then slide the crop window to the busiest/brightest part instead of the centre."""
-    scale = max(w / img.width, h / img.height)
-    img = img.resize((round(img.width * scale) + 1, round(img.height * scale) + 1), Image.LANCZOS)
-    top = (img.height - h) // 2
+@functools.lru_cache(maxsize=1)
+def _srgb():
+    return ImageCms.createProfile("sRGB")
+
+
+def _artwork(path):
+    """Artwork as RGB, turned the right way up when its camera says so (EXIF orientation), and changed into sRGB
+    when it carries another colour profile (Display P3, Adobe RGB), so its colours look as they do everywhere else."""
+    img = Image.open(path)
+    try:
+        if img.getexif().get(0x0112, 1) != 1:  # 0x0112: orientation, 1 is the right way up
+            img = ImageOps.exif_transpose(img)
+    except Exception:  # a broken EXIF block: use the picture as it is
+        pass
+    icc = img.info.get("icc_profile")
+    if icc and ImageCms is not None:
+        try:
+            profile = ImageCms.ImageCmsProfile(io.BytesIO(icc))
+            if "srgb" not in (ImageCms.getProfileDescription(profile) or "").lower():
+                if img.mode not in ("RGB", "CMYK", "L"):
+                    img = img.convert("RGB")
+                img = ImageCms.profileToProfile(img, profile, _srgb(), outputMode="RGB")
+        except Exception:  # a profile that can't be read or used: the colours as they are
+            pass
+    return img.convert("RGB")
+
+
+MOST_PIXELS = 9_000_000  # the biggest the artwork is scaled up to whole; past this only the part that's used is
+
+
+def _busiest(img, w):
+    """Left edge of the w-wide window with the most going on (edges and brightness), preferring the centre unless
+    another window is clearly richer."""
     spare = img.width - w
     if spare <= 0:
-        return img.crop((0, top, w, top + h))
+        return 0
     grey = img.convert("L")
     edges = grey.filter(ImageFilter.FIND_EDGES)
     interest = ImageChops.add(edges, grey.point(lambda v: v // 3)).resize((img.width, 1), Image.BOX)
     cols = list(interest.tobytes())
-    # prefer the centre unless another window is clearly richer
     weight = lambda x: 1 - 0.30 * abs(x - spare / 2) / (spare / 2)
     window = sum(cols[:w])
     best, left = window * weight(0), 0
@@ -279,7 +333,27 @@ def _cover(img, w, h):
         window += cols[x + w - 1] - cols[x - 1]
         if window * weight(x) > best:
             best, left = window * weight(x), x
-    return img.crop((left, top, left + w, top + h))
+    return left
+
+
+def _cover(img, w, h):
+    """Scale to fill, then slide the crop window to the busiest/brightest part instead of the centre. Artwork of an
+    odd shape, whose scaled copy would be huge (a 1920x50 strip would be 57,600 pixels wide), is looked over at a
+    smaller size and only the part that's used is scaled up."""
+    scale = max(w / img.width, h / img.height)
+    sw, sh = round(img.width * scale) + 1, round(img.height * scale) + 1
+    top = (sh - h) // 2
+    if sw * sh <= MOST_PIXELS:
+        img = img.resize((sw, sh), Image.LANCZOS)
+        left = _busiest(img, w)
+        return img.crop((left, top, left + w, top + h))
+    left = 0
+    if sw - w > 1:
+        look = math.sqrt(MOST_PIXELS / (sw * sh))
+        probe = img.resize((max(1, round(sw * look)), max(1, round(sh * look))), Image.LANCZOS)
+        left = min(sw - w, round(_busiest(probe, max(1, round(w * look))) / look))
+    across, down = sw / img.width, sh / img.height  # the scale each way, as if the whole picture were scaled
+    return img.resize((w, h), Image.LANCZOS, box=(left / across, top / down, (left + w) / across, (top + h) / down))
 
 
 def _gradient_text(base, xy, text, font, c1, c2):
@@ -291,20 +365,17 @@ def _gradient_text(base, xy, text, font, c1, c2):
     tw, th = box[2] - dx, box[3] - dy
     mask = Image.new("L", (tw + 8, th + 8), 0)
     ImageDraw.Draw(mask).text((-dx, -dy), text, font=font, fill=255)
-    grad = Image.new("RGB", mask.size)
-    px = grad.load()
-    for i in range(mask.width):
-        t = i / max(1, mask.width - 1)
-        col = tuple(round(c1[k] + (c2[k] - c1[k]) * t) for k in range(3))
-        for j in range(mask.height):
-            px[i, j] = col
-    base.paste(grad, (x, y), mask)
+    # the colours run left to right: one row is worked out, then stretched down to the height of the text
+    row = Image.new("RGB", (mask.width, 1))
+    last = max(1, mask.width - 1)
+    row.putdata([tuple(round(c1[k] + (c2[k] - c1[k]) * (i / last)) for k in range(3)) for i in range(mask.width)])
+    base.paste(row.resize(mask.size, Image.NEAREST), (x, y), mask)
 
 
 def _background(backdrop, tint, shade_level="medium", tint_level="normal"):
     brightness, top_dark, bottom_dark, glow_level = SHADES[shade_level]
     if backdrop:
-        bg = _cover(Image.open(backdrop).convert("RGB"), W, H)
+        bg = _cover(_artwork(backdrop), W, H)
         bg = Image.blend(bg, bg.convert("L").convert("RGB"), 0.35)
         if TINTS[tint_level]:
             bg = Image.blend(bg, Image.new("RGB", (W, H), tint), TINTS[tint_level])
@@ -326,50 +397,192 @@ def _background(backdrop, tint, shade_level="medium", tint_level="normal"):
     return Image.composite(Image.new("RGB", (W, H), (4, 2, 10)), bg, shade.resize((W, H)))
 
 
-def _fit(face, lines, start, max_w, subtitle=False):
+# the smallest each kind of text shrinks to before it's squeezed (see _squeeze); titles and subtitles always stopped at
+# 60 before, and still do whenever they fit there
+SMALLEST = {"title": 40, "subtitle": 32, "label": 28}
+TINY = 12  # text still too wide at this size has its end cut off
+
+
+def _fits(f, lines, max_w):
+    return all(f.getbbox(t)[2] <= max_w for t in lines)
+
+
+def _fit(face, lines, start, max_w, subtitle=False, least=60, smallest=60):
+    """The font at the biggest size, from start down in steps of 4, at which every line fits max_w. Text stops at
+    `least` when it fits there (titles and subtitles always came out at 60 or more, even from a smaller start), and
+    otherwise goes on down to `smallest`, where a line can still be too wide (see _squeeze)."""
+    # text grows with its size to within a few pixels, so a size the widest line at `start` says is well over the
+    # width is passed over without measuring (measuring a long line in an ornate font is slow)
+    widest = max(_font(face, start, subtitle).getbbox(t)[2] for t in lines)
+    roomy = lambda size: widest * size / start <= max_w * 1.1
     size = start
-    while size > 60:
-        f = _font(face, size, subtitle)
-        if all(f.getbbox(t)[2] <= max_w for t in lines):
-            return f
+    while size > least:
+        if roomy(size):
+            f = _font(face, size, subtitle)
+            if _fits(f, lines, max_w):
+                return f
         size -= 4
-    return _font(face, 60, subtitle)
+    size = least
+    while True:
+        if size - 4 < smallest:
+            return _font(face, size, subtitle)
+        if roomy(size):
+            f = _font(face, size, subtitle)
+            if _fits(f, lines, max_w):
+                return f
+        size -= 4
 
 
-def _x(style, font, text):
-    """Left edge of a line in the usual place: the margin, or centred when align is centre."""
-    return (W - font.getbbox(text)[2]) // 2 if style["align"] == "centre" else PAD
+def _squeeze(face, lines, f, max_w, subtitle=False):
+    """Text still too wide at its smallest size (one very long word, say), made just small enough to fit and, past
+    TINY, cut short with an ellipsis. Returns the font and the lines."""
+    widest = max(f.getbbox(t)[2] for t in lines)
+    if widest <= max_w:
+        return f, lines
+    size = max(TINY, int(f.size * max_w / widest))
+    f = _font(face, size, subtitle)
+    while size > TINY and not _fits(f, lines, max_w):
+        size -= 1
+        f = _font(face, size, subtitle)
+    end = "\u2026" if _draws(face, "\u2026") else "..."  # an ellipsis, or three dots in a font without one
+
+    def cut(text):
+        if f.getbbox(text)[2] <= max_w:
+            return text
+        most, least = len(text), 0  # the most characters that fit with the ellipsis after them
+        while least < most:
+            mid = (least + most + 1) // 2
+            if f.getbbox(text[:mid].rstrip() + end)[2] <= max_w:
+                least = mid
+            else:
+                most = mid - 1
+        return text[:least].rstrip() + end
+    return f, [cut(t) for t in lines]
 
 
-def _moved_x(style, width, block_w, anchor):
-    """Left edge of a line in a block moved to `anchor` (a fraction across), kept inside the poster."""
+def _wrap(face, line, size):
+    """A one-line title too long for the poster, split onto two lines at the space that leaves the narrower widest
+    line."""
+    f = _font(face, size)
+    words = line.split()
+    widths, space = [f.getlength(w) for w in words], f.getlength(" ")
+    best = None
+    for i in range(1, len(words)):
+        widest = max(sum(widths[:i]) + space * (i - 1), sum(widths[i:]) + space * (len(words) - i - 1))
+        if best is None or widest < best[0]:
+            best = (widest, [" ".join(words[:i]), " ".join(words[i:])])
+    return best[1] if best else [line]
+
+
+def _fit_title(face, lines, start, max_w):
+    """The title's font and lines. It shrinks to fit, down to 60, as it always has. A one-line title that still
+    doesn't fit goes onto two lines at its best space, and any title that still doesn't shrinks on below 60."""
+    f = _fit(face, lines, start, max_w)
+    if _fits(f, lines, max_w):
+        return f, lines
+    if len(lines) == 1:
+        lines = _wrap(face, lines[0], start)
+    f = _fit(face, lines, start, max_w, smallest=SMALLEST["title"])
+    return _squeeze(face, lines, f, max_w)
+
+
+def _title_text(style, title, subtitle):
+    """The title's and subtitle's fonts and lines, fitted to the poster: (title font, lines, subtitle font or None,
+    lines). The title and subtitle are already in their case."""
+    face = style.get("font", "poppins")
+    max_w = W - 2 * PAD
+    size = style.get("title_size", 1.0) * FACES[face][3]
+    tf, title_lines = _fit_title(face, title.split("\n"), round(150 * size), max_w)
+    sub_lines = subtitle.split("\n") if subtitle else []
+    sf = None
+    if sub_lines:
+        start = min(tf.size, round(132 * size))
+        # a title that had to go below 60 takes its subtitle down with it, rather than the other way round
+        sf = _fit(face, sub_lines, start, max_w, True, least=60 if tf.size >= 60 else start,
+                  smallest=SMALLEST["subtitle"])
+        sf, sub_lines = _squeeze(face, sub_lines, sf, max_w, subtitle=True)
+    return tf, title_lines, sf, sub_lines
+
+
+def _service_text(style, subtitle, name):
+    """A streaming poster's subtitle and the service's name (drawn when there's no logo), fitted: (subtitle font,
+    subtitle, name font, name). The subtitle is already in its case."""
+    face = style.get("font", "poppins")
+    max_w, scale = W - 2 * PAD, FACES[face][3]
+    start = round(150 * scale)
+    f = _fit(face, [subtitle], start, max_w, least=start, smallest=SMALLEST["title"])
+    f, (subtitle,) = _squeeze(face, [subtitle], f, max_w)
+    nf = _fit(face, [name], round(170 * scale), max_w, smallest=SMALLEST["title"])
+    nf, (name,) = _squeeze(face, [name], nf, max_w)
+    return f, subtitle, nf, name
+
+
+def text_fixes(label, title, subtitle=None, style=None, logo=None):
+    """How this poster's text comes out differently from posters drawn before these fixes, for its design record, so
+    one drawn then is drawn again: "letters" when it's now in Noto Sans (some letters were boxes) and "fits" when
+    it's now wrapped or shrunk further (it ran off the poster). Empty when it comes out as it always has. logo: for
+    a streaming poster, whether its logo is drawn (rather than the service's name); None for any other poster."""
+    style = style or STYLE
+    upper = (lambda t: t.upper() if t else t) if style.get("case") == "upper" else (lambda t: t)
+    name = title.replace("\n", " ")
+    fixes = []
+    if logo is None:
+        style = _with_font(style, label, title, subtitle)
+        tf, title_lines, sf, sub_lines = _title_text(style, upper(title), upper(subtitle))
+        fits = tf.size < 60 or title_lines != upper(title).split("\n") or (sf and sf.size < 60) or \
+            (subtitle and sub_lines != upper(subtitle).split("\n"))
+    else:
+        style = _with_font({k: v for k, v in style.items() if k not in LAYOUT}, label, subtitle, name)
+        f, sub, nf, fitted = _service_text(style, upper(subtitle), name)
+        fits = f.size < round(150 * FACES[style.get("font", "poppins")][3]) or sub != upper(subtitle) or \
+            (not logo and (nf.size < 60 or fitted != name))
+    face = style.get("font", "poppins")
+    if face == FALLBACK:
+        fixes.append("letters")
+    place = _label_place(style, label)
+    if fits or (place and (place[1].size < round(66 * style.get("label_size", 1.0) * FACES[face][3])
+                           or place[0] != upper(label))):
+        fixes.append("fits")
+    return fixes
+
+
+def _x(style, width):
+    """Left edge of a line `width` wide in the usual place: the margin, or centred when align is centre."""
+    return (W - width) // 2 if style["align"] == "centre" else PAD
+
+
+def _moved_x(style, width, block_w, anchor, over=0):
+    """Left edge of a line in a block moved to `anchor` (a fraction across), kept inside the poster. `over` is how
+    far any letter reaches left of where its line starts (Cinzel's N does), so that stays on the poster too."""
     if style["align"] == "centre":
-        centre = min(max(anchor * W, block_w / 2), W - block_w / 2)
+        centre = min(max(anchor * W, block_w / 2 + over), W - block_w / 2)
         return round(centre - width / 2)
-    return round(min(max(anchor * W, 0), W - block_w))
+    return round(min(max(anchor * W, over), W - block_w))
 
 
 def _label_place(style, label):
-    """Where the label goes: (text, font, x, y), or None when it is switched off."""
+    """Where the label goes: (text, font, x, y), or None when it is switched off. A long label shrinks to fit."""
     if not style["label"]:
         return None
     face = style.get("font", "poppins")
-    f = _font(face, round(66 * style.get("label_size", 1.0) * FONTS[face][3]))
     label = label.upper() if style["case"] == "upper" else label
+    start = round(66 * style.get("label_size", 1.0) * FACES[face][3])
+    f = _fit(face, [label], start, W - 2 * PAD, least=start, smallest=SMALLEST["label"])
+    f, (label,) = _squeeze(face, [label], f, W - 2 * PAD)
     box = f.getbbox(label)
     moved = style.get("label_position")
     if moved:
-        return label, f, _moved_x(style, box[2], box[2], moved[0]), round(min(max(moved[1] * H, 0), H - box[3]))
-    return label, f, _x(style, f, label), PAD
+        x = _moved_x(style, box[2], box[2], moved[0], max(0, -box[0]))
+        return label, f, x, round(min(max(moved[1] * H, 0), H - box[3]))
+    return label, f, _x(style, box[2]), PAD
 
 
-def _label(draw, style, label, accent):
+def _label(draw, place, colour):
     """Draw the label; its box (left, top, right, bottom) in pixels, or None when it is switched off."""
-    place = _label_place(style, label)
     if not place:
         return None
     text, f, x, y = place
-    draw.text((x, y), text, font=f, fill=_text_colour(style["label_colour"], accent))
+    draw.text((x, y), text, font=f, fill=colour)
     box = f.getbbox(text)
     return (x, y, x + box[2], y + box[3])
 
@@ -385,6 +598,86 @@ def _shadow(img, parts):
     img.paste((0, 0, 0), (0, 0), mask)
 
 
+# text that's hard to read on its artwork, a contrast below TRIGGER (as WCAG measures it, from 1 to 21), gets the
+# artwork behind it darkened until it reaches READ. Artwork with the usual shading never comes near it.
+TRIGGER, READ = 2.0, 3.0
+MOST_DARKENING = 0.85
+_LINEAR = [v / 255 / 12.92 if v <= 10 else ((v / 255 + 0.055) / 1.055) ** 2.4 for v in range(256)]
+
+
+def _luminance(colour):
+    """How bright a colour looks, from 0 (black) to 1 (white): WCAG's relative luminance."""
+    return 0.2126 * _LINEAR[colour[0]] + 0.7152 * _LINEAR[colour[1]] + 0.0722 * _LINEAR[colour[2]]
+
+
+def _contrast(a, b):
+    return (max(a, b) + 0.05) / (min(a, b) + 0.05)
+
+
+def _behind(img, box):
+    """The luminance of the artwork in a box: the level a quarter of it is brighter than, so a bright patch behind
+    part of the text counts."""
+    counts = img.crop(box).convert("L").histogram()
+    seen, quarter = 0, sum(counts) * 0.75
+    for level, n in enumerate(counts):
+        seen += n
+        if seen >= quarter:
+            return _LINEAR[level]
+    return 0.0
+
+
+def _lighter(colour, need):
+    """The colour made lighter, keeping its hue, until its luminance reaches need (or it's white)."""
+    h, light, s = colorsys.rgb_to_hls(*(v / 255 for v in colour))
+    while _luminance(colour) < need and light < 1:
+        light = min(1.0, light + 0.02)
+        colour = tuple(round(v * 255) for v in colorsys.hls_to_rgb(h, light, s))
+    return colour
+
+
+def _readable(img, groups):
+    """Make text readable on the artwork behind it. groups: (lines, colours), lines being [(text, font, x, y)] and
+    colours what they're drawn in (both ends of a gradient). Where the artwork is too bright for a group, it's
+    darkened under those lines, softly and only as much as they need. A text colour too dark to read even on black (a
+    near-black accent) is lightened instead, keeping its hue. Returns each group's colours, and whether it was helped."""
+    out, helped = [], []
+    for lines, colours in groups:
+        boxes = []
+        for t, f, x, y in lines:  # where each line's letters are, on the poster
+            b = f.getbbox(t)
+            boxes.append((max(0, x + b[0]), max(0, y + b[1]), min(W, x + b[2]), min(H, y + b[3])))
+        lines = [(line, box) for line, box in zip(lines, boxes) if box[0] < box[2] and box[1] < box[3]]
+        behind = [_behind(img, box) for _, box in lines]
+        text = min(_luminance(c) for c in colours)
+        if not lines or min(_contrast(text, b) for b in behind) >= TRIGGER:
+            out.append(colours)
+            helped.append(False)
+            continue
+        if text < READ * 0.05 - 0.05:  # not even black behind it would let it read
+            colours = [_lighter(c, READ * (max(behind) + 0.05) - 0.05) for c in colours]
+            text = min(_luminance(c) for c in colours)
+        # the most luminance the artwork can have behind it, aiming a little past READ as the patch's soft edge
+        # takes some of the darkening back
+        target = max(0.0, (text + 0.05) / (READ * 1.1) - 0.05)
+        darken = sorted(((min(MOST_DARKENING, 1 - (target / b) ** (1 / 2.2)), line, box)
+                         for (line, box), b in zip(lines, behind) if b > target), key=lambda d: d[0])
+        if darken:
+            # one soft patch as wide as the group, darker where a line needs more; it runs off the edge of the poster
+            # when the text is near it, rather than leaving a light strip
+            mask = Image.new("L", img.size, 0)
+            draw = ImageDraw.Draw(mask)
+            size = max(line[1].size for _, line, _ in darken)
+            pad = round(size * 0.5)
+            left, right = min(box[0] for _, box in lines) - pad, max(box[2] for _, box in lines) + pad
+            left, right = -pad if left < PAD else left, W + pad if right > W - PAD else right
+            for amount, line, box in darken:  # the most darkening wins where lines' patches overlap
+                draw.rectangle((left, box[1] - pad, right, box[3] + pad), fill=round(255 * amount))
+            img.paste((4, 2, 10), (0, 0), mask.filter(ImageFilter.GaussianBlur(max(6, size // 3))))
+        out.append(colours)
+        helped.append(True)
+    return out, helped
+
+
 def _fraction(box):
     return [round(box[0] / W, 4), round(box[1] / H, 4), round(box[2] / W, 4), round(box[3] / H, 4)] if box else None
 
@@ -396,51 +689,52 @@ def poster_image(label, title, subtitle=None, accent="purple", backdrop=None, st
     c1, c2, tint = accent_colours(accent if style["accent"] == "auto" else style["accent"])
     if style["case"] == "upper":
         title, subtitle = title.upper(), subtitle.upper() if subtitle else subtitle
-    title_lines = title.split("\n")
-    sub_lines = subtitle.split("\n") if subtitle else []
-    max_w = W - 2 * PAD
-    face = style.get("font", "poppins")
-    scale, leading = FONTS[face][3:]
-    size = style.get("title_size", 1.0) * scale
-    tf = _fit(face, title_lines, round(150 * size), max_w)
-    sf = _fit(face, sub_lines, min(tf.size, round(132 * size)), max_w, subtitle=True) if sub_lines else None
+    leading = FACES[style.get("font", "poppins")][4]
+    tf, title_lines, sf, sub_lines = _title_text(style, title, subtitle)
     line_h = lambda f: int(f.size * leading)
     total = len(title_lines) * line_h(tf) + (len(sub_lines) * line_h(sf) if sf else 0)
     lines = [(t, tf) for t in title_lines] + [(t, sf) for t in sub_lines]
-    block_w = max(f.getbbox(t)[2] for t, f in lines)
+    boxes = [f.getbbox(t) for t, f in lines]
+    block_w = max(box[2] for box in boxes)
     moved = style.get("title_position")
     if moved:
+        over = max(0, -min(box[0] for box in boxes))
         y = round(min(max(moved[1] * H - total, 0), H - total))
-        place = lambda f, t: _moved_x(style, f.getbbox(t)[2], block_w, moved[0])
+        xs = [_moved_x(style, box[2], block_w, moved[0], over) for box in boxes]
     else:
         y = H - PAD - 30 - total
-        place = lambda f, t: _x(style, f, t)
-    title_box = (min(place(f, t) for t, f in lines), y, max(place(f, t) + f.getbbox(t)[2] for t, f in lines), y + total)
+        xs = [_x(style, box[2]) for box in boxes]
+    title_box = (min(xs), y, max(x + box[2] for x, box in zip(xs, boxes)), y + total)
+    placed = []
+    for (t, f), x in zip(lines, xs):
+        placed.append((t, f, x, y))
+        y += line_h(f)
+    title_part, sub_part = placed[:len(title_lines)], placed[len(title_lines):]
 
     img = _background(backdrop, tint, style["shade"], style["tint"])
+    label_place = _label_place(style, label)
+    gradient = style["title"] == "gradient"
+    title_colours = [c1, c2] if gradient else [c1] if style["title"] == "solid" else [(255, 255, 255)]
+    colours, helped = _readable(img, [([label_place] if label_place else [], [_text_colour(style["label_colour"], c1)]),
+                                      (title_part, title_colours),
+                                      (sub_part, [_text_colour(style["subtitle_colour"], c1)])])
     shadow = style.get("text_shadow", "auto")
     parts = []
-    if shadow == "on" or (shadow == "auto" and style.get("label_position")):
-        parts += [_label_place(style, label)] if style["label"] else []
-    if shadow == "on" or (shadow == "auto" and moved):
-        at = y
-        for t, f in lines:
-            parts.append((t, f, place(f, t), at))
-            at += line_h(f)
+    if label_place and (shadow == "on" or (shadow == "auto" and (style.get("label_position") or helped[0]))):
+        parts.append(label_place)
+    if shadow == "on" or (shadow == "auto" and (moved or helped[1] or helped[2])):
+        parts += placed
     if parts:
         _shadow(img, parts)
     draw = ImageDraw.Draw(img)
-    label_box = _label(draw, style, label, c1)
-    for t in title_lines:
-        if style["title"] == "gradient":
-            _gradient_text(img, (place(tf, t), y), t, tf, c1, c2)
+    label_box = _label(draw, label_place, colours[0][0])
+    for t, f, x, at in title_part:
+        if gradient:
+            _gradient_text(img, (x, at), t, f, *colours[1])
         else:
-            draw.text((place(tf, t), y), t, font=tf, fill=c1 if style["title"] == "solid" else (255, 255, 255))
-        y += line_h(tf)
-    sub_colour = _text_colour(style["subtitle_colour"], c1)
-    for t in sub_lines:
-        draw.text((place(sf, t), y), t, font=sf, fill=sub_colour)
-        y += line_h(sf)
+            draw.text((x, at), t, font=f, fill=colours[1][0])
+    for t, f, x, at in sub_part:
+        draw.text((x, at), t, font=f, fill=colours[2][0])
     return img, {"label": _fraction(label_box), "title": _fraction(title_box)}
 
 
@@ -472,12 +766,18 @@ def _logo_image(path, key, white=False):
     """Load a service logo; grey or black parts become white so the logo reads on a dark poster. white=True makes
     the whole logo white."""
     logo = Image.open(path).convert("RGBA")
-    px = logo.load()
-    for y in range(logo.height):
-        for x in range(logo.width):
-            r, g, b, a = px[x, y]
-            if a and max(r, g, b) - min(r, g, b) < 40 and (r + g + b) / 3 < 140:
-                px[x, y] = (255, 255, 255, a)
+    r, g, b, a = logo.split()
+    rgb = Image.merge("RGB", (r, g, b))
+    # the grey or black parts, worked out for the whole logo at once: seen (not see-through), colours less than 40
+    # apart, and averaging under 140 (r + g + b at most 419, which the matrix below turns into 0)
+    seen = a.point(lambda v: 255 if v else 0)
+    spread = ImageChops.subtract(ImageChops.lighter(ImageChops.lighter(r, g), b),
+                                 ImageChops.darker(ImageChops.darker(r, g), b))
+    dark = rgb.convert("L", (1, 1, 1, -419))
+    turn = ImageChops.multiply(ImageChops.multiply(seen, spread.point(lambda v: 255 if v < 40 else 0)),
+                               dark.point(lambda v: 255 if v == 0 else 0))
+    rgb.paste((255, 255, 255), (0, 0), turn)
+    logo = Image.merge("RGBA", rgb.split() + (a,))
     box = logo.getbbox()
     logo = logo.crop(box) if box else logo
     if white:
@@ -496,6 +796,17 @@ def _logo_image(path, key, white=False):
     return logo
 
 
+def logo_file(logos_dir, logo_key, style=None):
+    """The downloaded logo a streaming poster shows: another version of it when one is chosen and has been
+    downloaded, otherwise the standard one, or None when that hasn't been downloaded (the poster shows the name)."""
+    version = (style or STYLE).get("logo", "standard")
+    other = os.path.join(logos_dir, f"{logo_key}--{version}.png")
+    if version != "standard" and os.path.exists(other):
+        return other
+    path = os.path.join(logos_dir, logo_key + ".png")
+    return path if os.path.exists(path) else None
+
+
 def make_logo_poster(out_path, label, logo_key, logos_dir, subtitle="Popular", backdrop=None, fallback_title=None,
                      style=None):
     """Service poster. If the logo file has not been downloaded (`cinesets logos`), the service name is drawn instead.
@@ -509,43 +820,40 @@ def logo_poster_image(label, logo_key, logos_dir, subtitle="Popular", backdrop=N
     """The service poster as an image, plus where its text sits (see poster_image). Text cannot be moved here."""
     style = _with_font({k: v for k, v in (style or STYLE).items() if k not in LAYOUT}, label, subtitle,
                        (fallback_title or logo_key).replace("\n", " "))
-    face = style.get("font", "poppins")
-    scale, leading = FONTS[face][3:]
+    leading = FACES[style.get("font", "poppins")][4]
     colour, tint = SERVICES.get(logo_key, ((255, 255, 255), (16, 14, 22)))
     if backdrop:
-        img = _cover(Image.open(backdrop).convert("RGB"), W, H).filter(ImageFilter.GaussianBlur(18))
+        img = _cover(_artwork(backdrop), W, H).filter(ImageFilter.GaussianBlur(18))
         img = Image.blend(img, Image.new("RGB", (W, H), tint), 0.8)
     else:
         img = Image.new("RGB", (W, H), tint)
     glow = Image.new("L", (W, H), 0)
     ImageDraw.Draw(glow).ellipse((W * 0.02, H * 0.2, W * 0.98, H * 0.64), fill=255)
     img.paste(tuple(int(c * 0.6) for c in colour), (0, 0), glow.filter(ImageFilter.GaussianBlur(170)).point(lambda v: int(v * 0.32)))
+    label_place = _label_place(style, label)
+    subtitle = subtitle.upper() if style["case"] == "upper" else subtitle
+    f, subtitle, nf, name = _service_text(style, subtitle, (fallback_title or logo_key).replace("\n", " "))
+    line_h = int(f.size * leading)
+    x, y = _x(style, f.getbbox(subtitle)[2]), H - PAD - 30 - line_h
+    colours, _ = _readable(img, [([label_place] if label_place else [], [_text_colour(style["label_colour"], colour)]),
+                                 ([(subtitle, f, x, y)], [_text_colour(style["subtitle_colour"], colour)])])
     draw = ImageDraw.Draw(img)
-    label_box = _label(draw, style, label, colour)
+    label_box = _label(draw, label_place, colours[0][0])
 
     white = style.get("logo_colour") == "white"
-    path = os.path.join(logos_dir, logo_key + ".png")
-    other = os.path.join(logos_dir, f"{logo_key}--{style.get('logo', 'standard')}.png")
-    if style.get("logo", "standard") != "standard" and os.path.exists(other):
-        path = other  # another version of the logo, when the service has one and it has been downloaded
-    if os.path.exists(path):
+    path = logo_file(logos_dir, logo_key, style)
+    if path:
         logo = _logo_image(path, logo_key, white)
-        max_w, max_h = W - 2 * PAD - 20, 360
-        r = min(max_w / logo.width, max_h / logo.height)
+        most_w, most_h = W - 2 * PAD - 20, 360
+        r = min(most_w / logo.width, most_h / logo.height)
         logo = logo.resize((int(logo.width * r), int(logo.height * r)), Image.LANCZOS)
         shadow = logo.split()[3].filter(ImageFilter.GaussianBlur(14)).point(lambda v: int(v * 0.6))
-        x, y = (W - logo.width) // 2, int(H * 0.42) - logo.height // 2
-        img.paste((0, 0, 0), (x + 4, y + 10), shadow)
-        img.paste(logo, (x, y), logo)
+        lx, ly = (W - logo.width) // 2, int(H * 0.42) - logo.height // 2
+        img.paste((0, 0, 0), (lx + 4, ly + 10), shadow)
+        img.paste(logo, (lx, ly), logo)
     else:
-        name = (fallback_title or logo_key).replace("\n", " ")
-        f = _fit(face, [name], round(170 * scale), W - 2 * PAD)
-        draw.text(((W - f.getbbox(name)[2]) // 2, int(H * 0.42) - f.size // 2), name, font=f,
+        draw.text(((W - nf.getbbox(name)[2]) // 2, int(H * 0.42) - nf.size // 2), name, font=nf,
                   fill=(255, 255, 255) if white else colour)
 
-    f = _font(face, round(150 * scale))
-    subtitle = subtitle.upper() if style["case"] == "upper" else subtitle
-    line_h = int(f.size * leading)
-    x, y = _x(style, f, subtitle), H - PAD - 30 - line_h
-    draw.text((x, y), subtitle, font=f, fill=_text_colour(style["subtitle_colour"], colour))
+    draw.text((x, y), subtitle, font=f, fill=colours[1][0])
     return img, {"label": _fraction(label_box), "title": _fraction((x, y, x + f.getbbox(subtitle)[2], y + line_h))}
