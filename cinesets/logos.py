@@ -23,6 +23,11 @@ FILES = {
     "paramount": "File:Paramount+ logo.svg",
     "peacock": "File:NBCUniversal Peacock Logo.svg",
     "stan": "File:Stan logo.svg",
+    "binge": "File:Binge logo.svg",
+    "iplayer": "File:BBC iPlayer 2021 (Alt).svg",
+    "channel4": "File:Channel 4 2022.svg",
+    "crunchyroll": "File:Crunchyroll 2024.svg",
+    "shudder": "File:Shudder 2017.svg",
 }
 # other logos a streaming poster can use instead: "alt" (another version of the logo) and "icon" (the mark alone)
 VARIANTS = {
@@ -34,6 +39,10 @@ VARIANTS = {
     "apple": {"alt": ("Apple TV", "File:Apple TV logo.svg")},
     "hulu": {"alt": ("Hulu 2018", "File:Hulu logo (2018).svg")},
     "paramount": {"alt": ("Paramount+ stacked", "File:Paramount Plus.svg")},
+    "iplayer": {"alt": ("iPlayer symbol and wordmark", "File:BBC iPlayer (2021).svg"),
+                "icon": ("iPlayer symbol", "File:BBC iPlayer 2021 (symbol).svg")},
+    "crunchyroll": {"alt": ("Crunchyroll stacked", "File:Crunchyroll 2024 stacked.svg"),
+                    "icon": ("Crunchyroll symbol", "File:Cib-crunchyroll (CoreUI Icons v1.0.0) orange.svg")},
 }
 
 
