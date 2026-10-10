@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.1](https://github.com/blurbery/cinesets/compare/v1.6.0...v1.6.1) (2026-10-10)
+
+
+### Documentation
+
+* **readme:** a link to the Discord ([2feecec](https://github.com/blurbery/cinesets/commit/2feecec06153189cf8e009155506c7724ce8cc85))
+
 ## [1.6.0](https://github.com/blurbery/cinesets/compare/v1.5.0...v1.6.0) (2026-10-09)
 
 
