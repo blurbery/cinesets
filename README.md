@@ -11,6 +11,7 @@
   <a href="https://github.com/blurbery/cinesets/actions/workflows/ci.yml"><img src="https://github.com/blurbery/cinesets/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://github.com/blurbery/cinesets/releases/latest"><img src="https://img.shields.io/github/v/release/blurbery/cinesets?label=release" alt="Latest release"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/licence-AGPL--3.0--or--later-blue" alt="Licence: AGPL-3.0-or-later"></a>
+  <a href="https://discord.gg/3jcxk3vJ4X"><img src="https://img.shields.io/badge/discord-join-5865F2?logo=discord&logoColor=white" alt="Join the Discord"></a>
   <a href="https://github.com/sponsors/blurbery"><img src="https://img.shields.io/badge/sponsor-%E2%9D%A4-ea4aaa?logo=githubsponsors&logoColor=white" alt="Sponsor blurbery"></a>
 </p>
 
@@ -20,6 +21,7 @@
   <a href="docs/screenshots.md"><b>Dashboard tour</b></a> ·
   <a href="docs/architecture.md"><b>How it fits together</b></a> ·
   <a href="https://github.com/blurbery/cinesets/releases"><b>Releases</b></a> ·
+  <a href="https://discord.gg/3jcxk3vJ4X"><b>Discord</b></a> ·
   <a href="https://github.com/sponsors/blurbery"><b>♥ Sponsor</b></a>
 </p>
 
@@ -194,6 +196,8 @@ If CineSets is useful to you, you can [sponsor me on GitHub](https://github.com/
 Found a bug or got an idea? [Open an issue](https://github.com/blurbery/cinesets/issues/new/choose). PRs are
 welcome too, just have a read of [CONTRIBUTING.md](CONTRIBUTING.md) first. Using AI is fine, but say so in the
 PR.
+
+Got a question, or just want to chat? Come and say hi on [Discord](https://discord.gg/3jcxk3vJ4X).
 
 > [!CAUTION]
 > Security problems go through [SECURITY.md](SECURITY.md), not public issues.
