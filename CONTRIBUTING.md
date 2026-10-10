@@ -37,8 +37,8 @@ venv/bin/ruff check . && shellcheck install.sh run.sh docker-entrypoint.sh
 ```
 
 `constraints.txt` holds the dependency versions CineSets is tested with, and install.sh, the Docker image and CI all
-install those. `requirements.txt` keeps the oldest versions it works with. Dependabot proposes newer versions every
-week. The **Lint** check runs ruff (the rules in `ruff.toml`) and shellcheck, as above.
+install those. `requirements.txt` keeps the oldest versions it works with. Newer versions go into `constraints.txt`
+by hand, and CI tests them. The **Lint** check runs ruff (the rules in `ruff.toml`) and shellcheck, as above.
 
 The unit tests use fake servers (`tests/conftest.py` for Emby and Jellyfin, `tests/test_silo.py` for Silo), so
 you don't need a real server to run them. To work on the dashboard, `venv/bin/python -m cinesets web --demo` runs
@@ -155,11 +155,11 @@ and so do PRs with AI use that wasn't disclosed.
 
 ## Releases
 
-Releases are automatic and follow [semantic versioning](https://semver.org). Each merge updates a release PR
-that bumps the version and adds to [CHANGELOG.md](CHANGELOG.md). When I merge that, the version gets tagged,
-the notes go up on [Releases](https://github.com/blurbery/cinesets/releases), and the Docker image
-`ghcr.io/blurbery/cinesets` is built from the tag for amd64 and arm64 and published as `1.5.0`, `1.5`, `1` and
-`latest` (for version 1.5.0).
+Releases follow [semantic versioning](https://semver.org). When I want one, I run the **Release** workflow by hand
+(Actions, Release, Run workflow) and it opens a release PR that bumps the version and adds to
+[CHANGELOG.md](CHANGELOG.md). When I merge that, the version gets tagged, the notes go up on
+[Releases](https://github.com/blurbery/cinesets/releases), and the Docker image `ghcr.io/blurbery/cinesets` is built
+from the tag for amd64 and arm64 and published as `1.5.0`, `1.5`, `1` and `latest` (for version 1.5.0).
 
 > [!NOTE]
 > You don't need to touch the version number or the changelog.
@@ -168,8 +168,8 @@ the notes go up on [Releases](https://github.com/blurbery/cinesets/releases), an
 <summary><b>Merging a release PR (for the maintainer)</b></summary>
 
 GitHub doesn't start the checks on a PR made by the release workflow until someone who can write to the repository
-presses **Approve workflows to run** in its merge box. Every merge to `main` updates the release PR and asks again,
-so press it just before merging, wait for the checks to pass, then merge.
+presses **Approve workflows to run** in its merge box. Running the workflow again updates the release PR and asks
+again, so press it just before merging, wait for the checks to pass, then merge.
 
 To skip that step, give the release workflow a GitHub App of its own:
 
@@ -179,7 +179,7 @@ To skip that step, give the release workflow a GitHub App of its own:
 3. In this repository's Settings, Secrets and variables, Actions, add a variable `RELEASE_APP_CLIENT_ID` holding the
    App's client ID and a secret `RELEASE_APP_PRIVATE_KEY` holding the whole private key file.
 
-From the next merge on, the App makes the release PR and its checks start by themselves. Delete the variable to go
+From the next run on, the App makes the release PR and its checks start by themselves. Delete the variable to go
 back.
 
 To change the notes of a PR that's merged but not released yet, edit its release notes box, then run the **Release**
@@ -190,9 +190,8 @@ it private. If so, make it public once: on GitHub, Your profile, Packages, cines
 visibility. Later releases keep that setting.
 
 Every Monday, **Newest servers** tests CineSets against the newest Jellyfin, Emby (release and beta) and Silo, and
-**MDBList lists** checks every list in `collections.yml`. GitHub emails you when a scheduled run fails. Dependabot's
-PRs are titled `deps: ...` (pip and Docker) or `ci: ...` (actions), so each title works as its release notes line
-as it is. The title check skips them, as it does the release PR.
+**MDBList lists** checks every list in `collections.yml`. GitHub emails you when a scheduled run fails. The title
+check skips the release PR, as the workflow makes it rather than a person.
 
 </details>
 

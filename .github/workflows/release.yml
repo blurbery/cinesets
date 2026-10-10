@@ -1,11 +1,12 @@
 # CineSets by blurbery (https://github.com/blurbery/cinesets). SPDX-License-Identifier: AGPL-3.0-or-later
 # Additional terms under AGPL-3.0 section 7 apply: see NOTICE.
 #
-# Semantic versioning from Conventional Commit titles. Every push to main updates a release pull request
-# (version bump in cinesets/__init__.py and CHANGELOG.md). Merging that pull request tags the version and
-# posts the notes to GitHub Releases. Only the maintainer can merge to main, so only the maintainer releases.
+# Semantic versioning from Conventional Commit titles. Pushes to main don't open a release pull request: run this
+# workflow by hand (Actions, Release, Run workflow) to open or update one (version bump in cinesets/__init__.py and
+# CHANGELOG.md). Merging it is a push to main, and that run tags the version and posts the notes to GitHub
+# Releases. Only the maintainer can merge to main, so only the maintainer releases.
 # Each merged pull request gives one line in the notes from its title, or one per line of its release notes box.
-# After changing a merged pull request's box, run this workflow by hand so the release pull request catches up.
+# After changing a merged pull request's box, run this workflow by hand again so the release pull request catches up.
 # Each release also publishes the Docker image ghcr.io/blurbery/cinesets for amd64 and arm64, tagged with the
 # version (1.5.0), its minor and major versions (1.5 and 1) and latest.
 name: Release
@@ -55,6 +56,9 @@ jobs:
           token: ${{ steps.app.outputs.token || github.token }}
           config-file: release-please-config.json
           manifest-file: .release-please-manifest.json
+          # Only a run by hand opens or updates the release pull request. A push to main only tags and publishes a
+          # release pull request that has just been merged.
+          skip-github-pull-request: ${{ github.event_name == 'push' }}
       - name: Summary
         if: steps.release.outputs.release_created == 'true'
         env:
