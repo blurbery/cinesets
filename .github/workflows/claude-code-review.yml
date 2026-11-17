@@ -58,6 +58,23 @@ jobs:
         if: env.HAS_CREDENTIALS == 'true' && steps.earlier.outputs.reviewed != 'true'
         with:
           fetch-depth: 1
+      - name: TEMP check the workspace id (prints no secret)
+        if: env.HAS_CREDENTIALS == 'true'
+        env:
+          KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          WS: ${{ secrets.ANTHROPIC_WORKSPACE_ID }}
+        run: |
+          echo "id length: ${#WS}"
+          case "$WS" in wrkspc_*) echo "starts with wrkspc_: yes" ;; *) echo "starts with wrkspc_: no" ;; esac
+          if printf '%s' "$WS" | grep -q '[[:space:]]'; then echo "has whitespace: yes"; else echo "has whitespace: no"; fi
+          if printf '%s' "$WS" | grep -Eq '^wrkspc_[A-Za-z0-9]+$'; then echo "shape ok: yes"; else echo "shape ok: no"; fi
+          body='{"model":"claude-sonnet-5-5","messages":[{"role":"user","content":"hi"}]}'
+          for h in with without; do
+            if [ "$h" = with ]; then extra=(-H "anthropic-workspace-id: $WS"); else extra=(); fi
+            code=$(curl -s -o "$RUNNER_TEMP/out.json" -w '%{http_code}' https://api.anthropic.com/v1/messages/count_tokens \
+              -H "x-api-key: $KEY" -H "anthropic-version: 2023-06-01" -H "content-type: application/json" "${extra[@]}" -d "$body")
+            echo "count_tokens $h the header: HTTP $code $(jq -c '.error // {ok: true}' "$RUNNER_TEMP/out.json" | cut -c1-200)"
+          done
       - uses: anthropics/claude-code-action@1d6de8cb0c237e7c15e9e1bdf973826ebae490cc # v1.0.248
         id: review
         if: env.HAS_CREDENTIALS == 'true' && steps.earlier.outputs.reviewed != 'true'
