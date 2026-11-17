@@ -93,9 +93,9 @@ jobs:
         server:
           - {name: "Jellyfin 10.10", kind: jellyfin, image: "jellyfin/jellyfin:10.10.7"}
           - {name: "Jellyfin 10.11", kind: jellyfin, image: "jellyfin/jellyfin:10.11.11"}
-          - {name: "Jellyfin 12.2", kind: jellyfin, image: "jellyfin/jellyfin:12.2"}
+          - {name: "Jellyfin 12.4", kind: jellyfin, image: "jellyfin/jellyfin:12.4"}
           - {name: "Emby 4.9", kind: emby, image: "emby/embyserver:4.9.5.0"}
-          - {name: "Emby 4.10", kind: emby, image: "emby/embyserver:4.10.1.0"}
+          - {name: "Emby 4.10", kind: emby, image: "emby/embyserver:4.10.2.0"}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -124,7 +124,7 @@ jobs:
       fail-fast: false
       matrix:
         silo:
-          - {name: "build 1144", image: "ghcr.io/silo-server/silo-server:build-1144"}
+          - {name: "build 2519", image: "ghcr.io/silo-server/silo-server:build-2519"}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:

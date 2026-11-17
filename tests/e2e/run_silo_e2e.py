@@ -11,7 +11,7 @@ Makes the first administrator and an API key, adds a Movies and a TV Shows libra
 folder names, and .nfo files give them genres, their other ids and artwork, so nothing depends on online lookups),
 then runs `cinesets setup` as a new user would, given Silo's Jellyfin-compatible port. Then it checks that CineSets
 creates manual library collections matched by IMDb, TMDb and TVDB ids (one with a genre left out, one matched by a
-show's IMDb id, which only Silo's item details have), with the right titles, libraries, description, display order,
+show's IMDb id, which older Silo builds give only in item details), with the right titles, libraries, description, display order,
 page order and poster. It shrinks and renames them, changes nothing on a repeat run, takes them back with adopt
 after losing its record, refuses to touch a collection it did not create and removes only its own.
 """
