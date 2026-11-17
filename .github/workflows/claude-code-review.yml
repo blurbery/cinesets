@@ -64,7 +64,12 @@ jobs:
           KEY: ${{ secrets.ANTHROPIC_API_KEY }}
           WS: ${{ secrets.ANTHROPIC_WORKSPACE_ID }}
         run: |
-          echo "id length: ${#WS}"
+          echo "id length: ${#WS}, key length: ${#KEY}"
+          [ "$WS" = "$KEY" ] && echo "id is the same as the key: yes" || echo "id is the same as the key: no"
+          for v in KEY WS; do
+            val="${!v}"
+            for pre in sk-ant-usr- sk-ant-api sk-ant-oat wrkspc_; do case "$val" in "$pre"*) echo "$v starts with $pre";; esac; done
+          done
           case "$WS" in wrkspc_*) echo "starts with wrkspc_: yes" ;; *) echo "starts with wrkspc_: no" ;; esac
           if printf '%s' "$WS" | grep -q '[[:space:]]'; then echo "has whitespace: yes"; else echo "has whitespace: no"; fi
           if printf '%s' "$WS" | grep -Eq '^wrkspc_[A-Za-z0-9]+$'; then echo "shape ok: yes"; else echo "shape ok: no"; fi
