@@ -11,7 +11,8 @@ Each list is read once, from the same address CineSets reads (cinesets/lists.py)
 pause between them, and the run stops if mdblist asks it to slow down. A list fails when it is gone or private
 (mdblist answers 404 for both), answers with an error or something that isn't a list, is empty, or has none of the
 movies or shows its collection needs. Lists for charts and streaming services should follow what's new, so they
-also fail when nothing in them is recent. Lists such as "Best of the 70s" are never stale.
+also fail when nothing in them is recent. Lists such as "Best of the 70s" are never stale, and nor are the few in
+NEVER_STALE, which follow a service whose popular films are mostly older ones.
 
 Exits 0 when every list is fine, 1 when any list fails, and 2 when mdblist rate limited the run before the end.
 """
@@ -35,6 +36,9 @@ KINDS = {"movie": "movie", "movies": "movie", "show": "show", "shows": "show", "
          "series": "show"}
 # how recent the newest title has to be for groups that follow what's new: days back from today
 RECENT = {"charts": 183, "streaming": 2 * 365}
+# lists that follow a service but are never stale: refreshed every day, though the service's most watched films can
+# all be years old (ITVX's popular movies are often Harry Potter, Coraline and Dune)
+NEVER_STALE = {"harmes7/itvx-popular-movies"}
 
 
 def lists_in(paths):
@@ -62,7 +66,7 @@ def verdict(slug, rows, users, today):
         mine = [r for r in rows if isinstance(r, dict) and (kind is None or r.get("mediatype") == kind)]
         if not mine:
             return f"no {NOUN.get(kind, 'titles')} for {key}"
-        if group in RECENT:
+        if group in RECENT and slug not in NEVER_STALE:
             years = [r.get("release_year") for r in mine if isinstance(r.get("release_year"), int)]
             since = (today - datetime.timedelta(days=RECENT[group])).year
             if not years or max(years) < since:
