@@ -4,7 +4,9 @@
 # Reviews each pull request once with a single Claude Sonnet pass and posts inline comments plus a short summary.
 # Later pushes are skipped once the summary (marked <!-- claude-review -->) exists.
 # Skips drafts, bots, fork PRs (GitHub withholds secrets from them) and Markdown-only changes. Uses the
-# ANTHROPIC_API_KEY secret (a Claude API key, billed per review). Without it, the job does nothing.
+# ANTHROPIC_API_KEY secret (a Claude API key, billed per review), plus ANTHROPIC_WORKSPACE_ID for a key linked to an
+# account rather than one workspace (sk-ant-usr-...): without it the API bills no workspace and answers "Credit
+# balance is too low". Without a key, the job does nothing.
 name: Claude Code Review
 
 on:
@@ -59,6 +61,11 @@ jobs:
       - uses: anthropics/claude-code-action@1d6de8cb0c237e7c15e9e1bdf973826ebae490cc # v1.0.248
         id: review
         if: env.HAS_CREDENTIALS == 'true' && steps.earlier.outputs.reviewed != 'true'
+        env:
+          # the workspace to bill, sent as a header the way Vivid's review sends it (the action's own
+          # anthropic_workspace_id input is for workload identity federation)
+          ANTHROPIC_CUSTOM_HEADERS: >-
+            ${{ secrets.ANTHROPIC_WORKSPACE_ID != '' && format('anthropic-workspace-id: {0}', secrets.ANTHROPIC_WORKSPACE_ID) || '' }}
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
