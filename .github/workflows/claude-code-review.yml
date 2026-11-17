@@ -4,8 +4,7 @@
 # Reviews each pull request once with a single Claude Sonnet pass and posts inline comments plus a short summary.
 # Later pushes are skipped once the summary (marked <!-- claude-review -->) exists.
 # Skips drafts, bots, fork PRs (GitHub withholds secrets from them) and Markdown-only changes. Uses the
-# ANTHROPIC_API_KEY secret (an API key, billed per review), or CLAUDE_CODE_OAUTH_TOKEN (a Claude subscription token
-# from `claude setup-token`) when there's no API key. Without either, the job does nothing.
+# ANTHROPIC_API_KEY secret (a Claude API key, billed per review). Without it, the job does nothing.
 name: Claude Code Review
 
 on:
@@ -34,11 +33,11 @@ jobs:
       contents: read
       pull-requests: write
     env:
-      HAS_CREDENTIALS: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' || secrets.ANTHROPIC_API_KEY != '' }}
+      HAS_CREDENTIALS: ${{ secrets.ANTHROPIC_API_KEY != '' }}
     steps:
       - name: Skip without credentials
         if: env.HAS_CREDENTIALS != 'true'
-        run: echo "::notice::Add an ANTHROPIC_API_KEY (or CLAUDE_CODE_OAUTH_TOKEN) repository secret to turn on Claude reviews."
+        run: echo "::notice::Add an ANTHROPIC_API_KEY repository secret to turn on Claude reviews."
       - name: Check for an earlier review
         id: earlier
         if: env.HAS_CREDENTIALS == 'true'
@@ -62,7 +61,6 @@ jobs:
         if: env.HAS_CREDENTIALS == 'true' && steps.earlier.outputs.reviewed != 'true'
         with:
           anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
-          claude_code_oauth_token: ${{ secrets.ANTHROPIC_API_KEY == '' && secrets.CLAUDE_CODE_OAUTH_TOKEN || '' }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           prompt: |
             You're reviewing pull request #${{ github.event.pull_request.number }} in ${{ github.repository }}. The PR branch is checked out in the working directory.
@@ -78,8 +76,8 @@ jobs:
             --model claude-sonnet-5-5
             --max-turns 25
             --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Read,Grep,Glob"
-      # The action hides Claude's output, so a failed review only says "is_error: true". Show the reason (an expired
-      # token, a used-up plan, an unknown model) from Claude's last result, which holds no secrets.
+      # The action hides Claude's output, so a failed review only says "is_error: true". Show the reason (a revoked or
+      # wrong key, no API credit left, an unknown model) from Claude's last result, which holds no secrets.
       - name: Say why the review failed
         if: failure() && steps.review.conclusion == 'failure'
         env:
