@@ -23,7 +23,8 @@ concurrency:
 jobs:
   tests:
     name: Unit tests (Python ${{ matrix.python }})
-    runs-on: ubuntu-latest
+    # ubuntu-latest (Ubuntu 26.04) has no Python 3.9 build, so 3.9 runs on 24.04, the newest Ubuntu that has one
+    runs-on: ${{ matrix.python == '3.9' && 'ubuntu-24.04' || 'ubuntu-latest' }}
     timeout-minutes: 10
     strategy:
       fail-fast: false
