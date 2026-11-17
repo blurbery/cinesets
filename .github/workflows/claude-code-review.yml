@@ -4,8 +4,8 @@
 # Reviews each pull request once with a single Claude Sonnet pass and posts inline comments plus a short summary.
 # Later pushes are skipped once the summary (marked <!-- claude-review -->) exists.
 # Skips drafts, bots, fork PRs (GitHub withholds secrets from them) and Markdown-only changes. Uses the
-# CLAUDE_CODE_OAUTH_TOKEN secret (a Claude subscription token from `claude setup-token`), or ANTHROPIC_API_KEY when
-# that isn't set. Without either, the job does nothing.
+# ANTHROPIC_API_KEY secret (an API key, billed per review), or CLAUDE_CODE_OAUTH_TOKEN (a Claude subscription token
+# from `claude setup-token`) when there's no API key. Without either, the job does nothing.
 name: Claude Code Review
 
 on:
@@ -38,7 +38,7 @@ jobs:
     steps:
       - name: Skip without credentials
         if: env.HAS_CREDENTIALS != 'true'
-        run: echo "::notice::Add a CLAUDE_CODE_OAUTH_TOKEN (or ANTHROPIC_API_KEY) repository secret to turn on Claude reviews."
+        run: echo "::notice::Add an ANTHROPIC_API_KEY (or CLAUDE_CODE_OAUTH_TOKEN) repository secret to turn on Claude reviews."
       - name: Check for an earlier review
         id: earlier
         if: env.HAS_CREDENTIALS == 'true'
@@ -61,8 +61,8 @@ jobs:
         id: review
         if: env.HAS_CREDENTIALS == 'true' && steps.earlier.outputs.reviewed != 'true'
         with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          anthropic_api_key: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN == '' && secrets.ANTHROPIC_API_KEY || '' }}
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+          claude_code_oauth_token: ${{ secrets.ANTHROPIC_API_KEY == '' && secrets.CLAUDE_CODE_OAUTH_TOKEN || '' }}
           github_token: ${{ secrets.GITHUB_TOKEN }}
           prompt: |
             You're reviewing pull request #${{ github.event.pull_request.number }} in ${{ github.repository }}. The PR branch is checked out in the working directory.
