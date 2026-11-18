@@ -172,7 +172,8 @@ def schedule(cfg, engine, path=None):
                     flags["busy"] = False
                 if not ok and float(job["every_hours"]) * 3600 > RETRY_AFTER and not flags["stop"]:
                     print(f"   job {i + 1} didn't finish, so it is tried again in about an hour")
-                last[job_name(job)] = {"at": started, "ok": ok}
+                # a failed run's hour before trying again counts from when it ended, or a long one would retry at once
+                last[job_name(job)] = {"at": started if ok else time.time(), "ok": ok}
                 save_json(os.path.join(cfg.path("data_dir"), "schedule.json"), last)
                 if flags["stop"]:
                     raise Stopped()

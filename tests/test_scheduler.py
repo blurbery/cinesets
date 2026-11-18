@@ -229,8 +229,25 @@ def test_a_job_is_timed_from_when_it_started(make_cfg, monkeypatch):
     monkeypatch.setattr(cli.time, "time", lambda: clock[0])
 
     def slow(method, path, **kw):
-        clock[0] += 60                          # every request takes a minute
+        clock[0] += 1                           # every request takes a second
         return real(method, path, **kw)
     srv.call = slow
     run()
-    assert job_record(cfg)["at"] == 1_000_000.0 and clock[0] > 1_000_000.0 + 60
+    assert job_record(cfg) == {"at": 1_000_000.0, "ok": True} and clock[0] > 1_000_000.0 + 10
+
+
+def test_a_long_failed_job_waits_its_hour_from_when_it_ended(make_cfg, monkeypatch):
+    """Timing a failed run from its start made one that ran for over an hour due again the moment it ended."""
+    cfg, srv, run = scheduler(make_cfg, monkeypatch)
+    real, clock = srv.call, [1_000_000.0]
+    monkeypatch.setattr(cli.time, "time", lambda: clock[0])
+
+    def slow_then_down(method, path, **kw):
+        clock[0] += 2 * 3600                    # two hours in, the server goes away
+        raise ServerError("GET /Items -> 503 unavailable", 503)
+    srv.call = slow_then_down
+    run()
+    record = job_record(cfg)
+    assert record["ok"] is False and record["at"] == clock[0]
+    assert not cli.job_due(WEEKLY, record, clock[0] + 60)
+
