@@ -4,8 +4,7 @@
 # Reviews each pull request once with a single Claude Sonnet pass and posts inline comments plus a short summary.
 # Later pushes are skipped once the summary (marked <!-- claude-review -->) exists.
 # Skips drafts, bots, fork PRs (GitHub withholds secrets from them) and Markdown-only changes. Uses the
-# CLAUDE_CODE_OAUTH_TOKEN secret (a Claude subscription token from `claude setup-token`), or ANTHROPIC_API_KEY when
-# that isn't set. Without either, the job does nothing.
+# ANTHROPIC_API_KEY secret (a Claude API key, billed per review). Without it, the job does nothing.
 name: Claude Code Review
 
 on:
@@ -34,11 +33,11 @@ jobs:
       contents: read
       pull-requests: write
     env:
-      HAS_CREDENTIALS: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN != '' || secrets.ANTHROPIC_API_KEY != '' }}
+      HAS_CREDENTIALS: ${{ secrets.ANTHROPIC_API_KEY != '' }}
     steps:
       - name: Skip without credentials
         if: env.HAS_CREDENTIALS != 'true'
-        run: echo "::notice::Add a CLAUDE_CODE_OAUTH_TOKEN (or ANTHROPIC_API_KEY) repository secret to turn on Claude reviews."
+        run: echo "::notice::Add an ANTHROPIC_API_KEY repository secret to turn on Claude reviews."
       - name: Check for an earlier review
         id: earlier
         if: env.HAS_CREDENTIALS == 'true'
@@ -57,23 +56,40 @@ jobs:
         if: env.HAS_CREDENTIALS == 'true' && steps.earlier.outputs.reviewed != 'true'
         with:
           fetch-depth: 1
-      - uses: anthropics/claude-code-action@1d6de8cb0c237e7c15e9e1bdf973826ebae490cc # v1.0.248
+      # Claude Code itself rather than claude-code-action: with an API key, the action's runs were refused with "Credit
+      # balance is too low" (400) on their first request, while the same key works for the plain CLI (November 2026).
+      - name: Review with Claude Code
+        id: review
         if: env.HAS_CREDENTIALS == 'true' && steps.earlier.outputs.reviewed != 'true'
-        with:
-          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          anthropic_api_key: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN == '' && secrets.ANTHROPIC_API_KEY || '' }}
-          github_token: ${{ secrets.GITHUB_TOKEN }}
-          prompt: |
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          GH_TOKEN: ${{ github.token }}
+          PROMPT: |
             You're reviewing pull request #${{ github.event.pull_request.number }} in ${{ github.repository }}. The PR branch is checked out in the working directory.
 
             1. Run `gh pr view ${{ github.event.pull_request.number }}` and `gh pr diff ${{ github.event.pull_request.number }}` to see what changed and why.
             2. Read AGENTS.md and CONTRIBUTING.md, if they exist, for the project's rules. Open other files only when you need context to judge a change.
             3. Look for real problems: bugs, crashes, regressions, broken edge cases, security issues, private details (keys, tokens, personal names or emails, server addresses, home-folder paths) and clear breaks of the project's rules. Skip style nitpicks and anything a linter or CI would catch.
-            4. Post each real problem as an inline comment on the line it's about, with mcp__github_inline_comment__create_inline_comment. Say what's wrong and how to fix it in a sentence or two.
+            4. Post each real problem as an inline comment on the line it's about, with exactly this command (one per problem, LINE being the line number in the new version of the file):
+               gh api --method POST repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments -f commit_id=${{ github.event.pull_request.head.sha }} -f side=RIGHT -f path=PATH -F line=LINE -f body="..."
+               Say what's wrong and how to fix it in a sentence or two.
             5. Finish with one short summary comment using `gh pr comment ${{ github.event.pull_request.number }} --body "..."`. Start the body with the line `<!-- claude-review -->` (it marks the PR as reviewed). If nothing needs fixing, say so in one line.
 
             Keep it short and only flag things worth fixing. Write in Australian English without em dashes.
-          claude_args: >-
-            --model claude-sonnet-5-5
-            --max-turns 25
-            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment:*),Read,Grep,Glob"
+          TOOLS: >-
+            Bash(gh pr view:*),Bash(gh pr diff:*),Bash(gh pr comment ${{ github.event.pull_request.number }}:*),Bash(gh api --method POST repos/${{ github.repository }}/pulls/${{ github.event.pull_request.number }}/comments:*),Read,Grep,Glob
+        run: |
+          npm install -g --no-fund --no-audit @anthropic-ai/claude-code@2.1.327 > /dev/null
+          claude -p "$PROMPT" --model claude-sonnet-5-5 --max-turns 25 --allowedTools "$TOOLS" --output-format json \
+            > "$RUNNER_TEMP/claude-execution-output.json"
+          jq -r '"Claude: \(.num_turns) turns, about US$\(.total_cost_usd * 100 | round / 100)"' "$RUNNER_TEMP/claude-execution-output.json"
+          jq -e '.is_error | not' "$RUNNER_TEMP/claude-execution-output.json" > /dev/null
+      # A failed review's reason (a revoked or wrong key, no API credit left, an unknown model), from Claude's result,
+      # which holds no secrets.
+      - name: Say why the review failed
+        if: failure() && steps.review.conclusion == 'failure'
+        run: |
+          LOG="$RUNNER_TEMP/claude-execution-output.json"
+          [ -s "$LOG" ] || { echo "::error::Claude left no output to read."; exit 0; }
+          # --output-format json writes one result object; its result holds the API's message on a failure
+          jq -r '"::error::Claude said: \(.result // "nothing" | tostring | .[0:500])"' "$LOG"
