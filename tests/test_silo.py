@@ -418,6 +418,27 @@ def test_artwork_comes_from_the_signed_link_without_the_api_key(silo_run):
     assert url.startswith("https://storage.example.com/") and not (headers or {}).get("Authorization")
 
 
+def test_artwork_links_that_could_reach_another_host_never_get_the_key(silo_run):
+    """urlparse reads https://evil\\@silo/ as Silo, but requests connects to evil: such links aren't fetched at all."""
+    cfg, srv, eng = silo_run()
+    here = urlparse(srv.root).netloc
+    for link in (f"http://evil.example\\@{here}/art.jpg", f"http://user@{here}/art.jpg", "ftp://evil.example/art.jpg",
+                 f"http://{here}/art .jpg"):
+        with pytest.raises(ServerError, match="won't follow"):
+            srv.artwork(link, "poster")
+    assert not silo_run.downloads and not [c for c in silo_run.fake.calls if "art" in c[1]]
+
+
+def test_storage_elsewhere_is_checked_against_the_usual_certificates(silo_run, monkeypatch):
+    cfg, srv, eng = silo_run()
+    srv.verify = False                                   # server.verify: false is for Silo itself
+    seen = []
+    monkeypatch.setattr(silo.requests, "get", lambda url, **kw: seen.append(kw.get("verify")) or Resp(content=jpeg()))
+    srv.artwork("https://storage.example.com/art/1.jpg?signature=abc", "poster")
+    srv.from_storage(srv.root + "/art/1.jpg")
+    assert seen == [True, False]
+
+
 def test_a_key_that_is_not_an_administrators_says_so(silo_run):
     cfg, srv, eng = silo_run()
     silo_run.fake.not_admin = True

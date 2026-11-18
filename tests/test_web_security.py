@@ -6,6 +6,8 @@
 server's API key never reaching the browser."""
 import contextlib
 import errno
+import hashlib
+import hmac
 import io
 import json
 import os
@@ -332,6 +334,71 @@ def test_an_overlong_session_cookie_is_simply_not_signed_in(make_cfg):
             client.cookie = forged
             assert client.call("/api/info")[0] == 401                           # never a 500
         assert not site.httpd.gate.valid("9" * 5000 + ".x")
+
+
+
+def test_a_client_trickling_its_headers_is_hung_up_on(make_cfg, monkeypatch):
+    """Each piece arriving within the 30 s timeout used to keep a connection open for ever; the headers now have a
+    deadline of their own."""
+    monkeypatch.setattr(web.Handler, "header_seconds", 0.5)
+    with running(make_cfg) as site:
+        port = site.httpd.server_address[1]
+        sock = socket.create_connection(("127.0.0.1", port), timeout=5)
+        sock.sendall(b"GET /app.css HTTP/1.1\r\nHost: 127.0.0.1\r\n")
+        for _ in range(4):                                                     # a header line every 0.3 s
+            time.sleep(0.3)
+            with contextlib.suppress(OSError):
+                sock.sendall(b"X-Slow: 1\r\n")
+        sock.settimeout(3)
+        try:
+            got = sock.recv(100)
+        except ConnectionResetError:
+            got = b""
+        assert got == b""                                                      # closed, never answered
+        sock.close()
+        assert site.client().call("/app.css")[0] == 200                         # everyone else is still answered
+
+
+def test_connections_beyond_the_limit_are_closed_straight_away(make_cfg, monkeypatch):
+    monkeypatch.setattr(web, "CONNECTIONS_MOST", 3)
+    with running(make_cfg) as site:
+        port = site.httpd.server_address[1]
+        held = [socket.create_connection(("127.0.0.1", port), timeout=5) for _ in range(3)]
+        time.sleep(0.3)
+        extra = socket.create_connection(("127.0.0.1", port), timeout=5)
+        extra.sendall(b"GET /app.css HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n")
+        extra.settimeout(3)
+        with contextlib.suppress(ConnectionResetError):
+            assert extra.recv(100) == b""
+        for sock in held + [extra]:
+            sock.close()
+        time.sleep(0.3)
+        assert site.client().call("/app.css")[0] == 200                         # free again once they've gone
+
+
+def test_signing_out_ends_that_session_even_for_a_copied_cookie(make_cfg):
+    """A cookie taken before sign-out (sniffed on plain http, or left in a shared browser) stops working at sign-out,
+    while another device's session carries on."""
+    with running(make_cfg) as site:
+        mine, other = site.client(), site.client()
+        assert mine.sign_in(site.key)[0] == 200 and other.sign_in(site.key)[0] == 200
+        copied = mine.cookie
+        assert copied != other.cookie                                           # each sign-in is its own session
+        mine.call("/api/logout", {})
+        thief = site.client()
+        thief.cookie = copied
+        assert thief.call("/api/info")[0] == 401
+        assert other.call("/api/info")[0] == 200
+        assert not site.httpd.gate.valid(copied) and site.httpd.gate.valid(other.cookie)
+
+
+def test_an_old_style_cookie_is_not_signed_in(make_cfg):
+    """expiry.signature cookies from before session ids can't be ended at sign-out, so they no longer count."""
+    with running(make_cfg) as site:
+        gate = site.httpd.gate
+        expiry = int(time.time()) + 3600
+        old = f"{expiry}." + hmac.new(gate.current()["secret"].encode(), str(expiry).encode(), hashlib.sha256).hexdigest()
+        assert not gate.valid(old)
 
 
 # ---------------------------------------------------------------- web.json, ids and Host names

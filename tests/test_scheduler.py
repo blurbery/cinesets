@@ -208,3 +208,29 @@ def test_every_setting_in_the_example_is_known(capsys):
     config._warned.clear()
     config.load(os.path.join(ROOT, "config.example.yml"))
     assert "doesn't know" not in capsys.readouterr().out
+
+
+def test_a_job_whose_collections_are_all_unpicked_is_done_not_failed(make_cfg, monkeypatch, capsys):
+    """Unpicking every collection a job names used to make it fail, and be retried every hour, for ever."""
+    cfg = make_cfg("emby", YML, "schedule: [{every_hours: 6, only: m-one}]\ncollections: {exclude: [m-one]}\n")
+    srv = FakeServer("emby")
+    monkeypatch.setattr(cli.servers, "connect", lambda cfg: srv)
+    monkeypatch.setattr(cli.time, "sleep", lambda s: (_ for _ in ()).throw(cli.Stopped()) if s >= 300 else None)
+    cli.schedule(cfg, Engine(cfg, srv), os.path.join(cfg["base_dir"], "config.yml"))
+    out = capsys.readouterr().out
+    record = load_json(os.path.join(cfg.path("data_dir"), "schedule.json"), {})
+    assert [r["ok"] for r in record.values()] == [True] and "nothing to do" in out and "tried again" not in out
+
+
+def test_a_job_is_timed_from_when_it_started(make_cfg, monkeypatch):
+    """Recording the end made a daily job that takes a while come round later every day."""
+    cfg, srv, run = scheduler(make_cfg, monkeypatch)
+    real, clock = srv.call, [1_000_000.0]
+    monkeypatch.setattr(cli.time, "time", lambda: clock[0])
+
+    def slow(method, path, **kw):
+        clock[0] += 60                          # every request takes a minute
+        return real(method, path, **kw)
+    srv.call = slow
+    run()
+    assert job_record(cfg)["at"] == 1_000_000.0 and clock[0] > 1_000_000.0 + 60

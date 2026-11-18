@@ -9,6 +9,10 @@ LABEL org.opencontainers.image.title="CineSets" \
       org.opencontainers.image.source="https://github.com/blurbery/cinesets" \
       org.opencontainers.image.licenses="AGPL-3.0-or-later"
 
+# time zone data, so TZ sets the local date seasonal collections go by (newer slim images leave it out)
+RUN [ -e /usr/share/zoneinfo/Etc/UTC ] || { apt-get update && apt-get install -y --no-install-recommends tzdata \
+    && rm -rf /var/lib/apt/lists/*; }
+
 WORKDIR /app
 # the tested versions in constraints.txt; a change to either file builds this layer again
 COPY requirements.txt constraints.txt ./

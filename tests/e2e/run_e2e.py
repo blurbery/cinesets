@@ -284,7 +284,7 @@ def entry(key, kind, title, group, **fields):
 
 def seed_list(data_dir, slug, rows):
     """A fresh cached copy of an mdblist list, so the test needs no outside service."""
-    path = os.path.join(data_dir, "lists", slug.replace("/", "__") + ".json")
+    path = os.path.join(data_dir, "lists", slug.replace("/", "@") + ".json")
     os.makedirs(os.path.dirname(path), exist_ok=True)
     with open(path, "w") as f:
         json.dump({"at": time.time(), "rows": rows}, f)

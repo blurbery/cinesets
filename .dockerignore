@@ -1,0 +1,21 @@
+# CineSets by blurbery (https://github.com/blurbery/cinesets). SPDX-License-Identifier: AGPL-3.0-or-later
+# Additional terms under AGPL-3.0 section 7 apply: see NOTICE.
+#
+# Kept out of the build context, so `docker build .` in a working install never sends the API key (config.yml,
+# cinesets.env), its data or its virtual environment to the builder, which may be on another machine.
+config.yml
+config.yml.*
+*.bak
+*.env
+.env*
+config/
+data/
+logs/
+venv/
+.venv/
+.git/
+.tmp/
+.claude/
+**/__pycache__/
+.ruff_cache/
+.pytest_cache/

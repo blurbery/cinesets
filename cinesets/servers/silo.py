@@ -18,6 +18,8 @@ from functools import partial
 from urllib.parse import quote, urljoin, urlparse
 
 import requests
+from urllib3.exceptions import LocationParseError
+from urllib3.util import parse_url
 
 from .. import __version__
 from ..store import load_json, save_json
@@ -61,10 +63,27 @@ def look_up(entry, now):
     return now - (entry.get("checked") or 0) >= ID_RECHECK
 
 
+PORTS = {"http": 80, "https": 443}
+
+
 def _origin(url):
-    """Scheme, host and port: two links go to the same place only if all three match."""
+    """Scheme, host and port: two links go to the same place only if all three match. None for a link that isn't a
+    plain http(s) address, or that Python's URL parser and the one requests connects with would read differently:
+    urlparse takes https://evil.example\\@silo.example/ to be silo.example, but requests goes to evil.example, so
+    trusting urlparse alone would send Silo's API key to another host. A link whose origin is None is never fetched."""
+    if re.search(r"[\\\s\x00-\x1f\x7f]", url):
+        return None
     u = urlparse(url)
-    return u.scheme, u.hostname, u.port or {"http": 80, "https": 443}.get(u.scheme)
+    if u.scheme not in PORTS or not u.hostname or "@" in u.netloc:
+        return None
+    try:
+        v = parse_url(url)
+        port = u.port
+    except (LocationParseError, ValueError):
+        return None
+    mine = (u.scheme, u.hostname, port or PORTS[u.scheme])
+    theirs = ((v.scheme or "").lower(), (v.host or "").lower().strip("[]"), v.port or PORTS.get((v.scheme or "").lower()))
+    return mine if mine == theirs else None
 
 
 COMPAT_NOTE = "That is Silo's Jellyfin-compatible port. CineSets needs Silo's own address, the one its web app opens on."
@@ -366,6 +385,8 @@ class SiloServer(Server):
         """The picture at a catalogue entry's artwork link. The API key goes only to Silo's own scheme, host and port;
         a link to its storage, or Silo sending CineSets on to it, is fetched without the key (see from_storage)."""
         url = urljoin(self.root + "/", link)
+        if _origin(url) is None:
+            raise ServerError(f"{what}: Silo gave a link CineSets won't follow ({urlparse(url).scheme}://...)", 0)
         if _origin(url) == _origin(self.root):  # Silo's own address, the only place the API key goes
             r = send(self.session.get, url, True, timeout=60, allow_redirects=False, verify=self.verify)[0]
             if 300 <= r.status_code < 400 and r.headers.get("Location"):
@@ -380,11 +401,13 @@ class SiloServer(Server):
         """Artwork from Silo's storage, with a signed link: no API key goes with it. A redirect is followed only to the
         same scheme, host and port, a few at most, so a link can't send CineSets anywhere else."""
         for _ in range(hops + 1):
-            r = send(requests.get, url, True, timeout=60, allow_redirects=False, verify=self.verify)[0]
+            # server.verify (off, or a CA file) is for Silo itself; storage elsewhere is checked against the usual CAs
+            verify = self.verify if _origin(url) == _origin(self.root) else True
+            r = send(requests.get, url, True, timeout=60, allow_redirects=False, verify=verify)[0]
             if not (300 <= r.status_code < 400 and r.headers.get("Location")):
                 break
             onward = urljoin(url, r.headers["Location"])
-            if _origin(onward) != _origin(url):
+            if _origin(onward) is None or _origin(onward) != _origin(url):
                 raise ServerError(f"artwork storage sent CineSets on to {urlparse(onward).netloc}, another host, so it "
                                   "stopped there", r.status_code)
             url = onward
