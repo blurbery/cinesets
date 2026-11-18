@@ -33,6 +33,8 @@ services:
     environment:
       PUID: 1000    # CineSets runs as this user and group, not root; ./config is handed to them
       PGID: 1000
+      # TZ: Europe/London   # your time zone: seasonal collections (Halloween, Christmas) start and end by its date,
+      #                     # and without it the container goes by UTC
     # Optional: keep the API key out of config.yml by putting CINESETS_API_KEY=... in ./config/cinesets.env
     # env_file: ./config/cinesets.env
 

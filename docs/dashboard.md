@@ -12,7 +12,8 @@ The [dashboard tour](screenshots.md) shows each tab and the sign-in page.
 
 The first time it starts, CineSets makes an access key and keeps it in `data/web.json`, which only you can read.
 In a terminal, the dashboard prints a link with the key on the end. Open it and you're signed in for 30 days on
-that browser.
+that browser. Signing out ends that browser's session for good, even for a copy of its cookie, and leaves your other
+devices signed in.
 
 ```bash
 ./run.sh web --link           # show the sign-in link again

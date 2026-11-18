@@ -26,6 +26,7 @@ SAFE_ID = re.compile(r"^[A-Za-z0-9-]+\Z")
 RANDOM_FROM = 25  # random artwork comes from the top titles of a collection, so posters show ones people know
 
 INDEX_MAX_AGE = 20 * 3600
+PENDING_MAX_AGE = 24 * 3600  # how long a create that may have gone through late can still be claimed
 
 
 class Busy(RuntimeError):
@@ -408,15 +409,32 @@ class Engine:
     @staticmethod
     def claimable(key, st, state, live):
         """Collections an earlier run's create may have made after CineSets gave up waiting: those with the name it
-        asked for that weren't there before it asked, and aren't another entry's."""
+        asked for that weren't there before it asked, and aren't another entry's. Only for a day, and only from a
+        record that says when it asked and with which titles: an older one, or a create long gone, can't tell its own
+        collection from one someone has made since with that name, so it claims nothing."""
         pending = st.get("pending") or {}
-        before = set(pending.get("not") or ())  # None in older records: the name was free then, or it wasn't made
+        if not isinstance(pending.get("at"), (int, float)) or time.time() - pending["at"] > PENDING_MAX_AGE:
+            return []
+        before = set(pending.get("not") or ())
         others = {v.get("id") for k, v in state.items() if k != key}
         return [c for c, n in live.items() if n == pending.get("name") and c not in before and c not in others]
 
-    def claim(self, coll, st, state, live):
-        """Take on a collection an earlier run asked for, if exactly one could be it."""
+    def made_by_us(self, cid, sent, user_id):
+        """Whether a collection holds nothing but titles CineSets asked for when it made one (or nothing at all:
+        Jellyfin 12 can drop them), so isn't someone's own that happens to have the same name."""
+        try:
+            return self.srv.members(cid, user_id) <= set(sent or ())
+        except (requests.RequestException, ServerError):
+            return False
+
+    def claim(self, coll, st, state, live, user_id):
+        """Take on a collection an earlier run asked for, if exactly one could be it and it holds only what that run
+        sent."""
         found, name = self.claimable(coll["key"], st, state, live), st["pending"].get("name")
+        if len(found) == 1 and not self.made_by_us(found[0], st["pending"].get("first"), user_id):
+            print(f"   {coll['key']}: {name!r} holds titles CineSets didn't put there, so it is someone else's; "
+                  "not claiming it")
+            found = []
         if len(found) == 1:
             st["id"], st["name"] = found[0], name
             print(f"   claimed {name!r}, created by an earlier run")
@@ -426,7 +444,7 @@ class Engine:
         st.pop("pending", None)
         save_json(self.state_file, state)
 
-    def after_failed_create(self, st, state, live, e):
+    def after_failed_create(self, st, state, live, e, user_id):
         """A create that raised: forget it if the server clearly turned it down, claim the collection if the server
         made it anyway, and otherwise leave it pending so the next run can claim one that turns up late."""
         name = st["pending"]["name"]
@@ -439,7 +457,7 @@ class Engine:
         except (requests.RequestException, ServerError):
             return
         new = [c for c, n in fresh.items() if n == name and c not in live]
-        if len(new) == 1:
+        if len(new) == 1 and self.made_by_us(new[0], st["pending"].get("first"), user_id):
             st["id"], st["name"] = new[0], name
             st.pop("pending", None)
             live[new[0]] = name
@@ -458,23 +476,26 @@ class Engine:
         if st.get("id") and not self.owned_name_ok(st, live[st["id"]], coll):
             raise RuntimeError(self.renamed(key, st["id"], live[st["id"]]))
         if not st.get("id") and st.get("pending"):
-            self.claim(coll, st, state, live)
+            self.claim(coll, st, state, live, user_id)
         cid, created, added = st.get("id"), False, 0
         if not cid:
             self.check_name_free(coll, live)
             first = self.existing_ids(ids[:40])
             if not first:
                 raise RuntimeError("none of its titles are on the server any more")
-            st["pending"] = {"name": create_as, "not": sorted(c for c, n in live.items() if n == create_as)}
+            st["pending"] = {"name": create_as, "not": sorted(c for c, n in live.items() if n == create_as),
+                             "at": int(time.time()), "first": list(first)}
             save_json(self.state_file, state)
             try:
                 cid, slowest = self.srv.create_collection(create_as, coll, first)
             except (requests.RequestException, ServerError) as e:
-                self.after_failed_create(st, state, live, e)
+                self.after_failed_create(st, state, live, e, user_id)
                 raise
             created, added = True, len(first)
             owner = next((k for k, v in state.items() if k != key and v.get("id") == cid), None)
-            if owner or cid in live:
+            # Emby hands back the collection already called that, which may be one made since this run listed them
+            theirs = cid in live or not self.made_by_us(cid, first, user_id)
+            if owner or theirs:
                 st.pop("pending", None)
                 save_json(self.state_file, state)
                 raise RuntimeError(f"the server returned collection {cid}, which CineSets does not own "

@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import re
+import sys
 import tempfile
 
 import yaml
@@ -96,12 +97,33 @@ class Config(dict):
         return p if os.path.isabs(p) else os.path.join(self["base_dir"], p)
 
 
+def keep_private(path, raw):
+    """A config.yml holding the API key that other users on the machine can read (copied by hand from
+    config.example.yml, say) is made readable by its owner only. Setup and the dashboard already write it that way."""
+    key = isinstance(raw, dict) and isinstance(raw.get("server"), dict) and raw["server"].get("api_key")
+    try:
+        mode = os.stat(path).st_mode & 0o777
+        if key and mode & 0o077:
+            os.chmod(path, mode & 0o700)
+            print(f"{os.path.basename(path)} holds the API key and others could read it, so it is now readable by "
+                  "its owner only", file=sys.stderr)
+    except OSError as e:
+        if path not in _WARNED:  # once: the dashboard reads config.yml again and again
+            _WARNED.add(path)
+            print(f"{os.path.basename(path)} holds the API key and others can read it, and CineSets couldn't change "
+                  f"that ({e.strerror}): run chmod 600 on it", file=sys.stderr)
+
+
+_WARNED = set()
+
+
 def load(path=None):
     path = config_path(path)
     raw = {}
     if os.path.exists(path):
         with open(path) as f:
             raw = read_yaml(f, os.path.basename(path))
+        keep_private(path, raw)
     cfg = Config(_merge(DEFAULTS, raw))
     cfg["base_dir"] = os.path.dirname(os.path.abspath(path))
     srv = cfg["server"]

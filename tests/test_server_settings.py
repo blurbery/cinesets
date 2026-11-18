@@ -39,7 +39,9 @@ def test_the_setting_reaches_the_request(make_cfg, monkeypatch, kind, verify):
     assert srv.session.sent[0][2]["verify"] is verify
 
 
-def test_silo_artwork_storage_gets_the_setting_too(make_cfg, monkeypatch):
+def test_silo_artwork_storage_elsewhere_is_always_checked(make_cfg, monkeypatch):
+    """server.verify (off, or a CA file) is for Silo itself: storage on another host is checked against the usual
+    certificate authorities, while artwork from Silo's own address follows the setting."""
     cfg = make_cfg("silo")
     cfg["server"]["verify"] = False
     srv = client(lambda k: cfg, "silo", Answer(200, {"items": [{"id": "77", "is_primary": True}]}),
@@ -47,7 +49,9 @@ def test_silo_artwork_storage_gets_the_setting_too(make_cfg, monkeypatch):
     seen = []
     monkeypatch.setattr(silo.requests, "get", lambda url, **kw: seen.append(kw) or Answer(200, content=b"jpeg"))
     srv.backdrop_image("movie-tmdb-105")
-    assert seen[0]["verify"] is False and srv.session.sent[1][2]["verify"] is False
+    assert seen[0]["verify"] is True and srv.session.sent[1][2]["verify"] is False
+    srv.from_storage(srv.root + "/art/1.jpg")
+    assert seen[1]["verify"] is False
 
 
 def test_turning_the_check_off_warns_once_in_plain_words(make_cfg, monkeypatch, capsys):

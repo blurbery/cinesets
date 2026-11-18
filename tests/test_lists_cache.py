@@ -77,11 +77,11 @@ def test_only_a_list_of_rows_is_kept(mdblist, tmp_path, body):
     answers.append(Answer(200, body))
     with pytest.raises(RuntimeError, match="ValueError"):
         lists.fetch_list("someone/odd", str(tmp_path))
-    assert not os.path.exists(tmp_path / "lists" / "someone__odd.json")
+    assert not os.path.exists(tmp_path / "lists" / "someone@odd.json")
 
 
 def saved_copy(tmp_path, hours_old):
-    path = tmp_path / "lists" / "someone__gone.json"
+    path = tmp_path / "lists" / "someone@gone.json"
     save_json(str(path), {"at": time.time() - hours_old * 3600, "rows": ROWS})
     return path
 
@@ -108,7 +108,7 @@ def test_a_list_that_keeps_failing_is_named_every_run(mdblist, tmp_path, capsys)
 
 def test_a_copy_that_cannot_be_read_is_treated_as_none(mdblist, tmp_path):
     answers, asked, waits = mdblist
-    path = tmp_path / "lists" / "someone__odd.json"
+    path = tmp_path / "lists" / "someone@odd.json"
     save_json(str(path), ["not", "a", "copy"])
     answers.append(Answer(200, ROWS))
     assert lists.fetch_list("someone/odd", str(tmp_path)) == ROWS
@@ -144,3 +144,32 @@ def test_a_damaged_state_points_to_its_backup(tmp_path):
         f.write("{not json")
     with pytest.raises(SystemExit, match="replace it with state.json.bak"):
         load_json(path, {})
+
+
+def test_lists_whose_names_differ_only_by_a_slash_keep_their_own_copies(mdblist, tmp_path):
+    """a__b/c and a/b__c used to share a cache file, so one list could be served the other's titles."""
+    answers, asked, waits = mdblist
+    other = [{"mediatype": "movie", "rank": 1, "id": 999}]
+    answers[:] = [Answer(200, ROWS), Answer(200, other)]
+    assert lists.fetch_list("a__b/c", str(tmp_path)) == ROWS
+    assert lists.fetch_list("a/b__c", str(tmp_path)) == other
+    assert lists.fetch_list("a__b/c", str(tmp_path)) == ROWS        # from its own saved copy, not the other list's
+
+
+def test_a_copy_saved_under_the_old_name_is_still_used(mdblist, tmp_path):
+    answers, asked, waits = mdblist
+    save_json(str(tmp_path / "lists" / "someone__old.json"), {"rows": ROWS, "at": time.time()})
+    assert lists.fetch_list("someone/old", str(tmp_path)) == ROWS and not asked
+
+
+
+def test_an_empty_answer_keeps_the_saved_copy_and_says_so(mdblist, tmp_path, capsys):
+    """An empty list would take its titles out of a collection made from several lists."""
+    answers, asked, waits = mdblist
+    saved_copy(tmp_path, 4)
+    answers.append(Answer(200, []))
+    assert lists.fetch_list("someone/gone", str(tmp_path)) == ROWS
+    out = capsys.readouterr().out
+    assert "answered with an empty list today" in out and "If it really is empty now" in out
+    answers[:] = [Answer(200, [])]
+    assert lists.fetch_list("someone/new", str(tmp_path)) == []             # nothing saved: empty is all there is

@@ -65,8 +65,10 @@ CSP = ("default-src 'self'; img-src 'self' data: blob:; style-src 'self'; script
 LOCAL = ("127.0.0.1", "localhost", "::1")
 COOKIE = "cinesets"
 SESSION_DAYS = 30
+SESSION_ID = re.compile(r"^[A-Za-z0-9_-]{16,43}\Z")
 PASSWORD_MIN = 12
 PBKDF2_ROUNDS = 600_000
+CONNECTIONS_MOST = 64  # open connections at once (a browser uses about six); more are closed straight away
 BUSY_LIMIT = 16  # requests handled at once; more get "busy" rather than piling up threads
 
 
@@ -143,7 +145,7 @@ class Gate:
     every request comes from the proxy's address, so the overall limit is the one that counts)."""
 
     TRIES, TRIES_ALL, WINDOW = 5, 20, 600  # wrong tries from one address, and from everyone, per 10 minutes
-    COOKIE_MOST = 128  # a session cookie is about 75 characters, so anything much longer isn't one
+    COOKIE_MOST = 128  # a session cookie is about 100 characters, so anything much longer isn't one
 
     def __init__(self, path):
         self.path, self.stamp, self.access = path, None, None
@@ -161,20 +163,43 @@ class Gate:
             self.stamp = stamp  # taken before reading, so a change made meanwhile is read next time
         return self.access
 
-    def _sign(self, expiry):
-        return hmac.new(self.current()["secret"].encode(), str(expiry).encode(), hashlib.sha256).hexdigest()
+    def _sign(self, expiry, sid):
+        return hmac.new(self.current()["secret"].encode(), f"{expiry}.{sid}".encode(), hashlib.sha256).hexdigest()
 
     def cookie(self):
-        expiry = int(time.time()) + SESSION_DAYS * 86400
-        return f"{expiry}.{self._sign(expiry)}"
+        """expiry.session-id.signature. Each sign-in gets its own random id, so signing out can end that session
+        alone (see logout), even for a copy of the cookie taken before."""
+        expiry, sid = int(time.time()) + SESSION_DAYS * 86400, secrets.token_urlsafe(16)
+        return f"{expiry}.{sid}.{self._sign(expiry, sid)}"
+
+    def _session(self, value):
+        """(expiry, session id) of a cookie this dashboard signed that hasn't run out, else None."""
+        if len(value or "") > self.COOKIE_MOST:  # int() on thousands of digits is slow, and refused on newer Pythons
+            return None
+        expiry, _, rest = (value or "").partition(".")
+        sid, _, signature = rest.partition(".")
+        if not (expiry.isascii() and expiry.isdigit()) or int(expiry) < time.time() or not SESSION_ID.match(sid):
+            return None
+        if not hmac.compare_digest(signature.encode(), self._sign(int(expiry), sid).encode()):
+            return None
+        return int(expiry), sid
 
     def valid(self, value):
-        if len(value or "") > self.COOKIE_MOST:  # int() on thousands of digits is slow, and refused on newer Pythons
-            return False
-        expiry, _, signature = (value or "").partition(".")
-        if not (expiry.isascii() and expiry.isdigit()) or int(expiry) < time.time():
-            return False
-        return hmac.compare_digest(signature.encode(), self._sign(int(expiry)).encode())
+        found = self._session(value)
+        return bool(found) and found[1] not in (self.current().get("signed_out") or {})
+
+    def logout(self, value):
+        """Ends this cookie's session for good: its id is kept in web.json until it would have run out anyway, so a
+        copy of the cookie stops working too, here and in every other process reading web.json."""
+        found = self._session(value)
+        if not found:
+            return
+        with self.lock:
+            access, now = read_access(self.path), time.time()
+            ended = access.get("signed_out") if isinstance(access.get("signed_out"), dict) else {}
+            ended = {k: v for k, v in ended.items() if isinstance(v, (int, float)) and v > now}
+            ended[found[1]] = found[0]
+            save_json(self.path, {**access, "signed_out": ended})
 
     def login(self, given, address):
         access = self.current()
@@ -952,6 +977,29 @@ class Handler(http.server.BaseHTTPRequestHandler):
     body_seconds = 30  # and a request body has this long to arrive in full, however slowly it trickles in
     drain_seconds = 5  # a body turned down unread is dropped for up to this long, so the browser still gets the answer
     login_most = 4096  # sign-in and sign-out bodies hold a key or a password, nothing more
+    header_seconds = 15  # the request line and headers have this long to arrive in full
+
+    def handle_one_request(self):
+        # timeout counts the wait for each piece, so a client sending a byte every few seconds could hold a connection
+        # (and a thread) for days before signing in; the request line and headers must all be in within
+        # header_seconds, or the connection is closed
+        self.too_slow = threading.Timer(self.header_seconds, self.hang_up)
+        self.too_slow.daemon = True
+        self.too_slow.start()
+        try:
+            super().handle_one_request()
+        finally:
+            self.too_slow.cancel()
+
+    def parse_request(self):
+        try:
+            return super().parse_request()  # reads the headers
+        finally:
+            self.too_slow.cancel()
+
+    def hang_up(self):
+        with contextlib.suppress(OSError):
+            self.connection.shutdown(socket.SHUT_RDWR)
 
     def log_message(self, fmt, *args):  # quiet: the terminal shows only the link and problems
         pass
@@ -1029,15 +1077,18 @@ class Handler(http.server.BaseHTTPRequestHandler):
             traceback.print_exc()
             self.send(500, "application/json", json.dumps({"error": "Something went wrong: see the terminal"}).encode())
 
-    def signed_in(self):
-        if self.server.gate is None:  # demo mode
-            return True
+    def cookie_in(self):
         value = None
         for part in (self.headers.get("Cookie") or "").split(";"):
             name, _, v = part.strip().partition("=")
             if name == COOKIE:
                 value = v
-        return self.server.gate.valid(value)
+        return value
+
+    def signed_in(self):
+        if self.server.gate is None:  # demo mode
+            return True
+        return self.server.gate.valid(self.cookie_in())
 
     def session(self, path, body):
         gate = self.server.gate
@@ -1048,6 +1099,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.cookie_out = (gate.cookie(), SESSION_DAYS * 86400)
             return {"signed_in": True}
         if path == "/api/logout" and gate:
+            gate.logout(self.cookie_in())
             self.cookie_out = ("", 0)
             return {"signed_in": False}
         return {"signed_in": self.signed_in(), "demo": self.server.app.demo, "sign_in": gate is not None,
@@ -1159,6 +1211,32 @@ def check_hosts(raw):
     return [(n.rsplit(":", 1)[0] if n.count(":") == 1 else n).rstrip(".") for n in names]  # no port needed
 
 
+class DashboardServer(http.server.ThreadingHTTPServer):
+    """One thread per connection, as many as CONNECTIONS_MOST at once: a connection beyond that is closed straight
+    away, so a flood of connections can't use up the process's open files and lock everyone out."""
+    daemon_threads = True
+
+    def __init__(self, *args, **kw):
+        super().__init__(*args, **kw)
+        self.open_connections = threading.BoundedSemaphore(CONNECTIONS_MOST)
+
+    def process_request(self, request, client_address):
+        if not self.open_connections.acquire(blocking=False):
+            self.shutdown_request(request)
+            return
+        try:
+            super().process_request(request, client_address)
+        except BaseException:
+            self.open_connections.release()
+            raise
+
+    def process_request_thread(self, request, client_address):
+        try:
+            super().process_request_thread(request, client_address)
+        finally:
+            self.open_connections.release()
+
+
 def make_server(app, host="127.0.0.1", port=8095, sign_in=True, public=False, hosts=None):
     """sign_in=False is allowed only on this machine's own address, and then only a browser on this machine is
     answered, or an SSH tunnel to it (which looks the same, and needs a login to the machine); nothing passed on by a
@@ -1169,8 +1247,7 @@ def make_server(app, host="127.0.0.1", port=8095, sign_in=True, public=False, ho
                          "(host 127.0.0.1). For other computers, keep sign-in on.")
     if public and not sign_in:
         raise SystemExit("A public dashboard needs sign-in: set web: sign_in: true.")
-    httpd = http.server.ThreadingHTTPServer((host, port), Handler)
-    httpd.daemon_threads = True
+    httpd = DashboardServer((host, port), Handler)
     httpd.app, httpd.slots, httpd.public = app, threading.BoundedSemaphore(BUSY_LIMIT), public
     httpd.gate = Gate(access_file(app.cfg)) if sign_in and not app.demo else None
     httpd.local_only = not sign_in and not app.demo

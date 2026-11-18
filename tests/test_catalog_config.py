@@ -590,3 +590,28 @@ def test_asking_for_an_unpicked_collection_says_so(make_cfg, capsys):
         cli.select(chosen, only="m-trending,s-trending", unpicked=unpicked)
     with pytest.raises(SystemExit, match="none of those are picked"):
         cli.select(chosen, group="charts", unpicked=unpicked)
+
+
+def test_a_config_holding_the_key_is_made_private(tmp_path, capsys):
+    """A config.yml copied by hand under a 022 umask is readable by everyone; loading it makes it the owner's only."""
+    p = tmp_path / "config.yml"
+    p.write_text('server: {type: emby, url: "http://127.0.0.1:8096", api_key: "secret"}\n')
+    os.chmod(p, 0o644)
+    config.load(str(p))
+    assert oct(os.stat(p).st_mode & 0o777) == "0o600"
+    assert "now readable by its owner only" in capsys.readouterr().err
+    q = tmp_path / "nokey" / "config.yml"
+    q.parent.mkdir()
+    q.write_text('server: {type: emby, url: "http://127.0.0.1:8096"}\n')
+    os.chmod(q, 0o644)
+    config.load(str(q))
+    assert oct(os.stat(q).st_mode & 0o777) == "0o644"   # nothing secret in it: left alone
+
+
+@pytest.mark.parametrize("narrower", [["--only", "m-x"], ["--group", "charts"], ["--unpicked"]])
+def test_all_cant_be_mixed_with_a_narrower_choice(monkeypatch, capsys, narrower):
+    """remove --only m-x --all used to remove every collection CineSets made."""
+    monkeypatch.setattr("sys.argv", ["cinesets", "remove", "--all", *narrower, "--yes"])
+    with pytest.raises(SystemExit) as e:
+        cli.main()
+    assert e.value.code == 2 and "--all can't go with" in capsys.readouterr().err

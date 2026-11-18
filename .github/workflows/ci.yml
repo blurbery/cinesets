@@ -82,6 +82,8 @@ jobs:
           test "$(stat -c %u:%g config)" = "1000:1000"
           test "$(stat -c %u:%g config/data)" = "1000:1000"
           if docker run --rm -e PUID=0 -v "$PWD/config:/config" cinesets:ci version; then echo "PUID=0 should be refused"; exit 1; fi
+          # TZ works, so seasonal collections go by the local date (Auckland is never UTC)
+          test "$(docker run --rm -e TZ=Pacific/Auckland --entrypoint date cinesets:ci +%z)" != "+0000"
 
   end-to-end:
     name: End to end (${{ matrix.server.name }})

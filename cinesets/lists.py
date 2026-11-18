@@ -60,8 +60,11 @@ def fetch_list(slug, data_dir, patient=True):
     global _impatient
     if not SLUG.match(slug) or ".." in slug:
         raise RuntimeError(f"{slug!r} is not an mdblist list (it should look like user/list-name)")
-    path = os.path.join(data_dir, "lists", slug.replace("/", "__") + ".json")
+    # "@" can't be in a slug, so no two lists share a file (with "__", a__b/c and a/b__c did)
+    path = os.path.join(data_dir, "lists", slug.replace("/", "@") + ".json")
     cached = load_json(path, None)
+    if cached is None:  # saved by CineSets 1.6 or older under the old name; replaced by the next copy
+        cached = load_json(os.path.join(data_dir, "lists", slug.replace("/", "__") + ".json"), None)
     if not (isinstance(cached, dict) and isinstance(cached.get("rows"), list) and isinstance(cached.get("at"), (int, float))):
         cached = None  # a copy that can't be read is the same as none
     if cached and time.time() - cached["at"] < LIST_TTL:
@@ -84,8 +87,13 @@ def fetch_list(slug, data_dir, patient=True):
             rows = _rows(r)
             if rows:
                 save_json(path, {"at": time.time(), "rows": rows})
-            return rows
-        problem = f"HTTP {status}"
+            if rows or not cached:
+                return rows
+            # an empty answer would take this list's titles out of a collection made from several lists, so the saved
+            # copy is used, with the same warning as a list that can't be fetched, until the list has titles again
+            problem = "with an empty list"
+        else:
+            problem = f"HTTP {status}"
     except (requests.RequestException, ValueError) as e:
         problem = type(e).__name__
     if cached:
@@ -106,5 +114,6 @@ def _stale(cached, path, problem, status):
     hours = int((now - cached["at"]) / 3600)
     saved = f"{hours // 24} days ago" if hours >= 48 else f"{hours} h ago"
     why = (" The list may have been deleted or made private: check it, or take it out of the collection."
-           if status in (403, 404, 410) else "")
+           if status in (403, 404, 410) else
+           " If it really is empty now, take it out of the collection." if status == 200 else "")
     return f"mdblist has answered {problem} {since}, so CineSets is using the copy it saved {saved}.{why}"

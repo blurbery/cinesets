@@ -173,12 +173,14 @@ elif command -v crontab >/dev/null 2>&1 && ask "Keep them up to date automatical
     echo "0 5 * * 0 \"$here/run.sh\" apply > \"$here/logs/weekly.log\" 2>&1"
   } | crontab - && scheduled=yes
 fi
-# /etc/cron.d jobs that run as root on a folder that isn't root's now stop at run.sh's check, with a note in logs/
+# /etc/cron.d jobs that run as root on a folder that isn't root's: run.sh hands them on to the folder's owner, but root
+# still runs run.sh first, a file $owner (and the dashboard) can change, so whoever can change it can run anything as root
 if [ "$uid" != 0 ]; then
   for f in /etc/cron.d/*; do
     if [ -f "$f" ] && cron_lines ours < "$f" | awk '!/^#/ && NF { u = ($1 ~ /^@/) ? $2 : $6; if (u == "root") bad = 1 } END { exit !bad }'; then
-      echo "Warning: $f runs CineSets as root, so those jobs now stop without doing anything."
-      echo "Put $owner in place of root in it (sudo nano $f), as deploy/cron.example shows."
+      echo "Warning: $f runs CineSets as root. Root then runs $here/run.sh, a file $owner can change, so"
+      echo "anyone who can change it could run anything as root. Put $owner in place of root in it (sudo nano $f),"
+      echo "as deploy/cron.example shows."
     fi
   done
 fi

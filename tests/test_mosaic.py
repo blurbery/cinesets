@@ -486,3 +486,11 @@ def test_the_dashboard_says_when_a_mosaic_has_too_few_posters(mosaic_site):
     assert status == 200 and out["artwork"]["item"] and "Too few of its titles have posters" in out["artwork"]["note"]
     status, out = call("/api/artwork", {"key": "m-heist", "action": "shuffle", "posters": {"artwork": "mosaic"}})
     assert status == 400 and "Too few" in out["error"]
+
+
+def test_a_picture_too_big_to_decode_safely_is_refused(tmp_path):
+    """A small file can claim hundreds of millions of pixels; artwork that size is refused before it is decoded."""
+    path = tmp_path / "huge.png"
+    Image.new("1", (6000, 5000)).save(path)                 # 30 million pixels in a few kilobytes
+    with pytest.raises(Image.DecompressionBombError):
+        Image.open(path)

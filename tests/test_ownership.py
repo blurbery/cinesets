@@ -5,6 +5,7 @@
 """What CineSets owns: collections that share a name, creates that finish late or fail, old records without a
 name, forget, and what remove shows before it asks."""
 import os
+import time
 
 import pytest
 
@@ -12,7 +13,7 @@ from cinesets import catalog, cli
 from cinesets.engine import Engine
 from cinesets.servers import ServerError
 from cinesets.store import load_json, save_json
-from conftest import FakeServer, seed_index
+from conftest import FakeServer, Resp, seed_index
 
 FRANCHISE = """collections:
   - key: m-bttf
@@ -90,19 +91,57 @@ def test_adopt_records_the_name_it_found(make_cfg):
     assert state(cfg)["m-bttf"] == {"id": cid, "name": "Movies - Back to the Future (new)"}
 
 
+def pending(**extra):
+    return {"name": NAME, "not": [], "at": int(time.time()) - 60, "first": ["m1", "m2", "m3"], **extra}
+
+
 def test_a_late_create_is_claimed_with_its_name(make_cfg):
     cfg, srv, eng = setup_run(make_cfg)
-    save_json(eng.state_file, {"m-bttf": {"pending": {"name": NAME, "not": None}}})   # a record from before 1.5
+    save_json(eng.state_file, {"m-bttf": {"pending": pending()}})
     late = srv.add_collection(NAME, ["m1", "m2", "m3"])
     eng.run("apply", catalog.load(cfg), 8)
     assert state(cfg)["m-bttf"]["id"] == late and state(cfg)["m-bttf"]["name"] == NAME
     assert "pending" not in state(cfg)["m-bttf"]
 
 
+def test_an_old_pending_create_never_claims_a_collection_made_since(make_cfg, capsys):
+    """A create that failed days ago left a record; the user then made their own collection with that name. It used to
+    be claimed, emptied of their titles, and deleted when its season ended."""
+    cfg, srv, eng = setup_run(make_cfg)
+    for record in (pending(at=int(time.time()) - 3 * 86400),               # too old
+                   {"name": NAME, "not": None},                             # from before CineSets kept the time
+                   pending(first=["m1"])):                                  # theirs holds a title CineSets didn't send
+        theirs = srv.add_collection(NAME, ["m1", "u1"])
+        save_json(eng.state_file, {"m-bttf": {"pending": record}})
+        eng.run("apply", catalog.load(cfg), 8)
+        assert "id" not in state(cfg)["m-bttf"] and "pending" not in state(cfg)["m-bttf"], record
+        assert srv.collections[theirs]["members"] == ["m1", "u1"] and not srv.collections[theirs]["meta"]
+        assert "already exists" in capsys.readouterr().out
+        del srv.collections[theirs]
+
+
+def test_a_create_that_hands_back_someone_elses_collection_is_refused(make_cfg, capsys):
+    """Emby answers a create with the collection already called that, which may be one made after this run listed
+    them: it holds titles CineSets didn't send, so it is left alone."""
+    cfg, srv, eng = setup_run(make_cfg)
+    real = srv.call
+    made = {}
+
+    def emby_like(method, path, **kw):
+        if method == "POST" and path.startswith("/Collections?"):
+            made["id"] = srv.add_collection(NAME, ["u1"])                     # theirs, made while the run was going
+            return Resp(data={"Id": made["id"]})
+        return real(method, path, **kw)
+    srv.call = emby_like
+    eng.run("apply", catalog.load(cfg), 8)
+    assert srv.collections[made["id"]]["members"] == ["u1"] and "id" not in state(cfg)["m-bttf"]
+    assert "does not own" in capsys.readouterr().out
+
+
 def test_a_pending_create_never_claims_a_collection_that_was_there_before(make_cfg, capsys):
     cfg, srv, eng = setup_run(make_cfg)
     theirs = srv.add_collection(NAME, ["m1"])
-    save_json(eng.state_file, {"m-bttf": {"pending": {"name": NAME, "not": [theirs]}}})
+    save_json(eng.state_file, {"m-bttf": {"pending": pending(**{"not": [theirs]})}})
     eng.run("apply", catalog.load(cfg), 8)
     assert "id" not in state(cfg)["m-bttf"] and "pending" not in state(cfg)["m-bttf"]
     assert not srv.collections[theirs]["meta"] and "already exists" in capsys.readouterr().out
@@ -110,7 +149,7 @@ def test_a_pending_create_never_claims_a_collection_that_was_there_before(make_c
 
 def test_a_pending_create_claims_nothing_when_the_name_is_shared(make_cfg, capsys):
     cfg, srv, eng = setup_run(make_cfg)
-    save_json(eng.state_file, {"m-bttf": {"pending": {"name": NAME, "not": []}}})
+    save_json(eng.state_file, {"m-bttf": {"pending": pending()}})
     srv.add_collection(NAME, ["m1"])
     srv.add_collection(NAME, ["m2"])
     eng.run("apply", catalog.load(cfg), 8)
@@ -145,7 +184,9 @@ def test_a_create_that_timed_out_stays_pending_with_the_names_already_there(make
         return real(method, path, **kw)
     srv.call = slow
     eng.run("apply", catalog.load(cfg), 8)
-    assert state(cfg)["m-bttf"]["pending"] == {"name": NAME, "not": []}
+    left = state(cfg)["m-bttf"]["pending"]
+    assert left["name"] == NAME and left["not"] == [] and left["first"] == ["m1", "m2", "m3"]
+    assert abs(left["at"] - time.time()) < 60
 
 
 def test_an_old_record_without_a_name_is_not_deleted_once_it_leaves_the_file(make_cfg, capsys):

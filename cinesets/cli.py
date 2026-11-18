@@ -42,10 +42,11 @@ from .servers import ServerError
 from .store import load_json, save_json
 
 
-def select(colls, only=None, group=None, unpicked=()):
+def select(colls, only=None, group=None, unpicked=(), none_ok=False):
     """Pick collections by key and/or group. Unknown names are reported and skipped (for example the
-    Halloween entries after the season); it is an error only if nothing at all matches. `unpicked` are the
-    collections left out under `collections` in config.yml, so asking for one says so."""
+    Halloween entries after the season); it is an error only if nothing at all matches, unless none_ok (the
+    scheduler, for which a job with nothing to do is simply done). `unpicked` are the collections left out under
+    `collections` in config.yml, so asking for one says so."""
     picked, skipped = colls, False
     left_out = {c["key"] for c in unpicked}
     if only:
@@ -68,7 +69,7 @@ def select(colls, only=None, group=None, unpicked=()):
         if unknown:
             print(f"Note: no collections in group(s) {', '.join(sorted(unknown))}, skipped")
         picked = [c for c in picked if c["group"] in groups]
-    if (only or group) and not picked:
+    if (only or group) and not picked and not none_ok:
         raise SystemExit("Nothing to do: none of those are picked in config.yml (collections). See: cinesets list"
                          if skipped else "No collections match. See: cinesets list")
     return picked
@@ -145,15 +146,22 @@ def schedule(cfg, engine, path=None):
                 if not job_due(job, last.get(job_name(job)), time.time()):
                     continue
                 print(f"--- {time.strftime('%Y-%m-%d %H:%M')} job {i + 1}")
-                flags["busy"], ok = True, False
+                # timed from the start, so a job that takes a while doesn't come round later each time
+                flags["busy"], ok, started = True, False, time.time()
                 try:
                     cfg, engine = reload(path, cfg, engine)
                     engine.halt = lambda: flags["stop"]
                     colls = catalog.load(cfg)  # re-read each time, so edits apply without a restart
                     chosen = catalog.picked(cfg, colls)
                     unpicked = [c for c in colls if c not in chosen]
-                    picked = chosen if job.get("all") else select(chosen, job.get("only"), job.get("group"), unpicked)
-                    ok = not engine.run("apply", picked, cfg["defaults"]["min_items"]).stopped
+                    picked = chosen if job.get("all") else select(chosen, job.get("only"), job.get("group"), unpicked,
+                                                                   none_ok=True)
+                    if picked:
+                        ok = not engine.run("apply", picked, cfg["defaults"]["min_items"]).stopped
+                    else:  # everything it names is unpicked: done, not failed (it was retried every hour, for ever)
+                        print(f"   job {i + 1}: none of its collections are picked in config.yml, so there's nothing "
+                              "to do")
+                        ok = True
                 except SystemExit as e:  # for example a renamed library: report it and try again
                     print(f"!! job {i + 1} stopped: {e}")
                 except (ServerError, requests.RequestException, yaml.YAMLError) as e:
@@ -164,7 +172,8 @@ def schedule(cfg, engine, path=None):
                     flags["busy"] = False
                 if not ok and float(job["every_hours"]) * 3600 > RETRY_AFTER and not flags["stop"]:
                     print(f"   job {i + 1} didn't finish, so it is tried again in about an hour")
-                last[job_name(job)] = {"at": time.time(), "ok": ok}
+                # a failed run's hour before trying again counts from when it ended, or a long one would retry at once
+                last[job_name(job)] = {"at": started if ok else time.time(), "ok": ok}
                 save_json(os.path.join(cfg.path("data_dir"), "schedule.json"), last)
                 if flags["stop"]:
                     raise Stopped()
@@ -440,6 +449,8 @@ def main():
     ap.add_argument("--new-key", action="store_true", help="web: make a new access key, signing everyone out")
     ap.add_argument("--set-password", action="store_true", help="web: set a password to sign in with")
     args = ap.parse_args()
+    if args.all and (args.only or args.group or args.unpicked):  # --all would quietly take every collection instead
+        ap.error("--all can't go with --only, --group or --unpicked: use one or the other")
     if args.keys and args.cmd != "forget":
         ap.error(f"{args.cmd} doesn't take {args.keys!r} on its own: use --only KEYS or --group GROUPS")
     try:

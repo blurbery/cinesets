@@ -3,8 +3,8 @@
 #
 # The tested versions of CineSets' dependencies. install.sh, the Docker image and CI install these exactly:
 #   pip install -r requirements.txt -c constraints.txt
-# requirements.txt keeps the oldest versions CineSets works with. Dependabot proposes updates here every week, and
-# CI tests each one before it's merged.
+# requirements.txt keeps the oldest versions CineSets works with. Updates here are made by hand (Dependabot's update
+# pull requests are off), and CI tests each one before it's merged.
 #
 # Pillow 12, requests 2.33 and urllib3 2.7 need Python 3.10 or newer, so Python 3.9 keeps the last release that
 # supports it. Leave the python_version < "3.10" lines as they are until CineSets drops Python 3.9.
