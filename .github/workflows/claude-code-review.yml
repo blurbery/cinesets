@@ -58,30 +58,6 @@ jobs:
         if: env.HAS_CREDENTIALS == 'true' && steps.earlier.outputs.reviewed != 'true'
         with:
           fetch-depth: 1
-      - name: TEMP check the workspace id (prints no secret)
-        if: env.HAS_CREDENTIALS == 'true'
-        env:
-          KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          WS: ${{ secrets.ANTHROPIC_WORKSPACE_ID }}
-        run: |
-          echo "id length: ${#WS}, key length: ${#KEY}"
-          [ "$WS" = "$KEY" ] && echo "id is the same as the key: yes" || echo "id is the same as the key: no"
-          for v in KEY WS; do
-            val="${!v}"
-            for pre in sk-ant-usr- sk-ant-api sk-ant-oat wrkspc_; do case "$val" in "$pre"*) echo "$v starts with $pre";; esac; done
-          done
-          case "$WS" in wrkspc_*) echo "starts with wrkspc_: yes" ;; *) echo "starts with wrkspc_: no" ;; esac
-          if printf '%s' "$WS" | grep -q '[[:space:]]'; then echo "has whitespace: yes"; else echo "has whitespace: no"; fi
-          if printf '%s' "$WS" | grep -Eq '^wrkspc_[A-Za-z0-9]+$'; then echo "shape ok: yes"; else echo "shape ok: no"; fi
-          for auth in x-api-key bearer; do
-            for ws in with without; do
-              args=(-H "anthropic-version: 2023-06-01")
-              if [ "$auth" = bearer ]; then args+=(-H "Authorization: Bearer $KEY"); else args+=(-H "x-api-key: $KEY"); fi
-              if [ "$ws" = with ]; then args+=(-H "anthropic-workspace-id: $WS"); fi
-              code=$(curl -s -o "$RUNNER_TEMP/out.json" -w '%{http_code}' https://api.anthropic.com/v1/models "${args[@]}")
-              echo "models via $auth, $ws workspace: HTTP $code $(jq -c '.error // {ok: true}' "$RUNNER_TEMP/out.json" | cut -c1-160)"
-            done
-          done
       - uses: anthropics/claude-code-action@1d6de8cb0c237e7c15e9e1bdf973826ebae490cc # v1.0.248
         id: review
         if: env.HAS_CREDENTIALS == 'true' && steps.earlier.outputs.reviewed != 'true'
