@@ -58,6 +58,21 @@ jobs:
         if: env.HAS_CREDENTIALS == 'true' && steps.earlier.outputs.reviewed != 'true'
         with:
           fetch-depth: 1
+      - name: TEMP one tiny API call (prints no secret)
+        if: env.HAS_CREDENTIALS == 'true'
+        env:
+          KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          WS: ${{ secrets.ANTHROPIC_WORKSPACE_ID }}
+        run: |
+          for model in claude-haiku-5-5 claude-sonnet-5-5; do
+            for ws in with without; do
+              args=(-H "x-api-key: $KEY" -H "anthropic-version: 2023-06-01" -H "content-type: application/json")
+              if [ "$ws" = with ]; then args+=(-H "anthropic-workspace-id: $WS"); fi
+              code=$(curl -s -o "$RUNNER_TEMP/out.json" -w '%{http_code}' https://api.anthropic.com/v1/messages "${args[@]}" \
+                -d "{\"model\":\"$model\",\"max_tokens\":5,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}")
+              echo "messages $model, $ws workspace: HTTP $code $(jq -c '.error // {ok: true}' "$RUNNER_TEMP/out.json" | cut -c1-160)"
+            done
+          done
       - uses: anthropics/claude-code-action@1d6de8cb0c237e7c15e9e1bdf973826ebae490cc # v1.0.248
         id: review
         if: env.HAS_CREDENTIALS == 'true' && steps.earlier.outputs.reviewed != 'true'
