@@ -99,6 +99,7 @@ class FakeSilo:
         self.rate_limit = 0
         self.not_admin = False
         self.no_poster = {"movie-imdb-tt0133093"}   # a title Silo has no poster for
+        self.card_ids = False                       # builds from 6 November 2026 put provider ids on catalog cards
 
     def add_collection(self, title, lib, kind="manual"):
         cid = str(self.next_id)
@@ -139,7 +140,8 @@ class FakeSilo:
             assert headers.get("X-Profile-Id") == "77", "the catalogue needs the profile header"
             typ = "movie" if q["type"] == "movie" else "series"
             rows = [{"content_id": cid, "type": typ, "title": it["title"], "year": it["year"], "genres": it["genres"],
-                     "backdrop_thumbhash": "x", **({"poster_thumbhash": "p"} if cid not in self.no_poster else {})}
+                     "backdrop_thumbhash": "x", **({"poster_thumbhash": "p"} if cid not in self.no_poster else {}),
+                     **(it["ids"] if self.card_ids else {})}
                     for cid, it in self.items.items() if it["lib"] == q["library_id"] and cid.startswith(typ)]
             return Resp(data=self.page(rows, q))
         if parts[:2] == ["catalog", "items"]:
@@ -320,6 +322,33 @@ def test_show_ids_are_looked_up_once(silo_run):
     assert index["show"]["tmdb"]["1399"] == "series-tvdb-121361"         # 1399-game-of-thrones, kept as the number
     assert index["movie"]["imdb"]["tt0133093"] == "movie-imdb-tt0133093"  # a film Silo knows by its IMDb id
     assert "Concerts" not in json.dumps(silo_run.fake.calls)
+
+
+def test_newer_silo_gives_the_ids_on_its_cards(silo_run):
+    """Silo builds from 6 November 2026 put provider ids on catalog cards: no show is looked up, and a film Silo knows
+    by its IMDb id also matches by its TMDB one."""
+    fake = silo_run.fake
+    fake.card_ids = True
+    fake.items["movie-imdb-tt0133093"]["ids"] = {"tmdb_id": "603", "imdb_id": "tt0133093"}
+    cfg, srv, eng = silo_run()
+    index = eng.build_index()
+    assert not [c for c in fake.calls if c[1].startswith("/catalog/items/")]
+    assert index["show"]["imdb"]["tt0944947"] == "series-tvdb-121361"
+    assert index["show"]["tmdb"]["1399"] == "series-tvdb-121361"         # 1399-game-of-thrones, kept as the number
+    assert index["show"]["tvdb"]["305288"] == "series-tvdb-305288"
+    assert index["movie"]["tmdb"]["603"] == "movie-imdb-tt0133093"        # never known before cards had ids
+
+
+def test_silo_says_why_it_refused(silo_run):
+    """A refused field's reason is only in errors[].detail, and a collection a section uses can't be deleted."""
+    cfg, srv, eng = silo_run()
+    clash = Resp(422, {"title": "Unprocessable Entity", "detail": "The request did not pass validation; see errors.",
+                       "errors": [{"detail": "A collection named movies - marvel already exists in this library",
+                                   "location": "body.title"}]})
+    assert "already exists in this library" in srv.problem(clash)
+    in_use = Resp(409, {"title": "Conflict", "detail": "The collection is used by a section"})
+    assert "take the collection out of that Home or library section" in srv.problem(in_use)
+    assert srv.problem(Resp(409, {"title": "Conflict", "detail": "Not a manual collection"})) == "Not a manual collection"
 
 
 def test_titles_silo_no_longer_has_are_skipped(silo_run, capsys):

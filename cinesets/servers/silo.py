@@ -148,12 +148,19 @@ class SiloServer(Server):
             body = None
         silo = isinstance(body, dict)  # Silo answers with problem JSON; anything else is from something in front of it
         detail = (str(body.get("detail") or body.get("title") or "") if silo else r.text)[:200]
+        # A refused field only says "see errors" in detail, and the reason is in errors[].detail: since November 2026
+        # (Silo-Server/silo-server#3933) that includes a collection name another one in the library has, case aside
+        reasons = [str(e.get("detail") or "") for e in (body.get("errors") or []) if isinstance(e, dict)] if silo else []
+        if any(reasons):
+            detail += " (" + "; ".join(x for x in reasons if x)[:200] + ")"
         if r.status_code == 401:
             detail += (f" (Silo did not accept the API key: make one under {cls.KEY_PAGE} that belongs to an "
                        "administrator and has no scopes, and put it in server.api_key)")
         elif r.status_code == 403:
             detail += (" (CineSets needs an API key that belongs to an administrator and has no scopes: make one under "
                        f"{cls.KEY_PAGE} in Silo and put it in server.api_key)")
+        elif r.status_code == 409 and "section" in detail.lower():
+            detail += " (take the collection out of that Home or library section in Silo first, then run CineSets again)"
         elif r.status_code == 404 and not silo:
             detail = ("(nothing answered there, so server.url is probably not Silo's own address: use the one its web "
                       "app opens on, not its Jellyfin-compatible port)")
@@ -237,13 +244,19 @@ class SiloServer(Server):
         typ = "movie" if kind == "movie" else "series"
         cards = self.pages(f"/catalog?library_id={quote(folder)}&type={typ}&sort=title&skip_total=true"
                            f"&image_size=small&limit={PAGE}", headers=self.profile())
-        out, seen = [], set()
+        out, seen, carded = [], set(), set()
         for c in cards:
             cid = c.get("content_id")
             if not cid or cid in seen:
                 continue
             seen.add(cid)
-            out.append({"id": cid, "name": c.get("title"), "year": c.get("year"), "ids": content_ids(cid),
+            # Silo builds from 6 November 2026 (Silo-Server/silo-server#3618) put the title's provider ids on its card,
+            # the same ones its item details give, so a show needs no lookup and a film known by its IMDb id learns
+            # its TMDB one. Older builds leave them off, and their shows are looked up as before.
+            card = {k: v for k in ("tmdb", "imdb", "tvdb") for v in [provider_id(c.get(f"{k}_id"))] if v}
+            if card:
+                carded.add(cid)
+            out.append({"id": cid, "name": c.get("title"), "year": c.get("year"), "ids": {**card, **content_ids(cid)},
                         "backdrop": bool(c.get("backdrop_url") or c.get("backdrop_thumbhash")),
                         "poster": bool(c.get("poster_url") or c.get("poster_thumbhash")),
                         "genres": c.get("genres") or []})
@@ -253,7 +266,7 @@ class SiloServer(Server):
             self._where.setdefault(it["id"], []).append(folder)
         save_json(self.where_file, self._where)
         if kind == "show":
-            self.add_show_ids(out, name)
+            self.add_show_ids([it for it in out if it["id"] not in carded], name)
         return out
 
     def where(self):
