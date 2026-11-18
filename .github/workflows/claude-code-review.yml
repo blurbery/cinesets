@@ -58,21 +58,19 @@ jobs:
         if: env.HAS_CREDENTIALS == 'true' && steps.earlier.outputs.reviewed != 'true'
         with:
           fetch-depth: 1
-      - name: TEMP one tiny API call (prints no secret)
+      - name: TEMP Claude Code with the key (prints no secret)
         if: env.HAS_CREDENTIALS == 'true'
         env:
-          KEY: ${{ secrets.ANTHROPIC_API_KEY }}
-          WS: ${{ secrets.ANTHROPIC_WORKSPACE_ID }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
+          npm install -g --silent @anthropic-ai/claude-code > /dev/null 2>&1
+          claude --version
           for model in claude-haiku-5-5 claude-sonnet-5-5; do
-            for ws in with without; do
-              args=(-H "x-api-key: $KEY" -H "anthropic-version: 2023-06-01" -H "content-type: application/json")
-              if [ "$ws" = with ]; then args+=(-H "anthropic-workspace-id: $WS"); fi
-              code=$(curl -s -o "$RUNNER_TEMP/out.json" -w '%{http_code}' https://api.anthropic.com/v1/messages "${args[@]}" \
-                -d "{\"model\":\"$model\",\"max_tokens\":5,\"messages\":[{\"role\":\"user\",\"content\":\"hi\"}]}")
-              echo "messages $model, $ws workspace: HTTP $code $(jq -c '.error // {ok: true}' "$RUNNER_TEMP/out.json" | cut -c1-160)"
-            done
+            claude -p "Reply with just: ok" --model "$model" --max-turns 1 --output-format json > "$RUNNER_TEMP/cc.json" 2> "$RUNNER_TEMP/cc.err" || true
+            echo "claude cli $model: $(jq -c '{is_error, result: (.result | tostring | .[0:150])}' "$RUNNER_TEMP/cc.json" 2>/dev/null || head -c 300 "$RUNNER_TEMP/cc.err")"
           done
+          claude -p "Reply with just: ok" --model claude-sonnet-5-5 --max-turns 1 --debug api > /dev/null 2> "$RUNNER_TEMP/dbg.txt" || true
+          grep -iE 'error|status|billing|credit|beta|context|fast|tier' "$RUNNER_TEMP/dbg.txt" | grep -viE 'key|token|authorization' | head -25 || true
       - uses: anthropics/claude-code-action@1d6de8cb0c237e7c15e9e1bdf973826ebae490cc # v1.0.248
         id: review
         if: env.HAS_CREDENTIALS == 'true' && steps.earlier.outputs.reviewed != 'true'
