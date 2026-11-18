@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import re
+import sys
 import tempfile
 
 import yaml
@@ -105,12 +106,12 @@ def keep_private(path, raw):
         if key and mode & 0o077:
             os.chmod(path, mode & 0o700)
             print(f"{os.path.basename(path)} holds the API key and others could read it, so it is now readable by "
-                  "its owner only")
+                  "its owner only", file=sys.stderr)
     except OSError as e:
         if path not in _WARNED:  # once: the dashboard reads config.yml again and again
             _WARNED.add(path)
             print(f"{os.path.basename(path)} holds the API key and others can read it, and CineSets couldn't change "
-                  f"that ({e.strerror}): run chmod 600 on it")
+                  f"that ({e.strerror}): run chmod 600 on it", file=sys.stderr)
 
 
 _WARNED = set()

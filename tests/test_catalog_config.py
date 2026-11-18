@@ -599,7 +599,7 @@ def test_a_config_holding_the_key_is_made_private(tmp_path, capsys):
     os.chmod(p, 0o644)
     config.load(str(p))
     assert oct(os.stat(p).st_mode & 0o777) == "0o600"
-    assert "now readable by its owner only" in capsys.readouterr().out
+    assert "now readable by its owner only" in capsys.readouterr().err
     q = tmp_path / "nokey" / "config.yml"
     q.parent.mkdir()
     q.write_text('server: {type: emby, url: "http://127.0.0.1:8096"}\n')
