@@ -1,0 +1,45 @@
+# CineSets by blurbery (https://github.com/blurbery/cinesets). SPDX-License-Identifier: AGPL-3.0-or-later
+# Additional terms under AGPL-3.0 section 7 apply: see NOTICE.
+#
+# Every Monday, checks the fixed franchise lists in collections.yml against their TMDB collections
+# (tests/e2e/check_franchises.py). A film that is out but not in its list, or one TMDB has taken out of the
+# collection, fails the run, and GitHub emails the repository owner about a failed scheduled run. The run's summary
+# lists the lines to add or take out. Needs a TMDB API key in the repository secret TMDB_API_KEY. Run it by hand
+# from Actions, Franchises, Run workflow.
+name: Franchises
+
+on:
+  schedule:
+    - cron: "29 3 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: franchises
+  cancel-in-progress: false
+
+jobs:
+  franchises:
+    name: Franchises
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt -c constraints.txt
+      - name: Check the franchise lists against TMDB
+        env:
+          TMDB_API_KEY: ${{ secrets.TMDB_API_KEY }}
+        run: |
+          set +e
+          python tests/e2e/check_franchises.py > franchises.txt 2>&1
+          status=$?
+          cat franchises.txt
+          { echo '```'; cat franchises.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          exit $status

@@ -66,6 +66,10 @@ I approve them.
   TMDB id, the number in its themoviedb.org address, so it's found whatever a server calls it (Zootopia is
   "Zootropolis" in British metadata), and check it against a second source such as Wikidata: a wrong id quietly
   puts the wrong film in the franchise.
+- A franchise TMDB has a collection for also names it in `tmdb_collections`, with `tmdb_add` for films that belong
+  in the list but not in TMDB's collection (spin-offs like Ballerina) and `tmdb_skip` for ones in it to leave out.
+  The weekly **Franchises** check then catches new films as they come out. With a TMDB API key in `TMDB_API_KEY`,
+  `python tests/e2e/check_franchises.py` shows what's out of step and `--write` fixes `collections.yml`.
 - One thing per PR.
 
 <details>
@@ -190,7 +194,9 @@ it private. If so, make it public once: on GitHub, Your profile, Packages, cines
 visibility. Later releases keep that setting.
 
 Every Monday, **Newest servers** tests CineSets against the newest Jellyfin, Emby (release and beta) and Silo, and
-**MDBList lists** checks every list in `collections.yml`. GitHub emails you when a scheduled run fails. The title
+**MDBList lists** checks every list in `collections.yml`, and **Franchises** checks the fixed franchise lists
+against their TMDB collections. GitHub emails you when a scheduled run fails. A failed Franchises run lists the
+films to add or take out in its summary; it needs a TMDB API key in the repository secret `TMDB_API_KEY`. The title
 check skips the release PR, as the workflow makes it rather than a person.
 
 </details>

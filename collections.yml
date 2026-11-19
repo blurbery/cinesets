@@ -39,6 +39,12 @@
 #   overview         the collection's description
 #   create_name      a temporary name to create the collection under (needed when its name was used before)
 #   label            the small label at the top, instead of the one in config.yml (labels)
+#   tmdb_collections for a fixed list: the TMDB collections its films come from, the number in the collection's
+#                    TMDB address (404609 in themoviedb.org/collection/404609). CineSets doesn't read it: the weekly
+#                    Franchises check (tests/e2e/check_franchises.py) adds a film to `titles` once it is out, and
+#                    takes out one TMDB has taken out of the collection.
+#   tmdb_add         films that aren't in those collections but belong in the list, like a spin-off (TMDB ids)
+#   tmdb_skip        films in those collections to leave out of the list (TMDB ids)
 #
 # A new group shows up in `list` and `pick` with its key as its name. To give it a proper one, add at the top level:
 #   sections:
@@ -229,6 +235,8 @@ collections:
     type: movie
     title: "Middle-\nearth"
     accent: green
+    tmdb_collections: [119, 121938]
+    tmdb_add: [839033]
     titles:
       - ["The Lord of the Rings: The Fellowship of the Ring", 2001, 120]
       - ["The Lord of the Rings: The Two Towers", 2002, 121]
@@ -306,6 +314,8 @@ collections:
     type: movie
     title: "John\nWick"
     accent: purple
+    tmdb_collections: [404609]
+    tmdb_add: [541671]
     titles:
       - ["John Wick", 2014, 245891]
       - ["John Wick: Chapter 2", 2017, 324552]
@@ -388,6 +398,7 @@ collections:
     type: movie
     title: "Rocky &\nCreed"
     accent: red
+    tmdb_collections: [1575, 553717]
     titles:
       - ["Rocky", 1976, 1366]
       - ["Rocky II", 1979, 1367]
@@ -406,6 +417,7 @@ collections:
     title: "Despicable\nMe"
     subtitle: "& Minions"
     accent: gold
+    tmdb_collections: [86066, 544669]
     titles:
       - ["Despicable Me", 2010, 20352]
       - ["Despicable Me 2", 2013, 93456]
@@ -421,6 +433,8 @@ collections:
     type: movie
     title: "Toy Story"
     accent: blue
+    tmdb_collections: [10194]
+    tmdb_add: [718789]
     titles:
       - ["Toy Story", 1995, 862]
       - ["Toy Story 2", 1999, 863]
@@ -435,6 +449,7 @@ collections:
     type: movie
     title: "Shrek"
     accent: green
+    tmdb_collections: [2150, 94602]
     titles:
       - ["Shrek", 2001, 808]
       - ["Shrek 2", 2004, 809]
@@ -449,6 +464,8 @@ collections:
     type: movie
     title: "Predator"
     accent: green
+    tmdb_collections: [399]
+    tmdb_add: [1376434]
     titles:
       - ["Predator", 1987, 106]
       - ["Predator 2", 1990, 169]
@@ -464,6 +481,7 @@ collections:
     type: movie
     title: "Ice Age"
     accent: blue
+    tmdb_collections: [8354]
     titles:
       - ["Ice Age", 2002, 425]
       - ["Ice Age: The Meltdown", 2006, 950]
@@ -478,6 +496,7 @@ collections:
     type: movie
     title: "Pirates of\nthe Caribbean"
     accent: gold
+    tmdb_collections: [295]
     titles:
       - ["Pirates of the Caribbean: The Curse of the Black Pearl", 2003, 22]
       - ["Pirates of the Caribbean: Dead Man's Chest", 2006, 58]
@@ -491,6 +510,8 @@ collections:
     type: movie
     title: "The Matrix"
     accent: green
+    tmdb_collections: [2344]
+    tmdb_add: [55931]
     titles:
       - ["The Matrix", 1999, 603]
       - ["The Animatrix", 2003, 55931]
@@ -504,6 +525,7 @@ collections:
     type: movie
     title: "Rambo"
     accent: red
+    tmdb_collections: [5039]
     titles:
       - ["First Blood", 1982, 1368]
       - ["Rambo: First Blood Part II", 1985, 1369]
@@ -517,6 +539,7 @@ collections:
     type: movie
     title: "Terminator"
     accent: blue
+    tmdb_collections: [528]
     titles:
       - ["The Terminator", 1984, 218]
       - ["Terminator 2: Judgment Day", 1991, 280]
@@ -531,6 +554,7 @@ collections:
     type: movie
     title: "Indiana\nJones"
     accent: gold
+    tmdb_collections: [84]
     titles:
       - ["Raiders of the Lost Ark", 1981, 85]
       - ["Indiana Jones and the Temple of Doom", 1984, 87]
@@ -544,6 +568,7 @@ collections:
     type: movie
     title: "The Hunger\nGames"
     accent: red
+    tmdb_collections: [131635, 1701563]
     titles:
       - ["The Hunger Games", 2012, 70160]
       - ["The Hunger Games: Catching Fire", 2013, 101299]
@@ -558,6 +583,8 @@ collections:
     type: movie
     title: "Planet of\nthe Apes"
     accent: teal
+    tmdb_collections: [1709, 173710]
+    tmdb_skip: [1685, 1687, 1688, 1705]
     titles:
       - ["Planet of the Apes", 1968, 871]
       - ["Rise of the Planet of the Apes", 2011, 61791]
@@ -571,6 +598,7 @@ collections:
     type: movie
     title: "Mad Max"
     accent: gold
+    tmdb_collections: [8945]
     titles:
       - ["Mad Max", 1979, 9659]
       - ["Mad Max 2", 1981, 8810]
@@ -585,6 +613,7 @@ collections:
     title: "The\nConjuring"
     subtitle: "Universe"
     accent: purple
+    tmdb_collections: [313086, 402074, 968052]
     titles:
       - ["The Conjuring", 2013, 138843]
       - ["Annabelle", 2014, 250546]
@@ -602,6 +631,7 @@ collections:
     type: movie
     title: "Bourne"
     accent: blue
+    tmdb_collections: [31562]
     titles:
       - ["The Bourne Identity", 2002, 2501]
       - ["The Bourne Supremacy", 2004, 2502]
@@ -615,6 +645,7 @@ collections:
     type: movie
     title: "Alien"
     accent: teal
+    tmdb_collections: [8091, 135416, 1434946]
     titles:
       - ["Alien", 1979, 348]
       - ["Aliens", 1986, 679]
@@ -630,6 +661,7 @@ collections:
     type: movie
     title: "Kung Fu\nPanda"
     accent: gold
+    tmdb_collections: [77816]
     titles:
       - ["Kung Fu Panda", 2008, 9502]
       - ["Kung Fu Panda 2", 2011, 49444]
@@ -642,6 +674,7 @@ collections:
     type: movie
     title: "Die Hard"
     accent: red
+    tmdb_collections: [1570]
     titles:
       - ["Die Hard", 1988, 562]
       - ["Die Hard 2", 1990, 1573]
@@ -656,6 +689,7 @@ collections:
     title: "Halloween"
     subtitle: "Saga"
     accent: red
+    tmdb_collections: [91361]
     titles:
       - ["Halloween", 1978, 948]
       - ["Halloween II", 1981, 11281]
@@ -674,6 +708,8 @@ collections:
     type: movie
     title: "Resident\nEvil"
     accent: blue
+    tmdb_collections: [17255]
+    tmdb_add: [460458, 1423191]
     titles:
       - ["Resident Evil", 2002, 1576]
       - ["Resident Evil: Apocalypse", 2004, 1577]
@@ -689,6 +725,7 @@ collections:
     type: movie
     title: "Evil Dead"
     accent: gold
+    tmdb_collections: [1960, 1826734]
     titles:
       - ["The Evil Dead", 1983, 764]
       - ["Evil Dead II", 1987, 765]
@@ -702,6 +739,8 @@ collections:
     type: movie
     title: "Jackass"
     accent: green
+    tmdb_collections: [17178, 989621]
+    tmdb_skip: [14158, 65851, 828853, 273641]
     titles:
       - ["Jackass: The Movie", 2002, 9012]
       - ["Jackass Number Two", 2006, 12094]
@@ -715,6 +754,7 @@ collections:
     type: movie
     title: "American Pie"
     accent: purple
+    tmdb_collections: [2806]
     titles:
       - ["American Pie", 1999, 2105]
       - ["American Pie 2", 2001, 2770]
@@ -726,6 +766,7 @@ collections:
     type: movie
     title: "Bad Boys"
     accent: teal
+    tmdb_collections: [14890]
     titles:
       - ["Bad Boys", 1995, 9737]
       - ["Bad Boys II", 2003, 8961]
@@ -737,6 +778,7 @@ collections:
     type: movie
     title: "Chucky"
     accent: pink
+    tmdb_collections: [10455]
     titles:
       - ["Child's Play", 1988, 10585]
       - ["Child's Play 2", 1990, 11186]
@@ -751,6 +793,7 @@ collections:
     type: movie
     title: "Lethal\nWeapon"
     accent: red
+    tmdb_collections: [945]
     titles:
       - ["Lethal Weapon", 1987, 941]
       - ["Lethal Weapon 2", 1989, 942]
@@ -762,6 +805,8 @@ collections:
     type: movie
     title: "Madagascar"
     accent: blue
+    tmdb_collections: [14740]
+    tmdb_add: [270946]
     titles:
       - ["Madagascar", 2005, 953]
       - ["Madagascar: Escape 2 Africa", 2008, 10527]
@@ -773,6 +818,8 @@ collections:
     type: movie
     title: "Spy Kids"
     accent: gold
+    tmdb_collections: [86486]
+    tmdb_add: [790493]
     titles:
       - ["Spy Kids", 2001, 10054]
       - ["Spy Kids 2: The Island of Lost Dreams", 2002, 9488]
@@ -785,6 +832,7 @@ collections:
     type: movie
     title: "The\nExpendables"
     accent: green
+    tmdb_collections: [126125]
     titles:
       - ["The Expendables", 2010, 27578]
       - ["The Expendables 2", 2012, 76163]
@@ -796,6 +844,8 @@ collections:
     type: movie
     title: "The LEGO\nMovie"
     accent: purple
+    tmdb_collections: [325470]
+    tmdb_add: [324849, 274862]
     titles:
       - ["The Lego Movie", 2014, 137106]
       - ["The Lego Batman Movie", 2017, 324849]
@@ -807,6 +857,8 @@ collections:
     type: movie
     title: "The Mummy"
     accent: teal
+    tmdb_collections: [1733, 116669]
+    tmdb_skip: [13486, 78049, 297291, 522417]
     titles:
       - ["The Mummy", 1999, 564]
       - ["The Mummy Returns", 2001, 1734]
@@ -818,6 +870,7 @@ collections:
     type: movie
     title: "The Purge"
     accent: pink
+    tmdb_collections: [256322]
     titles:
       - ["The Purge", 2013, 158015]
       - ["The Purge: Anarchy", 2014, 238636]
@@ -830,6 +883,7 @@ collections:
     type: movie
     title: "Underworld"
     accent: red
+    tmdb_collections: [2326]
     titles:
       - ["Underworld", 2003, 277]
       - ["Underworld: Evolution", 2006, 834]
@@ -842,6 +896,7 @@ collections:
     type: movie
     title: "28 Days\nLater"
     accent: red
+    tmdb_collections: [1565]
     titles:
       - ["28 Days Later", 2002, 170]
       - ["28 Weeks Later", 2007, 1562]
@@ -853,6 +908,7 @@ collections:
     type: movie
     title: "A Nightmare\non Elm Street"
     accent: red
+    tmdb_collections: [8581]
     titles:
       - ["A Nightmare on Elm Street", 1984, 377]
       - ["A Nightmare on Elm Street Part 2: Freddy's Revenge", 1985, 10014]
@@ -867,6 +923,8 @@ collections:
     type: movie
     title: "A Quiet\nPlace"
     accent: blue
+    tmdb_collections: [521226]
+    tmdb_add: [762441]
     titles:
       - ["A Quiet Place", 2018, 447332]
       - ["A Quiet Place Part II", 2021, 520763]
@@ -877,6 +935,7 @@ collections:
     type: movie
     title: "Austin\nPowers"
     accent: pink
+    tmdb_collections: [1006]
     titles:
       - ["Austin Powers: International Man of Mystery", 1997, 816]
       - ["Austin Powers: The Spy Who Shagged Me", 1999, 817]
@@ -887,6 +946,7 @@ collections:
     type: movie
     title: "Avatar"
     accent: gold
+    tmdb_collections: [87096]
     titles:
       - ["Avatar", 2009, 19995]
       - ["Avatar: The Way of Water", 2022, 76600]
@@ -897,6 +957,7 @@ collections:
     type: movie
     title: "Back to\nthe Future"
     accent: green
+    tmdb_collections: [264]
     titles:
       - ["Back to the Future", 1985, 105]
       - ["Back to the Future Part II", 1989, 165]
@@ -907,6 +968,7 @@ collections:
     type: movie
     title: "Beetlejuice"
     accent: green
+    tmdb_collections: [945475]
     titles:
       - ["Beetlejuice", 1988, 4011]
       - ["Beetlejuice Beetlejuice", 2024, 917496]
@@ -916,6 +978,7 @@ collections:
     type: movie
     title: "Beverly Hills\nCop"
     accent: purple
+    tmdb_collections: [85861]
     titles:
       - ["Beverly Hills Cop", 1984, 90]
       - ["Beverly Hills Cop II", 1987, 96]
@@ -927,6 +990,7 @@ collections:
     type: movie
     title: "Cars"
     accent: teal
+    tmdb_collections: [87118]
     titles:
       - ["Cars", 2006, 920]
       - ["Cars 2", 2011, 49013]
@@ -937,6 +1001,7 @@ collections:
     type: movie
     title: "Dune"
     accent: gold
+    tmdb_collections: [726871]
     titles:
       - ["Dune", 2021, 438631]
       - ["Dune: Part Two", 2024, 693134]
@@ -947,6 +1012,7 @@ collections:
     type: movie
     title: "Fifty Shades"
     accent: pink
+    tmdb_collections: [344830]
     titles:
       - ["Fifty Shades of Grey", 2015, 216015]
       - ["Fifty Shades Darker", 2017, 341174]
@@ -957,6 +1023,7 @@ collections:
     type: movie
     title: "Final\nDestination"
     accent: red
+    tmdb_collections: [8864]
     titles:
       - ["Final Destination", 2000, 9532]
       - ["Final Destination 2", 2003, 9358]
@@ -970,6 +1037,7 @@ collections:
     type: movie
     title: "Friday\nthe 13th"
     accent: blue
+    tmdb_collections: [9735]
     titles:
       - ["Friday the 13th", 1980, 4488]
       - ["Friday the 13th Part 2", 1981, 9725]
@@ -988,6 +1056,7 @@ collections:
     type: movie
     title: "Frozen"
     accent: ice
+    tmdb_collections: [386382]
     titles:
       - ["Frozen", 2013, 109445]
       - ["Frozen II", 2019, 330457]
@@ -997,6 +1066,7 @@ collections:
     type: movie
     title: "Ghostbusters"
     accent: red
+    tmdb_collections: [2980]
     titles:
       - ["Ghostbusters", 1984, 620]
       - ["Ghostbusters II", 1989, 2978]
@@ -1008,6 +1078,7 @@ collections:
     type: movie
     title: "Gladiator"
     accent: gold
+    tmdb_collections: [1069584]
     titles:
       - ["Gladiator", 2000, 98]
       - ["Gladiator II", 2024, 558449]
@@ -1017,6 +1088,8 @@ collections:
     type: movie
     title: "Home Alone"
     accent: blue
+    tmdb_collections: [9888]
+    tmdb_add: [654974]
     titles:
       - ["Home Alone", 1990, 771]
       - ["Home Alone 2: Lost in New York", 1992, 772]
@@ -1029,6 +1102,7 @@ collections:
     type: movie
     title: "Hotel\nTransylvania"
     accent: gold
+    tmdb_collections: [185103]
     titles:
       - ["Hotel Transylvania", 2012, 76492]
       - ["Hotel Transylvania 2", 2015, 159824]
@@ -1040,6 +1114,7 @@ collections:
     type: movie
     title: "How to Train\nYour Dragon"
     accent: green
+    tmdb_collections: [89137, 1458864]
     titles:
       - ["How to Train Your Dragon", 2010, 10191]
       - ["How to Train Your Dragon 2", 2014, 82702]
@@ -1051,6 +1126,7 @@ collections:
     type: movie
     title: "Insidious"
     accent: purple
+    tmdb_collections: [228446]
     titles:
       - ["Insidious", 2011, 49018]
       - ["Insidious: Chapter 2", 2013, 91586]
@@ -1064,6 +1140,7 @@ collections:
     type: movie
     title: "Jaws"
     accent: teal
+    tmdb_collections: [2366]
     titles:
       - ["Jaws", 1975, 578]
       - ["Jaws 2", 1978, 579]
@@ -1075,6 +1152,7 @@ collections:
     type: movie
     title: "Jumanji"
     accent: pink
+    tmdb_collections: [495527]
     titles:
       - ["Jumanji", 1995, 8844]
       - ["Jumanji: Welcome to the Jungle", 2017, 353486]
@@ -1086,16 +1164,19 @@ collections:
     type: movie
     title: "Kill Bill"
     accent: red
+    tmdb_collections: [2883]
+    tmdb_add: [414419]
     titles:
       - ["Kill Bill: Vol. 1", 2003, 24]
       - ["Kill Bill: Vol. 2", 2004, 393]
-      - ["Kill Bill: The Whole Bloody Affair", 2011]
+      - ["Kill Bill: The Whole Bloody Affair", 2011, 414419]
     min: 2
   - key: m-kingsman
     group: universes
     type: movie
     title: "Kingsman"
     accent: blue
+    tmdb_collections: [391860]
     titles:
       - ["Kingsman: The Secret Service", 2015, 207703]
       - ["Kingsman: The Golden Circle", 2017, 343668]
@@ -1106,6 +1187,7 @@ collections:
     type: movie
     title: "Knives Out"
     accent: gold
+    tmdb_collections: [722971]
     titles:
       - ["Knives Out", 2019, 546554]
       - ["Glass Onion: A Knives Out Mystery", 2022, 661374]
@@ -1116,6 +1198,7 @@ collections:
     type: movie
     title: "Meet the\nParents"
     accent: green
+    tmdb_collections: [51509]
     titles:
       - ["Meet the Parents", 2000, 1597]
       - ["Meet the Fockers", 2004, 693]
@@ -1127,6 +1210,7 @@ collections:
     type: movie
     title: "Men in Black"
     accent: purple
+    tmdb_collections: [86055]
     titles:
       - ["Men in Black", 1997, 607]
       - ["Men in Black II", 2002, 608]
@@ -1137,6 +1221,7 @@ collections:
     type: movie
     title: "Moana"
     accent: teal
+    tmdb_collections: [1241984]
     titles:
       - ["Moana", 2016, 277834]
       - ["Moana 2", 2024, 1241982]
@@ -1146,6 +1231,7 @@ collections:
     type: movie
     title: "Mortal\nKombat"
     accent: gold
+    tmdb_collections: [9818, 931431]
     titles:
       - ["Mortal Kombat", 1995, 9312]
       - ["Mortal Kombat: Annihilation", 1997, 9823]
@@ -1157,6 +1243,7 @@ collections:
     type: movie
     title: "Night at\nthe Museum"
     accent: gold
+    tmdb_collections: [85943]
     titles:
       - ["Night at the Museum", 2006, 1593]
       - ["Night at the Museum: Battle of the Smithsonian", 2009, 18360]
@@ -1167,6 +1254,7 @@ collections:
     type: movie
     title: "Now You\nSee Me"
     accent: purple
+    tmdb_collections: [382685]
     titles:
       - ["Now You See Me", 2013, 75656]
       - ["Now You See Me 2", 2016, 291805]
@@ -1178,6 +1266,7 @@ collections:
     title: "Ocean's"
     subtitle: "Trilogy"
     accent: teal
+    tmdb_collections: [304]
     titles:
       - ["Ocean's Eleven", 2001, 161]
       - ["Ocean's Twelve", 2004, 163]
@@ -1188,6 +1277,7 @@ collections:
     type: movie
     title: "Paddington"
     accent: pink
+    tmdb_collections: [488924]
     titles:
       - ["Paddington", 2014, 116149]
       - ["Paddington 2", 2017, 346648]
@@ -1198,6 +1288,7 @@ collections:
     type: movie
     title: "Paranormal\nActivity"
     accent: purple
+    tmdb_collections: [41437]
     titles:
       - ["Paranormal Activity", 2009, 23827]
       - ["Paranormal Activity 2", 2010, 41436]
@@ -1212,6 +1303,7 @@ collections:
     type: movie
     title: "Pitch\nPerfect"
     accent: pink
+    tmdb_collections: [306031]
     titles:
       - ["Pitch Perfect", 2012, 114150]
       - ["Pitch Perfect 2", 2015, 254470]
@@ -1222,6 +1314,7 @@ collections:
     type: movie
     title: "Rush Hour"
     accent: red
+    tmdb_collections: [90863]
     titles:
       - ["Rush Hour", 1998, 2109]
       - ["Rush Hour 2", 2001, 5175]
@@ -1232,6 +1325,7 @@ collections:
     type: movie
     title: "Saw"
     accent: blue
+    tmdb_collections: [656]
     titles:
       - ["Saw", 2004, 176]
       - ["Saw II", 2005, 215]
@@ -1249,6 +1343,7 @@ collections:
     type: movie
     title: "Scream"
     accent: gold
+    tmdb_collections: [2602]
     titles:
       - ["Scream", 1996, 4232]
       - ["Scream 2", 1997, 4233]
@@ -1263,6 +1358,7 @@ collections:
     type: movie
     title: "Sonic the\nHedgehog"
     accent: green
+    tmdb_collections: [720879]
     titles:
       - ["Sonic the Hedgehog", 2020, 454626]
       - ["Sonic the Hedgehog 2", 2022, 675353]
@@ -1273,6 +1369,7 @@ collections:
     type: movie
     title: "Super\nMario"
     accent: red
+    tmdb_collections: [1434561]
     titles:
       - ["The Super Mario Bros. Movie", 2023, 502356]
       - ["The Super Mario Galaxy Movie", 2026, 1226863]
@@ -1282,6 +1379,7 @@ collections:
     type: movie
     title: "Taken"
     accent: purple
+    tmdb_collections: [135483]
     titles:
       - ["Taken", 2008, 8681]
       - ["Taken 2", 2012, 82675]
@@ -1292,8 +1390,9 @@ collections:
     type: movie
     title: "Terrifier"
     accent: silver
+    tmdb_collections: [727761]
     titles:
-      - ["Terrifier", 2018]
+      - ["Terrifier", 2018, 420634]
       - ["Terrifier 2", 2022, 663712]
       - ["Terrifier 3", 2024, 1034541]
     min: 2
@@ -1303,6 +1402,7 @@ collections:
     title: "Texas\nChainsaw"
     subtitle: "Massacre"
     accent: orange
+    tmdb_collections: [111751]
     titles:
       - ["The Texas Chain Saw Massacre", 1974, 30497]
       - ["The Texas Chainsaw Massacre Part 2", 1986, 16337]
@@ -1317,6 +1417,7 @@ collections:
     type: movie
     title: "The\nEqualizer"
     accent: teal
+    tmdb_collections: [523855]
     titles:
       - ["The Equalizer", 2014, 156022]
       - ["The Equalizer 2", 2018, 345887]
@@ -1327,6 +1428,7 @@ collections:
     type: movie
     title: "The\nGodfather"
     accent: pink
+    tmdb_collections: [230]
     titles:
       - ["The Godfather", 1972, 238]
       - ["The Godfather Part II", 1974, 240]
@@ -1337,6 +1439,7 @@ collections:
     type: movie
     title: "The\nHangover"
     accent: teal
+    tmdb_collections: [86119]
     titles:
       - ["The Hangover", 2009, 18785]
       - ["The Hangover Part II", 2011, 45243]
@@ -1347,6 +1450,7 @@ collections:
     type: movie
     title: "The Maze\nRunner"
     accent: red
+    tmdb_collections: [295130]
     titles:
       - ["The Maze Runner", 2014, 198663]
       - ["Maze Runner: The Scorch Trials", 2015, 294254]
@@ -1357,6 +1461,7 @@ collections:
     type: movie
     title: "Top Gun"
     accent: blue
+    tmdb_collections: [531330]
     titles:
       - ["Top Gun", 1986, 744]
       - ["Top Gun: Maverick", 2022, 361743]
@@ -1366,6 +1471,7 @@ collections:
     type: movie
     title: "Tron"
     accent: blue
+    tmdb_collections: [63043]
     titles:
       - ["Tron", 1982, 97]
       - ["TRON: Legacy", 2010, 20526]
@@ -1376,6 +1482,7 @@ collections:
     type: movie
     title: "Twilight"
     accent: gold
+    tmdb_collections: [33514]
     titles:
       - ["Twilight", 2008, 8966]
       - ["The Twilight Saga: New Moon", 2009, 18239]
@@ -1388,6 +1495,7 @@ collections:
     type: movie
     title: "Venom"
     accent: green
+    tmdb_collections: [558216]
     titles:
       - ["Venom", 2018, 335983]
       - ["Venom: Let There Be Carnage", 2021, 580489]
@@ -1398,6 +1506,7 @@ collections:
     type: movie
     title: "Wicked"
     accent: green
+    tmdb_collections: [968080]
     titles:
       - ["Wicked", 2024, 402431]
       - ["Wicked: For Good", 2025, 967941]
@@ -1407,6 +1516,7 @@ collections:
     type: movie
     title: "Zootopia"
     accent: blue
+    tmdb_collections: [1084247]
     titles:
       - ["Zootopia", 2016, 269149]
       - ["Zootopia 2", 2025, 1084242]
