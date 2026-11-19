@@ -77,6 +77,14 @@ def plan(titles, parts, adds, skip, today):
     return keep + new, new, out
 
 
+def retry_after(value):
+    """Seconds to wait from a Retry-After header: a number of seconds (an HTTP date or nothing means 10), at most 60."""
+    try:
+        return min(max(int(str(value).strip()), 1), 60)
+    except (TypeError, ValueError):
+        return 10
+
+
 class TMDB:
     """TMDB's API, a request at a time. A token (the long read access token) goes in a header, a key as api_key."""
 
@@ -98,15 +106,14 @@ class TMDB:
                     raise Unreadable(f"TMDB didn't answer for {path}: {type(e).__name__}")
                 time.sleep(5)
                 continue
-            if r.status_code == 429 and attempt < 2:
-                time.sleep(min(int(r.headers.get("Retry-After") or 10), 60))
-                continue
             if r.status_code == 401:
                 raise Unreadable("TMDB refused the key: set TMDB_API_KEY to a TMDB API key or read access token")
             if r.status_code == 404:
                 raise Problem(f"TMDB has nothing at {path}")
-            if r.status_code >= 500 and attempt < 2:
-                time.sleep(5)
+            if r.status_code == 429 or r.status_code >= 500:
+                if attempt == 2:   # every entry after this one would hit it too
+                    raise Unreadable(f"TMDB answered {r.status_code} for {path} three times")
+                time.sleep(retry_after(r.headers.get("Retry-After")) if r.status_code == 429 else 5)
                 continue
             if r.status_code != 200:
                 raise Problem(f"TMDB answered {r.status_code} for {path}")
