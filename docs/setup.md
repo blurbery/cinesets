@@ -87,6 +87,15 @@ on your own network. It covers everything CineSets fetches from the server, Silo
 Setup asks about it when it meets such a certificate: point it to the CA certificate file, skip the check, or stop.
 It writes your answer into `config.yml`. Run without a terminal, setup stops and says so instead.
 
+## A TMDB key (optional)
+
+Setup asks for a TMDB API key last. With one, franchise collections pick up a new film once it's out, without
+waiting for a CineSets update. Get it free at themoviedb.org: sign in, then Settings, API. Either the API key or the
+longer read access token works. Press Enter to skip it: the franchises then use the lists that come with CineSets,
+which are checked against TMDB every week. You can add or change the key later on the dashboard's Lists tab, in
+`config.yml` under `tmdb: api_key`, or with `CINESETS_TMDB_API_KEY` in the environment. This product uses the TMDB
+API but is not endorsed or certified by TMDB.
+
 ## Docker
 
 Each release is published as `ghcr.io/blurbery/cinesets` for amd64 and arm64. The `1` tag follows every 1.x

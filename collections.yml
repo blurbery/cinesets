@@ -40,9 +40,10 @@
 #   create_name      a temporary name to create the collection under (needed when its name was used before)
 #   label            the small label at the top, instead of the one in config.yml (labels)
 #   tmdb_collections for a fixed list: the TMDB collections its films come from, the number in the collection's
-#                    TMDB address (404609 in themoviedb.org/collection/404609). CineSets doesn't read it: the weekly
-#                    Franchises check (tests/e2e/check_franchises.py) adds a film to `titles` once it is out, and
-#                    takes out one TMDB has taken out of the collection.
+#                    TMDB address (404609 in themoviedb.org/collection/404609). The weekly Franchises check
+#                    (tests/e2e/check_franchises.py) adds a film to `titles` once it is out, and takes out one TMDB
+#                    has taken out of the collection. With a TMDB key in config.yml, CineSets does the same when it
+#                    runs, so new films come in without waiting for an update.
 #   tmdb_add         films that aren't in those collections but belong in the list, like a spin-off (TMDB ids)
 #   tmdb_skip        films in those collections to leave out of the list (TMDB ids)
 #

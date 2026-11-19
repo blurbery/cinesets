@@ -2,7 +2,8 @@
 # Copyright (C) 2026 blurbery
 # SPDX-License-Identifier: AGPL-3.0-or-later
 # Additional terms under AGPL-3.0 section 7 apply: see NOTICE.
-"""Settings: config.yml plus environment overrides (CINESETS_URL, CINESETS_API_KEY, CINESETS_SERVER)."""
+"""Settings: config.yml plus environment overrides (CINESETS_URL, CINESETS_API_KEY, CINESETS_SERVER,
+CINESETS_TMDB_API_KEY)."""
 import contextlib
 import errno
 import hashlib
@@ -40,6 +41,8 @@ DEFAULTS = {
     # how many titles collections hold: `most` caps every list-based collection; a section's or a collection's own
     # number replaces its built-in size (up or down). Franchises always keep every title in their list.
     "limits": {"most": None, "sections": {}, "collections": {}},
+    # optional: a TMDB API key or read access token, so franchises pick up new films by themselves (see tmdb.py)
+    "tmdb": {"api_key": ""},
     # the dashboard (cinesets web): see web.py and docs/dashboard.md
     "web": {"host": "127.0.0.1", "port": 8095, "sign_in": True, "public": False, "hosts": []},
 }
@@ -100,7 +103,8 @@ class Config(dict):
 def keep_private(path, raw):
     """A config.yml holding the API key that other users on the machine can read (copied by hand from
     config.example.yml, say) is made readable by its owner only. Setup and the dashboard already write it that way."""
-    key = isinstance(raw, dict) and isinstance(raw.get("server"), dict) and raw["server"].get("api_key")
+    key = isinstance(raw, dict) and any(isinstance(raw.get(block), dict) and raw[block].get("api_key")
+                                        for block in ("server", "tmdb"))
     try:
         mode = os.stat(path).st_mode & 0o777
         if key and mode & 0o077:
@@ -149,7 +153,29 @@ def load(path=None):
     cfg["collections"] = check_pick(cfg["collections"])
     cfg["web"] = check_web(cfg["web"])
     cfg["limits"] = check_limits(cfg["limits"])
+    cfg["tmdb"] = check_tmdb(cfg["tmdb"])
     return cfg
+
+
+def check_tmdb(raw):
+    """`tmdb` in config.yml: {api_key: ""}, with CINESETS_TMDB_API_KEY in the environment taking its place."""
+    if raw is None:
+        raw = {}
+    if not isinstance(raw, dict):
+        raise SystemExit("config.yml: tmdb must have api_key (see config.example.yml)")
+    key = raw.get("api_key")
+    if key is None:
+        key = ""
+    if not isinstance(key, str):
+        raise SystemExit("config.yml tmdb: api_key must be text in quotes, like \"0123abcd\"")
+    env = os.environ.get("CINESETS_TMDB_API_KEY", "").strip()
+    return {"api_key": env or key.strip(), "from_env": bool(env)}
+
+
+def tmdb_block(key):
+    """The `tmdb` block for config.yml."""
+    return ("tmdb:\n  api_key: " + json.dumps(key) + "   # optional: keeps franchises up to date (see "
+            "config.example.yml)\n")
 
 
 LIMIT_MOST = 1000

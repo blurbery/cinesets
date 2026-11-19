@@ -211,6 +211,19 @@
             <div id="nc-done" class="nc-done" role="status" hidden></div>
           </section>
 
+          <section class="card tmdbcard" aria-labelledby="tmdb-heading">
+            <h2 id="tmdb-heading">Franchise updates from TMDB</h2>
+            <p class="hint">With a TMDB API key, franchise collections like Toy Story and John Wick pick up a new film once it's out, without waiting for a CineSets update. Without one, they use the lists that come with CineSets. Get a free key at <a href="https://www.themoviedb.org/settings/api" target="_blank" rel="noopener noreferrer">themoviedb.org, Settings, API</a>: the API key or the read access token both work.</p>
+            <p id="tmdb-status" class="tmdb-status" role="status" aria-live="polite"></p>
+            <form id="tmdb-form" class="tmdb-row" novalidate>
+              <input id="tmdb-key" class="field" type="password" autocomplete="off" spellcheck="false" aria-label="TMDB API key or read access token" placeholder="API key or read access token">
+              <button id="tmdb-save" class="btn btn-primary" type="submit">Save key</button>
+              <button id="tmdb-remove" class="btn" type="button" hidden>Remove key</button>
+            </form>
+            <p id="tmdb-error" class="signin-error" role="alert" hidden></p>
+            <p id="tmdb-credit" class="tmdb-credit muted"></p>
+          </section>
+
           <div class="lists-toolbar">
             <h2>Every collection</h2>
             <div class="search">

@@ -21,6 +21,7 @@ from . import fonts, lists, mosaic, posters
 from .lists import fetch_list
 from .servers import ServerError, chunks
 from .store import load_json, save_json
+from .tmdb import live_titles, new_run as tmdb_new_run
 
 SAFE_ID = re.compile(r"^[A-Za-z0-9-]+\Z")
 RANDOM_FROM = 25  # random artwork comes from the top titles of a collection, so posters show ones people know
@@ -87,6 +88,7 @@ class Engine:
         self.posters = os.path.join(self.data, "posters")
         self._titles = None  # (index, {kind: titles_in table}) for the index a run or the dashboard is using
         self.halt = lambda: False  # the scheduler swaps this for one that says when it has been asked to stop
+        self.patient = True  # the dashboard sets this False: TMDB is asked once, briefly, instead of waited out
 
     # ------------------------------------------------------------ library index
     def build_index(self):
@@ -129,7 +131,9 @@ class Engine:
             # way (case, accents, punctuation, "&" or "and", a leading "The") from that year or one either side. Each
             # library item fills one place at most, and a remake from another year never counts.
             from .catalog import fixed_title, loose_title
-            wanted = [fixed_title(x) for x in coll["titles"]]
+            # with a TMDB key, the list as TMDB has the franchise's collections now (new films in), else as shipped
+            listed = live_titles(coll, self.cfg, self.data, patient=self.patient)
+            wanted = [fixed_title(x) for x in listed]
             found, near = self.titles_in(index, kind), self.titles_in(index, kind, loose=True)
             picks, used = {}, set()
 
@@ -145,7 +149,7 @@ class Engine:
                 years = near.get(loose_title(t), {}) if n not in picks and isinstance(y, int) else {}
                 fill(n, next((years[x] for x in (y, y - 1, y + 1) if x in years and years[x] not in used), None))
             ids = self.srv.narrow(coll, [picks[n] for n in sorted(picks)])
-            return ids, len(coll["titles"]), len(ids)
+            return ids, len(listed), len(ids)
         ids, seen, wanted = [], set(), 0
         for slug in coll["lists"]:
             rows = [x for x in fetch_list(slug, self.data) if x.get("mediatype") == kind]
@@ -714,6 +718,7 @@ class Engine:
 
     def _steps(self, cmd, colls, min_items, result):
         lists.new_run()
+        tmdb_new_run()
         index = self.get_index()
         state = load_json(self.state_file, {})
         used, todo = set(), []  # (collection, its titles), or (collection, None) for one out of season

@@ -356,6 +356,13 @@ code { font-family: var(--mono); }
 /* ---- Lists tab */
 .newcol { margin-bottom: 26px; display: flex; flex-direction: column; gap: 10px; }
 .newcol h2 { font-size: 16px; }
+.tmdbcard { margin-bottom: 26px; display: flex; flex-direction: column; gap: 10px; }
+.tmdbcard h2 { font-size: 16px; }
+.tmdbcard .hint a { color: var(--blue-hover); }
+.tmdb-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.tmdb-row .field { flex: 1 1 260px; min-width: 0; }
+.tmdb-status { font-size: 13px; }
+.tmdb-credit { font-size: 12px; }
 .nc-lists { display: flex; flex-direction: column; gap: 8px; }
 .nc-row { display: flex; gap: 8px; align-items: center; }
 .nc-row .field { flex: 1; }

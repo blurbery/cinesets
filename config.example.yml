@@ -15,6 +15,13 @@ server:
                                  # CA certificate that signed it (relative to this file), or false to skip the
                                  # check (only on your own network).
 
+# Optional. With a TMDB API key, franchise collections (Toy Story, John Wick and the rest) pick up a new film once
+# it's out, without waiting for a CineSets update. Get one free at themoviedb.org, Settings, API: the API key or the
+# longer read access token both work. Leave it empty to use the franchise lists that come with CineSets, or set
+# CINESETS_TMDB_API_KEY in the environment. This product uses the TMDB API but is not endorsed or certified by TMDB.
+tmdb:
+  api_key: ""
+
 # Libraries CineSets matches titles in. Names must match your server's library names exactly
 # (for example "Films" or "Kids TV"). When a title is in several, the first library listed wins.
 # type: movie or show.

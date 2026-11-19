@@ -7,11 +7,12 @@
   TMDB_API_KEY=... python tests/e2e/check_franchises.py            (say what would change)
   TMDB_API_KEY=... python tests/e2e/check_franchises.py --write    (change collections.yml to match)
 
-TMDB_API_KEY is a TMDB API key or API read access token (themoviedb.org, Settings, API). Only this check uses it:
-CineSets itself reads the `titles` it writes and never asks TMDB.
+TMDB_API_KEY is a TMDB API key or API read access token (themoviedb.org, Settings, API). This keeps the `titles`
+that come with CineSets current for everyone; people who set their own key get the same changes straight away
+(cinesets/tmdb.py).
 
 An entry with `tmdb_collections` gets its films from those TMDB collections, its `tmdb_add` films (spin-offs TMDB
-keeps apart, like Ballerina from John Wick) and none of its `tmdb_skip` ones:
+keeps apart, like Ballerina from John Wick) and none of its `tmdb_skip` ones, by the rules in cinesets.tmdb.plan:
 - a film comes in once it is out, so announced films (Zootopia 3, Avatar 5) wait for their release date;
 - a film goes when TMDB has taken it out of all of the entry's collections and it isn't in `tmdb_add`;
 - films already in the list keep their place, title and year, so a film added by hand before its release stays.
@@ -27,23 +28,15 @@ import json
 import os
 import re
 import sys
-import time
 
-import requests
 import yaml
 
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-API = "https://api.themoviedb.org/3"
-AGENT = "CineSets franchise check (+https://github.com/blurbery/cinesets)"
+sys.path.insert(0, ROOT)
+
+from cinesets.tmdb import Client as TMDB, Problem, Refused, Unreadable, plan  # noqa: E402
+
 FIELDS = ("tmdb_collections", "tmdb_add", "tmdb_skip")
-
-
-class Problem(Exception):
-    """An entry or TMDB answer this check can't work with."""
-
-
-class Unreadable(Problem):
-    """TMDB can't be read at all (a refused key, or no answer): the run stops rather than repeat it for each entry."""
 
 
 def ids_of(entry, field):
@@ -54,82 +47,6 @@ def ids_of(entry, field):
     if not isinstance(value, list) or not all(isinstance(x, int) and not isinstance(x, bool) and x > 0 for x in value):
         raise Problem(f"{entry.get('key')}: {field} must be a list of TMDB ids, like [404609], not {value!r}")
     return value
-
-
-def plan(titles, parts, adds, skip, today):
-    """The list after the rules in this file's docstring, plus the films added and taken out.
-
-    titles: the entry's [title, year, id] entries; parts: {id: (title, release date)} for every film in its TMDB
-    collections; adds: the same for its tmdb_add films; skip: ids to leave out; today: an ISO date."""
-    wanted = {**parts, **adds}
-    keep, out = [], []
-    for entry in titles:
-        tmdb = entry[2] if len(entry) > 2 else None
-        if tmdb in wanted and tmdb not in skip:
-            keep.append(list(entry))
-        else:
-            out.append(list(entry))
-    have = {e[2] for e in keep}
-    new = []
-    for tmdb, (title, date) in sorted(wanted.items(), key=lambda kv: (kv[1][1] or "9999", kv[0])):
-        if tmdb not in have and tmdb not in skip and date and date <= today:
-            new.append([title, int(date[:4]), tmdb])
-    return keep + new, new, out
-
-
-def retry_after(value):
-    """Seconds to wait from a Retry-After header: a number of seconds (an HTTP date or nothing means 10), at most 60."""
-    try:
-        return min(max(int(str(value).strip()), 1), 60)
-    except (TypeError, ValueError):
-        return 10
-
-
-class TMDB:
-    """TMDB's API, a request at a time. A token (the long read access token) goes in a header, a key as api_key."""
-
-    def __init__(self, key):
-        self.session = requests.Session()
-        self.session.headers["User-Agent"] = AGENT
-        self.params = {"language": "en-US"}
-        if key.startswith("eyJ"):
-            self.session.headers["Authorization"] = f"Bearer {key}"
-        else:
-            self.params["api_key"] = key
-
-    def get(self, path):
-        for attempt in range(3):
-            try:
-                r = self.session.get(API + path, params=self.params, timeout=30)
-            except requests.RequestException as e:
-                if attempt == 2:
-                    raise Unreadable(f"TMDB didn't answer for {path}: {type(e).__name__}")
-                time.sleep(5)
-                continue
-            if r.status_code == 401:
-                raise Unreadable("TMDB refused the key: set TMDB_API_KEY to a TMDB API key or read access token")
-            if r.status_code == 404:
-                raise Problem(f"TMDB has nothing at {path}")
-            if r.status_code == 429 or r.status_code >= 500:
-                if attempt == 2:   # every entry after this one would hit it too
-                    raise Unreadable(f"TMDB answered {r.status_code} for {path} three times")
-                time.sleep(retry_after(r.headers.get("Retry-After")) if r.status_code == 429 else 5)
-                continue
-            if r.status_code != 200:
-                raise Problem(f"TMDB answered {r.status_code} for {path}")
-            time.sleep(0.1)
-            return r.json()
-        raise Unreadable(f"TMDB kept failing for {path}")
-
-    def collection(self, cid):
-        """{id: (title, release date)} for every film in the collection."""
-        body = self.get(f"/collection/{cid}")
-        return {p["id"]: (p.get("title") or "", p.get("release_date") or "") for p in body.get("parts") or []
-                if isinstance(p, dict) and isinstance(p.get("id"), int)}
-
-    def movie(self, mid):
-        body = self.get(f"/movie/{mid}")
-        return {mid: (body.get("title") or "", body.get("release_date") or "")}
 
 
 def check(doc, tmdb, today):
@@ -222,7 +139,8 @@ def main(argv=None):
     try:
         results, problems = check(doc, TMDB(key), today)
     except Unreadable as e:
-        print(f"Problem: {e}")
+        hint = ": set TMDB_API_KEY to a TMDB API key or read access token" if isinstance(e, Refused) else ""
+        print(f"Problem: {e}{hint}")
         return 2
     changed = {k: titles for k, titles, added, out in results if added or out}
     for k, titles, added, out in results:

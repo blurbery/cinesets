@@ -17,6 +17,7 @@ it sits on the page, without knowing which server it's talking to.
 | `collections.yml` | The catalogue: every collection, its section, its lists or franchise titles and its colours |
 | `catalog.py` | Reads the catalogue and `custom-collections.yml`, and works out names, page order and sizes |
 | `lists.py` | Fetches public MDBList lists, refreshing them every few hours and keeping a copy in case MDBList is down |
+| `tmdb.py` | With a TMDB key (optional), keeps franchise lists in step with their TMDB collections, keeping a copy for a day and in case TMDB is down. The weekly franchise check uses the same rules |
 | `engine.py` | The library index, list matching, posters and the writes, with the safety rules: CineSets only touches collections it made, writes only what changed and backs off when a server struggles |
 | `posters.py` | Draws the posters |
 | `mosaic.py` | Mosaic posters: picks and keeps each one's tiles and lays out the grid of the collection's own posters |

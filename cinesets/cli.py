@@ -36,7 +36,7 @@ from urllib.parse import urlparse
 import requests
 import yaml
 
-from . import __version__, catalog, config, fonts, logos, servers
+from . import __version__, catalog, config, fonts, logos, servers, tmdb
 from .engine import Engine
 from .servers import ServerError
 from .store import load_json, save_json
@@ -358,6 +358,29 @@ def clean_address(url):
     return servers.trim(url.rstrip("/"))
 
 
+def ask_tmdb(path):
+    """The optional TMDB key, checked with TMDB before it goes into config.yml. Enter skips it."""
+    print("\nOptional: with a TMDB API key, franchise collections pick up a new film once it's out, without waiting "
+          "for a CineSets update. Get one free at themoviedb.org, Settings, API (the API key or the read access token).")
+    for _ in range(3):
+        key = getpass.getpass("TMDB API key (typing is hidden; press Enter to skip): ").strip()
+        if not key:
+            print("Skipped. The franchises use the lists that come with CineSets; add a key any time on the dashboard's "
+                  "Lists tab or in config.yml.")
+            return
+        try:
+            tmdb.Client(key, patient=False).check()
+        except tmdb.Refused:
+            print("TMDB turned that key down. Copy it again, or press Enter to skip.")
+            continue
+        except tmdb.Problem as e:
+            print(f"Couldn't check the key with TMDB ({e}). It's saved anyway; CineSets tries it on each run.")
+        config.write_block(path, "tmdb", config.tmdb_block(key))
+        print(f"Saved the TMDB key to {path}. {tmdb.CREDIT}")
+        return
+    print("Skipped the TMDB key for now. Add one any time on the dashboard's Lists tab or in config.yml.")
+
+
 def setup(path):
     """Interactive first-run setup: find the server and what it is, test the key, detect libraries, write config.yml."""
     path = config.config_path(path)
@@ -416,6 +439,7 @@ def setup(path):
     print(f"Wrote {path}.")
     print("Check it: remove any library you don't want CineSets to use, and put your main one first.")
     if sys.stdin.isatty():
+        ask_tmdb(path)
         answer = input("\nMake every collection? Answer n to choose sections or single collections now "
                        "(you can change this any time with `pick`). [Y/n] ").strip().lower()
         if answer.startswith("n"):

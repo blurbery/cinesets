@@ -35,7 +35,8 @@ services:
       PGID: 1000
       # TZ: Europe/London   # your time zone: seasonal collections (Halloween, Christmas) start and end by its date,
       #                     # and without it the container goes by UTC
-    # Optional: keep the API key out of config.yml by putting CINESETS_API_KEY=... in ./config/cinesets.env
+    # Optional: keep the API key out of config.yml by putting CINESETS_API_KEY=... in ./config/cinesets.env, and a
+    # TMDB key (franchises pick up new films by themselves) as CINESETS_TMDB_API_KEY=... in the same file
     # env_file: ./config/cinesets.env
 
   # The dashboard, always running (optional; see docs/dashboard.md). It is published on this host's 127.0.0.1 only:
