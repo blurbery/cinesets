@@ -117,6 +117,11 @@ The Lists tab shows the MDBList lists behind every collection, each linking to i
   well as its own catalogue, so updating CineSets never overwrites them.
 - **Removing** a collection there doesn't delete it from your server. `./run.sh remove --unpicked` does that.
 - **Franchises** use fixed lists of films, so they can't take extra lists.
+- **Franchise updates from TMDB:** paste a TMDB API key (free, at themoviedb.org, Settings, API) and franchises
+  pick up a new film once it's out, from the next apply. CineSets checks the key with TMDB before saving it to
+  `tmdb: api_key` in `config.yml`, and never shows it to the page again. Remove it to go back to the lists that come
+  with CineSets. A key set in `CINESETS_TMDB_API_KEY` is changed there instead. This product uses the TMDB API but is
+  not endorsed or certified by TMDB.
 
 ## How many titles
 

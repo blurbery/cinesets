@@ -3438,6 +3438,59 @@
     S.saved.picks = derivePicks(S.saved.collections);
     S.saved.version = settings && settings.version !== undefined ? settings.version : null;
     S.saved.limits = normaliseLimits(settings && settings.limits);
+    S.tmdb = (settings && settings.tmdb) || { set: false, from_env: false, credit: "" };
+    renderTmdb();
+  }
+
+  // ------------------------------------------------------------------ TMDB key (Lists tab)
+  function renderTmdb() {
+    const t = S.tmdb || {};
+    $("tmdb-status").textContent = t.from_env
+      ? "A TMDB key is set in the environment (CINESETS_TMDB_API_KEY). Franchises pick up new films by themselves."
+      : t.set ? "A TMDB key is saved. Franchises pick up new films by themselves."
+        : "No TMDB key. Franchises use the lists that come with CineSets.";
+    $("tmdb-key").disabled = !!t.from_env;
+    $("tmdb-save").disabled = !!t.from_env;
+    $("tmdb-key").placeholder = t.set && !t.from_env ? "Paste a new key to replace it" : "API key or read access token";
+    $("tmdb-remove").hidden = !t.set || !!t.from_env;
+    if (t.credit) $("tmdb-credit").textContent = t.credit;
+  }
+
+  function setTmdbError(msg) {
+    $("tmdb-error").textContent = msg || "";
+    $("tmdb-error").hidden = !msg;
+  }
+
+  async function sendTmdb(key, btn) {
+    btn.disabled = true;
+    btn.classList.add("is-busy");
+    setTmdbError("");
+    try {
+      const res = await api("api/tmdb", { method: "POST", body: { key, version: S.saved.version } });
+      if (res.version) S.saved.version = res.version;
+      if (res.tmdb) S.tmdb = res.tmdb;
+      $("tmdb-key").value = "";
+      renderTmdb();
+      toast(res.message, res.saved ? "ok" : "info");
+    } catch (e) {
+      if (e.status === 401) return;
+      if (e.status === 409) showConflict(e.message);
+      else setTmdbError(e.message);
+    } finally {
+      btn.classList.remove("is-busy");
+      renderTmdb();
+    }
+  }
+
+  function saveTmdb(e) {
+    e.preventDefault();
+    const key = $("tmdb-key").value.trim();
+    if (!key) {
+      setTmdbError("Paste the key first.");
+      $("tmdb-key").focus();
+      return;
+    }
+    sendTmdb(key, $("tmdb-save"));
   }
 
   function showConflict(msg) {
@@ -4055,6 +4108,8 @@
     });
     $("nc-add-list").addEventListener("click", () => ncRow().focus());
     $("nc-check").addEventListener("click", ncCheck);
+    $("tmdb-form").addEventListener("submit", saveTmdb);
+    $("tmdb-remove").addEventListener("click", () => sendTmdb("", $("tmdb-remove")));
     $("nc-form").addEventListener("submit", ncCreate);
     $("nc-twolines").addEventListener("change", (e) => {
       $("nc-title2").hidden = !e.target.checked;

@@ -48,7 +48,7 @@ from urllib.parse import parse_qs, urlparse
 import yaml
 from PIL import Image
 
-from . import __version__, catalog, config, fonts, mosaic, posters, scenes
+from . import __version__, catalog, config, fonts, mosaic, posters, scenes, tmdb
 from .engine import SAFE_ID, Busy, Engine
 from .lists import fetch_list, slug_of
 from .servers import ServerError, connect
@@ -56,7 +56,8 @@ from .store import load_json, save_json
 
 STATIC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 FILES = {"/": ("index.html", "text/html; charset=utf-8"), "/app.js": ("app.js", "text/javascript; charset=utf-8"),
-         "/app.css": ("app.css", "text/css; charset=utf-8"), "/icon.png": ("icon.png", "image/png")}
+         "/app.css": ("app.css", "text/css; charset=utf-8"), "/icon.png": ("icon.png", "image/png"),
+         "/tmdb.svg": ("tmdb.svg", "image/svg+xml")}  # TMDB's logo, for the credit their API terms ask for
 MAX_BODY = 1 << 20
 PREVIEW = (600, 900)
 TILE = (300, 450)  # the small posters in the section strip and Preview all
@@ -272,6 +273,7 @@ class Dashboard:
             self.cfg_path = config.config_path(cfg_path)
             self.cfg = config.load(self.cfg_path)
             self.engine = Engine(self.cfg, server or connect(self.cfg))
+            self.engine.patient = False  # previews ask TMDB once, briefly; runs (their own process) wait it out
             self.index = self.engine.get_index()
             self.kind = self.cfg["server"]["type"]
 
@@ -335,7 +337,14 @@ class Dashboard:
     def settings(self):
         cfg = self.settings_now()
         version = config.file_version(self.cfg_path) if not self.demo else "demo"
-        return {"posters": cfg["posters"], "collections": cfg["collections"], "limits": cfg["limits"], "version": version}
+        return {"posters": cfg["posters"], "collections": cfg["collections"], "limits": cfg["limits"], "version": version,
+                "tmdb": self.tmdb_status(cfg)}
+
+    @staticmethod
+    def tmdb_status(cfg):
+        """Whether a TMDB key is set and where, never the key itself."""
+        t = cfg.get("tmdb") or {}
+        return {"set": bool(t.get("api_key")), "from_env": bool(t.get("from_env")), "credit": tmdb.CREDIT}
 
     def collections(self):
         cfg, state = self.settings_now(), self.read_state()
@@ -748,6 +757,38 @@ class Dashboard:
         return {"saved": True, "version": version,
                 "message": f"Saved to {os.path.basename(self.cfg_path)}. The posters change on the next apply."}
 
+    # ------------------------------------------------------------ TMDB key
+    def set_tmdb(self, body):
+        """Save the TMDB key (checked with TMDB first) or, with an empty one, take it out of config.yml."""
+        key = body.get("key")
+        if not isinstance(key, str) or len(key) > 1000 or any(ch.isspace() for ch in key.strip()):
+            raise Problem("Paste the TMDB API key or read access token on its own")
+        key = key.strip()
+        cfg = self.settings_now()
+        if (cfg.get("tmdb") or {}).get("from_env"):
+            raise Problem("The TMDB key comes from CINESETS_TMDB_API_KEY in the environment, so change it there")
+        if self.demo:
+            return {"saved": False, "message": "Demo mode: nothing is saved", "tmdb": self.tmdb_status(cfg)}
+        if key:
+            try:
+                tmdb.Client(key, patient=False).check()
+            except tmdb.Refused:
+                raise Problem("TMDB turned that key down. Copy it again from themoviedb.org, Settings, API")
+            except tmdb.Problem as e:
+                raise Problem(f"Couldn't check the key with TMDB ({e}). Try again in a moment", 502)
+        with self.lock:
+            try:
+                version = config.write_blocks(self.cfg_path, {"tmdb": config.tmdb_block(key)},
+                                              version=body.get("version"), backup=True)
+            except config.Changed as e:
+                raise Problem(str(e), 409)
+            self.ids.clear()  # franchises may hold other films now
+            tmdb.new_run()    # and TMDB is asked again with this key, even during a pause after a refusal
+            cfg = self.settings_now()
+        return {"saved": True, "version": version, "tmdb": self.tmdb_status(cfg),
+                "message": "TMDB key saved. Franchises pick up new films from the next apply." if key else
+                           "TMDB key removed. Franchises use the lists that come with CineSets."}
+
     # ------------------------------------------------------------ mdblist lists and your own collections
     def check_list(self, body):
         """What a list holds, before it becomes a collection: its size, films or shows, and how much is in the library."""
@@ -961,6 +1002,7 @@ ROUTES = {
     ("POST", "/api/lists/add"): lambda app, q, body: app.add(body),
     ("POST", "/api/lists/remove"): lambda app, q, body: app.remove_custom(body),
     ("POST", "/api/text"): lambda app, q, body: app.set_text(body),
+    ("POST", "/api/tmdb"): lambda app, q, body: app.set_tmdb(body),
 }
 
 

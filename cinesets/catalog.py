@@ -101,8 +101,8 @@ TMDB_FIELDS = ("tmdb_collections", "tmdb_add", "tmdb_skip")
 
 
 def _tmdb_fields(c):
-    """`tmdb_collections`, `tmdb_add` and `tmdb_skip` checked. CineSets never reads them: they say where a fixed
-    list's films come from, for tests/e2e/check_franchises.py, which keeps `titles` in step with TMDB."""
+    """`tmdb_collections`, `tmdb_add` and `tmdb_skip` checked. They say where a fixed list's films come from: with a
+    TMDB key, runs follow them (tmdb.py), and tests/e2e/check_franchises.py keeps the shipped `titles` in step."""
     for field in TMDB_FIELDS:
         value = c.get(field)
         if value is None:

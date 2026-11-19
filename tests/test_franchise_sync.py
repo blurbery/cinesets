@@ -10,7 +10,7 @@ import sys
 import pytest
 import yaml
 
-from cinesets import catalog
+from cinesets import catalog, tmdb
 
 sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "e2e"))
 import check_franchises as cf  # noqa: E402
@@ -136,7 +136,7 @@ def test_no_key_and_a_missing_collection_are_problems(tmp_path, monkeypatch, cap
 def test_a_refused_key_stops_the_run_with_one_message(tmp_path, monkeypatch, capsys):
     class Refused(FakeTMDB):
         def collection(self, cid):
-            raise cf.Unreadable("TMDB refused the key")
+            raise cf.Refused("TMDB refused the key")
     path = tmp_path / "collections.yml"
     path.write_text(FILE + FILE.split("collections:\n", 1)[1].replace("m-johnwick", "m-again"), encoding="utf-8")
     monkeypatch.setattr(cf, "TMDB", lambda key: Refused({}))
@@ -175,24 +175,24 @@ class Answer:
 @pytest.mark.parametrize("status, headers", [(429, {"Retry-After": "Wed, 21 Oct 2026 07:28:00 GMT"}), (503, {})])
 def test_tmdb_busy_or_down_three_times_stops_the_run(monkeypatch, status, headers):
     waits = []
-    monkeypatch.setattr(cf.time, "sleep", waits.append)
-    tmdb = cf.TMDB("0123abcd")
-    monkeypatch.setattr(tmdb.session, "get", lambda *a, **k: Answer(status, headers))
-    with pytest.raises(cf.Unreadable, match=f"TMDB answered {status} for /collection/1 three times"):
-        tmdb.collection(1)
+    monkeypatch.setattr(tmdb.time, "sleep", waits.append)
+    client = cf.TMDB("0123abcd")
+    monkeypatch.setattr(client.session, "get", lambda *a, **k: Answer(status, headers))
+    with pytest.raises(cf.Unreadable, match=f"TMDB answered {status} for /collection/1 3 times"):
+        client.collection(1)
     assert waits == [10, 10] if status == 429 else waits == [5, 5]
 
 
 def test_tmdb_answers_after_a_slow_down(monkeypatch):
     answers = [Answer(429, {"Retry-After": "3"}), Answer(200)]
-    monkeypatch.setattr(cf.time, "sleep", lambda s: None)
-    tmdb = cf.TMDB("0123abcd")
-    monkeypatch.setattr(tmdb.session, "get", lambda *a, **k: answers.pop(0))
-    assert tmdb.collection(1) == {} and not answers
+    monkeypatch.setattr(tmdb.time, "sleep", lambda s: None)
+    client = cf.TMDB("0123abcd")
+    monkeypatch.setattr(client.session, "get", lambda *a, **k: answers.pop(0))
+    assert client.collection(1) == {} and not answers
 
 
 def test_retry_after_reads_seconds_and_caps_them():
-    assert [cf.retry_after(x) for x in ("3", " 7 ", "600", "0", None, "", "soon")] == [3, 7, 60, 1, 10, 10, 10]
+    assert [tmdb.retry_after(x) for x in ("3", " 7 ", "600", "0", None, "", "soon")] == [3, 7, 60, 1, 10, 10, 10]
 
 
 ONE = """collections:

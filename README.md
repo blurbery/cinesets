@@ -88,6 +88,17 @@ It listens on this machine only, needs you signed in and never shows your API ke
 The [dashboard tour](docs/screenshots.md) shows each part of it, and the [dashboard guide](docs/dashboard.md) covers
 signing in, reaching it from another computer (Tailscale, Caddy, nginx) and keeping it running.
 
+## Franchises and TMDB
+
+Franchise collections (Toy Story, John Wick, Alien and the rest) come from fixed lists of films, so a remake never
+sneaks in. CineSets checks them against [TMDB](https://www.themoviedb.org)'s collections every week and ships new
+films in its updates. Add your own TMDB API key (free, at themoviedb.org, Settings, API) and they pick up a new film
+once it's out, without waiting for an update: setup asks for one, or paste it on the dashboard's Lists tab, or set
+`tmdb: api_key` in `config.yml` or `CINESETS_TMDB_API_KEY`. It's optional: without a key, the lists that come with
+CineSets are used.
+
+This product uses the TMDB API but is not endorsed or certified by TMDB.
+
 ## Picking collections
 
 The collections come in sections: trending and charts, genres, streaming, best of, kids and family, seasonal,
