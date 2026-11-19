@@ -97,6 +97,24 @@ def _fixed_titles(value, key):
     return out
 
 
+TMDB_FIELDS = ("tmdb_collections", "tmdb_add", "tmdb_skip")
+
+
+def _tmdb_fields(c):
+    """`tmdb_collections`, `tmdb_add` and `tmdb_skip` checked. CineSets never reads them: they say where a fixed
+    list's films come from, for tests/e2e/check_franchises.py, which keeps `titles` in step with TMDB."""
+    for field in TMDB_FIELDS:
+        value = c.get(field)
+        if value is None:
+            continue
+        if not (isinstance(value, list) and all(isinstance(x, int) and not isinstance(x, bool) and x > 0
+                                                for x in value)):
+            raise SystemExit(f"collections.yml: {c['key']}: {field} must be a list of TMDB ids, like [404609], "
+                             f"not {value!r}")
+        if not c.get("titles"):
+            raise SystemExit(f"collections.yml: {c['key']}: {field} is for fixed lists, so it needs titles")
+
+
 def loose_title(name):
     """A title reduced to its letters and digits for a second try at matching a fixed list: no case, accents,
     punctuation, spaces or leading "The", "&" read as "and" and "³" as "3", so "Alien³" and "Alien 3" are the same."""
@@ -194,6 +212,7 @@ def load(cfg):
         c.setdefault("lists", [])
         if c.get("titles"):
             c["titles"] = _fixed_titles(c["titles"], c["key"])
+        _tmdb_fields(c)
         label = str(c.get("label") or cfg["labels"][c["kind"]])
         words = " ".join(x for x in [c["title"].replace("-\n", "-").replace("\n", " "), c["subtitle"]] if x)
         twin = 0 if c["kind"] == "movie" else 1
