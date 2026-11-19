@@ -782,6 +782,7 @@ class Dashboard:
             except config.Changed as e:
                 raise Problem(str(e), 409)
             self.ids.clear()  # franchises may hold other films now
+            tmdb.new_run()    # and TMDB is asked again with this key, even during a pause after a refusal
             cfg = self.settings_now()
         return {"saved": True, "version": version, "tmdb": self.tmdb_status(cfg),
                 "message": "TMDB key saved. Franchises pick up new films from the next apply." if key else

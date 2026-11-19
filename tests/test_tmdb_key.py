@@ -87,6 +87,7 @@ def test_tmdb_down_uses_the_saved_copy_then_the_shipped_list(fake_tmdb, tmp_path
     fake_tmdb.fail = tmdb.Unreadable("TMDB didn't answer (ConnectionError)")
     assert tmdb.live_titles(WICK, KEYED, str(tmp_path)) == first
     assert "TMDB didn't answer (ConnectionError), so CineSets is using the copy it saved 25 h ago" in capsys.readouterr().out
+    tmdb.new_run()
     assert tmdb.live_titles(WICK, KEYED, str(tmp_path / "elsewhere")) == WICK["titles"]
     assert "m-johnwick: TMDB didn't answer (ConnectionError), so it uses the list that comes with CineSets" \
         in capsys.readouterr().out
@@ -101,6 +102,38 @@ def test_a_refused_key_is_said_once_a_run(fake_tmdb, tmp_path, capsys):
     tmdb.new_run()
     tmdb.live_titles(WICK, KEYED, str(tmp_path))
     assert len(fake_tmdb.calls) == 2                                   # the next run tries the key again
+
+
+def test_an_outage_is_waited_out_once_a_run(fake_tmdb, tmp_path, capsys):
+    other = {**WICK, "key": "m-other", "tmdb_collections": [999], "tmdb_add": []}
+    tmdb.live_titles(other, KEYED, str(tmp_path))                     # a copy for m-other, which then goes stale
+    age(tmp_path / "tmdb" / "collection-999.json", 25)
+    fake_tmdb.calls.clear()
+    fake_tmdb.fail = tmdb.Unreadable("TMDB answered 503 for /collection/404609 3 times")
+    assert tmdb.live_titles(WICK, KEYED, str(tmp_path)) == WICK["titles"]
+    assert len(tmdb.live_titles(other, KEYED, str(tmp_path))) == 2      # its stale copy, without asking
+    assert tmdb.live_titles({**WICK, "key": "m-third"}, KEYED, str(tmp_path)) == WICK["titles"]
+    assert len(fake_tmdb.calls) == 1                                    # only the first franchise asked
+    out = capsys.readouterr().out
+    assert out.count("TMDB couldn't be read (TMDB answered 503") == 1 and "the rest of this run" in out
+    fake_tmdb.fail = None
+    tmdb.new_run()
+    assert len(tmdb.live_titles(WICK, KEYED, str(tmp_path))) == 3       # the next run asks again
+
+
+def test_the_dashboard_pauses_after_an_outage_or_a_refused_key(fake_tmdb, tmp_path, capsys):
+    for fail in (tmdb.Unreadable("TMDB didn't answer (ReadTimeout)"), tmdb.Refused("TMDB refused the key")):
+        tmdb.new_run()
+        fake_tmdb.calls.clear()
+        fake_tmdb.fail = fail
+        tmdb.live_titles(WICK, KEYED, str(tmp_path), patient=False)
+        tmdb.live_titles(WICK, KEYED, str(tmp_path), patient=False)
+        assert len(fake_tmdb.calls) == 1 and not tmdb._refused
+        assert time.time() + tmdb.PAUSE - 5 < tmdb._down_until <= time.time() + tmdb.PAUSE
+        tmdb._down_until = time.time() - 1                              # the pause is over
+        tmdb.live_titles(WICK, KEYED, str(tmp_path), patient=False)
+        assert len(fake_tmdb.calls) == 2
+    assert "for the next 5 minutes the dashboard uses" in capsys.readouterr().out
 
 
 def test_a_damaged_copy_is_asked_for_again(fake_tmdb, tmp_path):
@@ -244,7 +277,9 @@ def test_the_dashboard_saves_and_removes_the_tmdb_key(keyed_site):
     call, cfg, srv, app, client = keyed_site
     s = call("/api/settings")[1]
     assert s["tmdb"] == {"set": False, "from_env": False, "credit": tmdb.CREDIT}
+    tmdb._down_until = time.time() + tmdb.PAUSE                         # paused after an old key was refused
     status, out = call("/api/tmdb", {"key": " secret-tmdb ", "version": s["version"]})
+    assert tmdb._down_until == 0.0                                      # the new key is tried straight away
     assert status == 200 and out["saved"] and out["tmdb"]["set"] and Checked.tried == ["secret-tmdb"]
     assert out["version"] == config.file_version(app.cfg_path)
     assert config.load(app.cfg_path)["tmdb"]["api_key"] == "secret-tmdb"

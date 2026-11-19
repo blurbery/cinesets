@@ -134,29 +134,50 @@ def key_of(cfg):
     return str((cfg.get("tmdb") or {}).get("api_key") or "").strip()
 
 
+PAUSE = 300  # the dashboard leaves TMDB alone this long after it couldn't be read or refused the key
 _refused = False  # TMDB turned the key down this run: the rest of the run uses the shipped lists without asking
+_down_until = 0.0  # TMDB couldn't be read: until then, saved copies and the shipped lists are used without asking
 
 
 def new_run():
-    """Called at the start of each run, so a key fixed since the last one is tried again."""
-    global _refused
-    _refused = False
+    """Called at the start of each run (and when the dashboard saves a key), so TMDB is asked again."""
+    global _refused, _down_until
+    _refused, _down_until = False, 0.0
 
 
-def _films(fetch, tmdb_id, path, ttl):
+def _give_up(patient, e):
+    """TMDB couldn't be read: a run stops asking until its end (each franchise would wait out its own tries), the
+    dashboard for a few minutes. Said once."""
+    global _down_until
+    if time.time() < _down_until:
+        return
+    _down_until = float("inf") if patient else time.time() + PAUSE
+    print(f"TMDB couldn't be read ({e}), so " + ("the rest of this run uses" if patient else
+          f"for the next {PAUSE // 60} minutes the dashboard uses") +
+          " the copies CineSets saved, or the lists that come with CineSets")
+
+
+def _films(fetch, tmdb_id, path, ttl, patient=True):
     """{id: (title, date)} from the saved copy while it is fresh, else from TMDB (saved), else the stale copy with a
-    note. Raises Problem when there is neither an answer nor a copy, and Refused whatever is saved."""
+    note. Raises Problem when there is neither an answer nor a copy, and Refused whatever is saved. While TMDB is
+    down (see _give_up) the saved copy is used however old it is, without asking."""
     saved = load_json(path, None)
     ok = (isinstance(saved, dict) and isinstance(saved.get("at"), (int, float)) and isinstance(saved.get("films"), list)
           and all(isinstance(f, list) and len(f) == 3 for f in saved["films"]))
     films = {f[0]: (f[1], f[2]) for f in saved["films"]} if ok else None
     if films is not None and time.time() - saved["at"] < ttl:
         return films
+    if time.time() < _down_until:
+        if films is None:
+            raise Problem("TMDB couldn't be read")
+        return films
     try:
         fresh = fetch(tmdb_id)
     except Refused:
         raise
     except Problem as e:
+        if isinstance(e, Unreadable):
+            _give_up(patient, e)
         if films is None:
             raise
         hours = int((time.time() - saved["at"]) / 3600)
@@ -170,7 +191,7 @@ def _films(fetch, tmdb_id, path, ttl):
 def live_titles(coll, cfg, data_dir, patient=True, today=None):
     """A fixed list's (title, year, id) entries as TMDB has its collections now, or the list in collections.yml when
     there is no key, the entry names no TMDB collection, or TMDB has never answered for it."""
-    global _refused
+    global _refused, _down_until
     titles = coll["titles"]
     key = key_of(cfg)
     if not key or not coll.get("tmdb_collections") or _refused:
@@ -179,11 +200,15 @@ def live_titles(coll, cfg, data_dir, patient=True, today=None):
     try:
         parts, adds = {}, {}
         for cid in coll["tmdb_collections"]:
-            parts.update(_films(client.collection, cid, os.path.join(folder, f"collection-{cid}.json"), COLLECTION_TTL))
+            parts.update(_films(client.collection, cid, os.path.join(folder, f"collection-{cid}.json"), COLLECTION_TTL,
+                                patient))
         for mid in coll.get("tmdb_add") or []:
-            adds.update(_films(client.movie, mid, os.path.join(folder, f"movie-{mid}.json"), MOVIE_TTL))
+            adds.update(_films(client.movie, mid, os.path.join(folder, f"movie-{mid}.json"), MOVIE_TTL, patient))
     except Refused:
-        _refused = True
+        if patient:
+            _refused = True
+        else:  # the dashboard keeps running: it tries again after a pause, or as soon as a new key is saved
+            _down_until = time.time() + PAUSE
         print("TMDB refused the API key in config.yml (tmdb: api_key, or CINESETS_TMDB_API_KEY), so franchises use "
               "the lists that come with CineSets. Check the key on themoviedb.org, Settings, API.")
         return titles
