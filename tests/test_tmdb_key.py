@@ -322,3 +322,14 @@ def test_a_key_from_the_environment_is_changed_there(keyed_site, monkeypatch):
     status, out = call("/api/tmdb", {"key": "good", "version": s["version"]})
     assert status == 400 and "CINESETS_TMDB_API_KEY" in out["error"] and Checked.tried == []
     assert not any(b"from-env" in b for b in client.bodies)
+
+
+def test_the_dashboard_shows_tmdbs_logo_with_the_credit(keyed_site):
+    call = keyed_site[0]
+    status, data, headers = call("/tmdb.svg", header=False, raw=True)
+    assert status == 200 and headers["Content-Type"] == "image/svg+xml"
+    # served under the page's security policy, so no style block (its fill is on the shape) and nothing that runs
+    assert data.startswith(b"<svg") and b"<style" not in data and b"<script" not in data and b"href" not in data
+    assert b'fill="url(#linear-gradient)"' in data
+    page = call("/", header=False, raw=True)[1]
+    assert b'src="tmdb.svg"' in page and tmdb.CREDIT.encode() in page

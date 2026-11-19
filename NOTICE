@@ -44,3 +44,7 @@ Third-party material:
 - Streaming service logos are not included. `cinesets logos` downloads them from Wikimedia Commons onto your
   own server; they remain trade marks of their owners.
 - Collection lists are read from public lists on mdblist.com and are not redistributed here.
+- The TMDB logo (cinesets/static/tmdb.svg) is a trade mark of The Movie Database (TMDB) and is not covered by
+  AGPL-3.0-or-later. It is TMDB's own logo from themoviedb.org/about/logos-attribution, with its colour fill
+  moved from a style block onto the shape so the dashboard's security policy allows it, and is shown only to
+  credit TMDB as their API terms ask. This product uses the TMDB API but is not endorsed or certified by TMDB.

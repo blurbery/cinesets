@@ -362,7 +362,9 @@ code { font-family: var(--mono); }
 .tmdb-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 .tmdb-row .field { flex: 1 1 260px; min-width: 0; }
 .tmdb-status { font-size: 13px; }
-.tmdb-credit { font-size: 12px; }
+.tmdb-credit { font-size: 12px; display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; }
+.tmdb-logo-link { display: inline-flex; flex: none; }
+.tmdb-logo { display: block; height: 12px; width: auto; }
 .nc-lists { display: flex; flex-direction: column; gap: 8px; }
 .nc-row { display: flex; gap: 8px; align-items: center; }
 .nc-row .field { flex: 1; }

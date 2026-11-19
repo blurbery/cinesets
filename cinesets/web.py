@@ -56,7 +56,8 @@ from .store import load_json, save_json
 
 STATIC = os.path.join(os.path.dirname(os.path.abspath(__file__)), "static")
 FILES = {"/": ("index.html", "text/html; charset=utf-8"), "/app.js": ("app.js", "text/javascript; charset=utf-8"),
-         "/app.css": ("app.css", "text/css; charset=utf-8"), "/icon.png": ("icon.png", "image/png")}
+         "/app.css": ("app.css", "text/css; charset=utf-8"), "/icon.png": ("icon.png", "image/png"),
+         "/tmdb.svg": ("tmdb.svg", "image/svg+xml")}  # TMDB's logo, for the credit their API terms ask for
 MAX_BODY = 1 << 20
 PREVIEW = (600, 900)
 TILE = (300, 450)  # the small posters in the section strip and Preview all

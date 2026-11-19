@@ -3453,7 +3453,7 @@
     $("tmdb-save").disabled = !!t.from_env;
     $("tmdb-key").placeholder = t.set && !t.from_env ? "Paste a new key to replace it" : "API key or read access token";
     $("tmdb-remove").hidden = !t.set || !!t.from_env;
-    $("tmdb-credit").textContent = t.credit || "";
+    if (t.credit) $("tmdb-credit").textContent = t.credit;
   }
 
   function setTmdbError(msg) {
